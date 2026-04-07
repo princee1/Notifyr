@@ -3,7 +3,7 @@ from fastapi import Depends, Request, Response, status
 from app.classes.auth_permission import AuthPermission
 from app.container import InjectInMethod
 from app.cost.ingest_cost import DeleteDocumentIngestCost
-from app.decorators.handlers import AgenticHandler, ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, ProxyRestGatewayHandler, RedisHandler, ServiceAvailabilityHandler
+from app.decorators.handlers import AgenticHandler, ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, GatewayHandler, RedisHandler, ServiceAvailabilityHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import DeleteDocumentIngestUpdatePipe, update_status_upon_no_metadata_pipe
@@ -48,7 +48,7 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     
     @UseLimiter('1/minutes')
     @PingService([RemoteAgentService])
-    @UseHandler(AgenticHandler,ProxyRestGatewayHandler)
+    @UseHandler(AgenticHandler,GatewayHandler)
     @LockService(RemoteAgentService,lockType='reader')
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
@@ -65,7 +65,7 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @UseLimiter('30/minutes')
     @HTTPStatusCode(status.HTTP_200_OK)
     @PingService([RemoteAgentService])
-    @UseHandler(AgenticHandler,ProxyRestGatewayHandler)
+    @UseHandler(AgenticHandler,GatewayHandler)
     @LockService(RemoteAgentService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/{collection_name}/',methods=[HTTPMethod.GET])
     async def get_collection(self, request:Request,response:Response,collection_name:str,autPermission:AuthPermission=Depends(get_auth_permission)):
@@ -83,14 +83,13 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @PingService([RedisService,RemoteAgentService,ArqIngestTaskService])
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
     @LockService(RedisService,RemoteAgentService,ArqIngestTaskService,lockType='reader')
-    @UseHandler(AgenticHandler,CostHandler,ArqHandler,ProxyRestGatewayHandler,RedisHandler,DataIngestHandler)
+    @UseHandler(AgenticHandler,CostHandler,ArqHandler,GatewayHandler,RedisHandler,DataIngestHandler)
     @BaseHTTPRessource.HTTPRoute('/{collection_name}/',methods=[HTTPMethod.DELETE],response_model=DeleteCollectionModel)
     async def delete_collection(self, request:Request,response:Response,collection_name:str,cost:Annotated[DeleteDocumentIngestCost,Depends(DeleteDocumentIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],broker:Annotated[Broker,Depends(Broker)],mode:DeleteMode = Depends(delete_mode_query), autPermission:AuthPermission=Depends(get_auth_permission)):
         """Delete all results and delete all enqueued job matching the collection_name filtered by the task_name """
 
         meta,jobs_done,jobs_queue,errors =  await self.delete_section('vector_config','collection_name',collection_name)
         
-
         async with self.session.delete(f'/{collection_name}',params={"mode":mode}) as res:
             res_body = await res.json()
             if res.status != status.HTTP_200_OK:
@@ -122,7 +121,7 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @PingService([RedisService,RemoteAgentService,ArqIngestTaskService])
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
     @LockService(RedisService,RemoteAgentService,ArqIngestTaskService,lockType='reader')
-    @UseHandler(AgenticHandler,CostHandler,ArqHandler,ProxyRestGatewayHandler,RedisHandler,DataIngestHandler)
+    @UseHandler(AgenticHandler,CostHandler,ArqHandler,GatewayHandler,RedisHandler,DataIngestHandler)
     @BaseHTTPRessource.HTTPRoute('/docs/{job_id}/',methods=[HTTPMethod.DELETE],response_model=DeleteCollectionModel)
     async def delete_documents(self,job_id:str, request:Request,response:Response,cost:Annotated[DeleteDocumentIngestCost,Depends(DeleteDocumentIngestCost)],broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],autPermission:AuthPermission=Depends(get_auth_permission)):
         """Delete result and the point associated with the job_id filtered by the task_name """

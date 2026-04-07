@@ -419,10 +419,13 @@ def slice_dict(data:dict,keys:Iterable[str],mode:SliceMode):
     
     temp = {}
     for k in data:
-        if k not in keys:
-            continue
+
+        if (k not in keys) == (mode == 'exclude'):
+            temp[k] = data[k]
+
         if (k in keys) == (mode == 'include'):
             temp[k] = data[k]
+        
     data.clear()
     data.update(temp)
 

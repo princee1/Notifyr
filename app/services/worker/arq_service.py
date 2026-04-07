@@ -1,6 +1,6 @@
 import asyncio
 from datetime import timedelta
-from typing import Any, Callable, Iterable, Literal, Union
+from typing import Any, Callable, Iterable, List, Literal, Union
 from arq.connections import RedisSettings,create_pool,ArqRedis
 from arq.jobs import Job,JobStatus,ResultNotFound,JobResult,JobDef
 from arq.constants import result_key_prefix,job_key_prefix
@@ -38,6 +38,14 @@ class JobAlreadyExistsError(BaseError):
         self.job_id = job_id
         self.reason = reason
 
+class JobSemanticInstructionAlreadyExistsError(BaseError):
+    def __init__(self,job_id:str, instruction:str,distance:float,target_job_id:str):
+        super().__init__()
+        self.job_id = job_id
+        self.instruction = instruction
+        self.distance = distance
+        self.target_job_id = target_job_id
+
 class JobStatusNotValidError(BaseError): 
 
     def __init__(self,job_id:str, status:str):
@@ -60,7 +68,6 @@ class JobInProgressError(BaseError):
     def __init__(self, job_id:str):
         super().__init__(job_id)
         self.job_id = job_id
-
 
 @Service()
 class ArqIngestTaskService(BaseService):
@@ -206,29 +213,38 @@ class ArqIngestTaskService(BaseService):
 
             return await job_id.status()
     
-        async def search(self,task:str,params:dict,_raise:bool|None,filter:set[str]|None=None)->Job|BaseError|None:
+        async def search(self,task:str,params:dict,_raise:bool|None,mode:Literal['single','match']='single',filter:set[str]|None=None,filter_mode:SliceMode='include')->List[Job]|Job|None:
+            jobs = []
             for job in [*await self.get_queued_jobs(), *await self.get_jobs_results(True)]:
                 nickname = job.kwargs.get('_nickname',None)
                 if nickname != task:
                     continue
                     
-                if filter != None and job.job_id in filter:
-                    continue
-                   
+                if filter != None:
+                    if (job.job_id in filter) == (filter_mode == 'include'):
+                        continue
+
+                    if (job.job_id not in filter)==(filter_mode=='exclude'):
+                        continue
+                
                 for k,v in params.items():
                     if k in job.kwargs and v == job.kwargs[k]:
-                        if _raise != None and _raise:
-                            raise JobAlreadyExistsError(job.job_id,f'job exist found with the search params: {params}')
-                        else:
-                            return job
-            
+                        match mode:
+                            case 'single':
+                                if _raise != None and _raise:
+                                    raise JobAlreadyExistsError(job.job_id,f'job exist found with the search params: {params}')
+                                else:
+                                    return job
+                            case 'match':
+                                jobs.append(job)
+            if jobs:
+                return jobs
+ 
             if _raise != None and not _raise:
                 raise JobDoesNotExistsError('not specified',f'job does not exist found with the search params: {params}')
-            return None
-
-        async def filter(self,task:str,params:Any,where:str):
-            ...
             
+            return None if mode =='single' else jobs
+
         async def exists(self,job_id:str,raise_on_exist=False,delete_on_error:bool=False,return_status=False):
             job = await self.fetch(job_id)
             status:JobStatus = await job.status()

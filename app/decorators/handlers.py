@@ -14,7 +14,6 @@ from app.errors.agentic_error import AgenticServerDisconnectedError, AgenticStre
 from app.errors.llm_error import LLMProviderDoesNotExistError, LLMModelNotPermittedError, LLMModelMaxTokenExceededError, LLMRateLimiterError, LLMConfigNotConfiguredError
 from app.services.worker.arq_service import DataTaskNotFoundError, JobAlreadyExistsError, JobDequeueError, JobDoesNotExistsError, JobInProgressError, JobStatusNotValidError,ResultNotFound, UnexpectedJobStatusError
 from app.classes.auth_permission import WSPathNotFoundError
-from app.classes.email import EmailInvalidFormatError, NotSameDomainEmailError
 from app.classes.stream_data_parser import ContinuousStateError, DataParsingError, SequentialStateError, ValidationDataError
 from app.classes.template import SchemaValidationError, SkipTemplateCreationError, TemplateBuildError, TemplateCreationError, TemplateFormatError, TemplateInjectError, TemplateNotFoundError, TemplateValidationError
 from app.container import InjectInMethod
@@ -53,6 +52,13 @@ from app.errors.upload_error import (
     TotalFilesSizeExceededError,
     DuplicateFileNameError,
     InvalidExtensionError,
+)
+from app.classes.embeddings import (
+    EmbeddingException,
+    EmptyVectorError,
+    VectorDimensionMismatchError,
+    ZeroMagnitudeError,
+    InvalidExportModeError,
 )
 
 class ServiceAvailabilityHandler(Handler):
@@ -1071,8 +1077,7 @@ class FileHandler(Handler):
                 detail="An internal server error occurred while processing the file."
             )
         
-class ProxyRestGatewayHandler(Handler):
-
+class GatewayHandler(Handler):
 
     async def handle(self, function, *args, **kwargs):
         try:
@@ -1191,7 +1196,6 @@ class GrpcHandler(Handler):
     async def handle(self, function, *args, **kwargs):
         return await super().handle(function, *args, **kwargs)
 
-
 class GraphitiHandler(Handler):
     ...
 
@@ -1226,3 +1230,40 @@ class DataIngestHandler(Handler):
                     "database": e.database
                 }
             )
+
+
+class EmbeddingHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+        
+        except EmptyVectorError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            ) from e
+        
+        except VectorDimensionMismatchError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            ) from e
+        
+        except ZeroMagnitudeError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            ) from e
+        
+        except InvalidExportModeError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            ) from e
+        
+        except EmbeddingException as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="An embedding operation failed"
+            ) from e

@@ -8,3 +8,9 @@ class DeleteCollectionModel(DeleteIngestDocumentModel):
 class QdrantCollectionModel(BaseModel):
     collection_name:str
     metadata:dict[str,Any]
+
+
+class QdrantEmbedRequestModel(BaseModel):
+    query:str
+    request_id:str
+    issuer:str

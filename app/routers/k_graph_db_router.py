@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response,status
 from app.container import Get
-from app.definition._router import service_lock_decorator
+from app.definition._router import lock_service_wrapper
 from app.models.graphiti_model import GraphitiSearchModel
 from app.services.database.memcached_service import MemCachedService
 from app.services.database.graphiti_service import GraphitiService
@@ -30,14 +30,14 @@ def KnowledgeGraphDBRouter(depends:list=None):
     ########################         #######################
 
     @router.get('/document/{document_id}/',status_code=status.HTTP_200_OK)
-    @service_lock_decorator(GraphitiService)
+    @lock_service_wrapper(GraphitiService)
     async def get_document_graph(response:Response,request:Request,document_id:str):
         return await graphitiService.get_document_nodes(
             document_id=document_id
         )
 
     @router.delete('/document/{document_id}/',status_code=status.HTTP_200_OK)
-    @service_lock_decorator(GraphitiService)
+    @lock_service_wrapper(GraphitiService)
     async def delete_document(response:Response,request:Request,document_id:str):
         count=await graphitiService.delete_document(
             document_id
@@ -49,7 +49,7 @@ def KnowledgeGraphDBRouter(depends:list=None):
     ########################         #######################
 
     @router.get('/domain/{domain}/',status_code=status.HTTP_200_OK)
-    @service_lock_decorator(GraphitiService)
+    @lock_service_wrapper(GraphitiService)
     async def get_domain_graph(response:Response,request:Request,domain:str):
         return await graphitiService.get_domain_nodes(
             domain=domain,
@@ -57,7 +57,7 @@ def KnowledgeGraphDBRouter(depends:list=None):
         )
     
     @router.delete('/domain/{domain}/',status_code=status.HTTP_200_OK)
-    @service_lock_decorator(GraphitiService)
+    @lock_service_wrapper(GraphitiService)
     async def delete_domain(response:Response,request:Request,domain:str,):
         
         nodes = await graphitiService.get_domain_nodes(
@@ -81,7 +81,7 @@ def KnowledgeGraphDBRouter(depends:list=None):
     ########################         #######################
 
     @router.post('/playground/')
-    @service_lock_decorator(GraphitiService)
+    @lock_service_wrapper(GraphitiService)
     async def graphiti_playground(response:Response,request:Request,search:GraphitiSearchModel):
         await graphitiService.search(
             "",

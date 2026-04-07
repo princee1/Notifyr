@@ -4,7 +4,7 @@ from fastapi import Depends, Request, Response
 from app.classes.auth_permission import AuthPermission
 from app.container import InjectInMethod
 from app.cost.ingest_cost import DeleteDocumentIngestCost
-from app.decorators.handlers import AgenticHandler, ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, GraphitiHandler, ProxyRestGatewayHandler, RedisHandler, ServiceAvailabilityHandler
+from app.decorators.handlers import AgenticHandler, ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, GraphitiHandler, GatewayHandler, RedisHandler, ServiceAvailabilityHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import DeleteDocumentIngestUpdatePipe, MerchantPipe, domain_pipe, update_status_upon_no_metadata_pipe
@@ -45,7 +45,7 @@ class KGraphDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
             self.session.close()
 
     @Throttle(normal=(300,40))
-    @UseHandler(GraphitiHandler,ProxyRestGatewayHandler)
+    @UseHandler(GraphitiHandler,GatewayHandler)
     @UseHandler(AgenticHandler)
     @PingService([RemoteAgentService])
     @LockService(RemoteAgentService,lockType='reader')
@@ -60,7 +60,7 @@ class KGraphDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
             return res_body
 
     @UsePipe(domain_pipe)
-    @UseHandler(GraphitiHandler,ProxyRestGatewayHandler)
+    @UseHandler(GraphitiHandler,GatewayHandler)
     @UseHandler(AgenticHandler)
     @PingService([RemoteAgentService])
     @LockService(RemoteAgentService,lockType='reader')
@@ -82,7 +82,7 @@ class KGraphDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @PingService([RedisService,RemoteAgentService,ArqIngestTaskService])
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
     @LockService(RedisService,RemoteAgentService,ArqIngestTaskService,lockType='reader')
-    @UseHandler(GraphitiHandler,AgenticHandler,CostHandler,ArqHandler,ProxyRestGatewayHandler,RedisHandler,DataIngestHandler)
+    @UseHandler(GraphitiHandler,AgenticHandler,CostHandler,ArqHandler,GatewayHandler,RedisHandler,DataIngestHandler)
     @BaseHTTPRessource.HTTPRoute('/document/{job_id}/',methods=[HTTPMethod.DELETE],response_model=DeleteDomainModel)
     async def delete_document(self,job_id:str,response:Response,request:Request,cost:Annotated[DeleteDocumentIngestCost,Depends(DeleteDocumentIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],authPermission:AuthPermission = Depends(get_auth_permission)):
         
@@ -109,7 +109,7 @@ class KGraphDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @PingService([RedisService,RemoteAgentService,ArqIngestTaskService])
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
     @LockService(RedisService,RemoteAgentService,ArqIngestTaskService,lockType='reader')
-    @UseHandler(GraphitiHandler,AgenticHandler,CostHandler,ArqHandler,ProxyRestGatewayHandler,RedisHandler,DataIngestHandler)
+    @UseHandler(GraphitiHandler,AgenticHandler,CostHandler,ArqHandler,GatewayHandler,RedisHandler,DataIngestHandler)
     @BaseHTTPRessource.HTTPRoute('/domain/{domain}/',methods=[HTTPMethod.DELETE],response_model=DeleteDomainModel)
     async def delete_domain(self,domain:str,response:Response,request:Request,cost:Annotated[DeleteDocumentIngestCost,Depends(DeleteDocumentIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],authPermission:AuthPermission = Depends(get_auth_permission)):
         
@@ -142,7 +142,7 @@ class KGraphDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @Throttle(uniform=(200,500))
     @HTTPStatusCode(status.HTTP_200_OK)
     @PingService([RemoteAgentService])
-    @UseHandler(AgenticHandler,GraphitiHandler,ProxyRestGatewayHandler)
+    @UseHandler(AgenticHandler,GraphitiHandler,GatewayHandler)
     @LockService(RemoteAgentService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/playground/',methods=[HTTPMethod.POST])
     async def playground(self,response:Response,request:Request,search:GraphitiSearchModel,authPermission:AuthPermission= Depends(get_auth_permission)):

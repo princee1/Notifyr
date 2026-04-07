@@ -141,7 +141,7 @@ async def process_file_loader_task(ctx:dict[str,Any],vector_config:VectorConfig|
         
         if graph_config != None:
             for chunk in textDataLoader.chunks:
-                await graphitiService.add_chunk_episode(chunk,graph_config.instruction,graph_config.entities,graph_config.edges)
+                await graphitiService.add_chunk_episode(chunk,graph_config.instruction,graph_config.entities,graph_config.edges,graph_config.description)
 
     async with StepRunner(step,FileIngestionStepIndex.TOKEN_COST) as skip:
         skip()

@@ -1,6 +1,7 @@
-from typing import Any, List
+from typing import Any, List, Tuple
 from fastapi import HTTPException
 from app.classes.chunk import Chunk
+from app.classes.embeddings import EmbeddingUsage, EmbeddingWrapper
 from app.definition._service import BaseService, LinkDep, Service
 from app.errors.service_error import BuildFailureError
 from app.services.agent.llm_provider_service import LLMProviderService
@@ -262,7 +263,7 @@ class QdrantService(BaseService):
             timeout=timeout
         )
     
-    async def embed_query(self,query:str)->List[float]:
+    async def embed_query(self,query:str)->List[float]|Tuple[EmbeddingWrapper,EmbeddingUsage]:
         if APP_MODE == ApplicationMode.arq:
             return await self.embedding_search.aget_query_embedding(
                 query
@@ -271,11 +272,12 @@ class QdrantService(BaseService):
             match self.embed_provider:
                 case 'openai':
                     resp = await self.embedding_search.create(query,model='text-embedding-3-small',dimensions=512)
-                    usage = resp.usage
-                    return resp.data[0], (usage.prompt_tokens,usage.total_tokens)
-                    
+                    embedding = EmbeddingWrapper(None,resp.data[0],norm=None,)
+                    usage = EmbeddingUsage(resp.usage.prompt_tokens,resp.usage.total_tokens,'text-embedding-3-small',self.embed_provider)
                 case 'gemini':
                     ...
+                
+            return embedding,usage
     
     @property
     def qdrant_url(self) -> str:

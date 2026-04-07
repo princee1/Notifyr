@@ -1,12 +1,14 @@
 from typing import Annotated, List
+import aiohttp
 from fastapi import Depends, File, HTTPException, Request, Response, UploadFile,status
 from validators.uri import uri
 from app.classes.auth_permission import AuthPermission, Role
+from app.classes.embeddings import EmbeddingWrapper, EmbeddingModel
 from app.container import Get, InjectInMethod
 from app.cost.file_cost import FileCost
 from app.cost.ingest_cost import DeleteDocumentIngestCost, FileIngestCost, CrawlMarkdownIngestCost, ResearchMarkdownIngestCost
 from app.decorators.guards import ArqDataTaskGuard, DataIngestDatabaseGuard, UploadFilesGuard
-from app.decorators.handlers import LLMHandler, ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, FileHandler, MiniServiceHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler, UploadFileHandler, VaultHandler
+from app.decorators.handlers import GatewayHandler, LLMHandler, ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, FileHandler, MiniServiceHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler, UploadFileHandler, VaultHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.pipes import  DataClassToDictPipe, MerchantPipe, MiniServiceInjectorPipe, QueryToModelPipe, update_status_upon_no_metadata_pipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, LockService
@@ -16,7 +18,9 @@ from app.depends.funcs_dep import get_profile
 from app.manager.broker_manager import Broker
 from app.manager.merchant_manager import Merchant
 from app.models.crawal4ai_model import SchemaExtractionConfig, SeedingURLModel, URLGeneratorModel
+from app.models.vector_model import QdrantEmbedRequestModel
 from app.services.agent.llm_provider_service import LLMProviderService, VerifyLLMConfig
+from app.services.agent.remote_agent_service import RemoteAgentService
 from app.services.config_service import ConfigService
 from app.services.custom_service import CustomService
 from app.services.database.redis_service import RedisService
@@ -29,7 +33,7 @@ from app.definition._ressource import UseLimiter
 from app.services.worker.arq_service import ArqIngestTaskService, JobAlreadyExistsError, JobInProgressError,JobStatus, UnexpectedJobStatusError
 from app.models.ingest_model import (
     AbortedJobResponse,
-    ComparableInstruction,
+    ComparableEmbeddings,
     CrawlingComparableURL,
     DeleteIngestUriMetadata,
     ResearchIngestDataResponse,
@@ -100,7 +104,7 @@ class JobArqRessource(BaseHTTPRessource):
     @Throttle(uniform=(100,300))
     @PingService([ArqIngestTaskService])
     @LockService(ArqIngestTaskService,lockType='reader')
-    @UseHandler(CostHandler,AsyncIOHandler,FileHandler,RedisHandler)
+    @UseHandler(CostHandler,AsyncIOHandler,FileHandler,RedisHandler,ArqHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
     @BaseHTTPRessource.HTTPRoute('/{job_id}/', methods=[HTTPMethod.DELETE],response_model=AbortedJobResponse)
     async def abort_job(self, job_id: str, request: Request,response:Response,cost:Annotated[DeleteDocumentIngestCost,Depends(DeleteDocumentIngestCost)],broker:Annotated[Broker,Depends(Broker)],force:bool = Depends(force_update_query),autPermission:AuthPermission=Depends(get_auth_permission)):
@@ -161,22 +165,23 @@ class DataIngestRessource(BaseHTTPRessource):
             )
     
     @InjectInMethod()
-    def __init__(self,configService:ConfigService,vaultService:VaultService,fileService:FileService,arqService:ArqIngestTaskService,customService:CustomService):
+    def __init__(self,configService:ConfigService,vaultService:VaultService,fileService:FileService,arqService:ArqIngestTaskService,customService:CustomService,remoteAgentService:RemoteAgentService):
         super().__init__(None,None)
         self.configService = configService
         self.vaultService = vaultService
         self.fileService = fileService
         self.arqService = arqService
         self.customService = customService
+        self.remoteAgentService = remoteAgentService
 
     @UseLimiter('10/hour')
     @Throttle(normal=(300,150))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
-    @PingService([RedisService,{'cls':LLMProviderService,'kwargs':VerifyLLMConfig()}])
     @UsePipe(QueryToModelPipe('ingestTask'),MerchantPipe)
-    @LockService(RedisService,ArqIngestTaskService,LLMProviderService,lockType='reader')
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
+    @PingService([RedisService,{'cls':LLMProviderService,'kwargs':VerifyLLMConfig()}])
+    @LockService(RedisService,ArqIngestTaskService,LLMProviderService,lockType='reader')
     @UseHandler(UploadFileHandler,ArqHandler,AsyncIOHandler,PydanticHandler,LLMHandler,RedisHandler)
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.FILE_DATA_TASK),UploadFilesGuard(),docling_guard)
     @BaseHTTPRessource.HTTPRoute('/file/',methods=[HTTPMethod.POST],response_model=FileUploadIngestEnqueueResponse)
@@ -233,9 +238,9 @@ class DataIngestRessource(BaseHTTPRessource):
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.CRAWL_DATA_TASK),crawl4ai_guard)
-    @PingService([RedisService,{'cls':LLMProviderService,'kwargs':VerifyLLMConfig(crawl=True)}])
-    @LockService(RedisService,ArqIngestTaskService,CustomService,LLMProviderService,lockType='reader')
-    @UseHandler(ArqHandler,AsyncIOHandler,LLMHandler,RedisHandler,MiniServiceHandler,VaultHandler)
+    @UseHandler(ArqHandler,AsyncIOHandler,LLMHandler,RedisHandler,MiniServiceHandler,VaultHandler,GatewayHandler)
+    @PingService([RemoteAgentService,RedisService,{'cls':LLMProviderService,'kwargs':VerifyLLMConfig(crawl=True)}])
+    @LockService(RemoteAgentService,RedisService,ArqIngestTaskService,CustomService,LLMProviderService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/web/',methods=[HTTPMethod.POST],response_model=WebCrawlingUriMetadata,mount=False)
     async def ingest_web_crawling(self,request:Request,response:Response,ingestTask:WebCrawlingDataIngestModel, broker:Annotated[Broker,Depends(Broker)],cost:Annotated[CrawlMarkdownIngestCost,Depends(CrawlMarkdownIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],mode:DeleteMode = Depends(delete_mode_query),request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission)):
         """
@@ -252,11 +257,23 @@ class DataIngestRessource(BaseHTTPRessource):
         uri = ingestTask.name
         await self.arqService.exists(uri, True,True)
 
+        embedBody = QdrantEmbedRequestModel(query=ingestTask.instruction,request_id=cost.request_id,issuer=cost.issuer)
+        async with self.session.post('/embed/',json=embedBody.model_dump()) as res:
+
+            res_body = await res.json()
+            if res.status != status.HTTP_200_OK:
+               raise aiohttp.ClientPayloadError(res_body,res.status)
+            
+            embedding:dict = res_body
+            embedding['vector_id'] = uri
+
+        instruction_embedding = EmbeddingWrapper(embedding)
+
         if mode == 'soft':
             comparable_urls = CrawlingComparableURL(ingestTask=ingestTask)
-            comparable_instruction = ComparableInstruction(ingestTask=ingestTask)
-            await comparable_instruction.search()
-            await self.arqService.search(ArqDataTaskConstant.CRAWL_DATA_TASK,{'urls': comparable_urls},True)
+            comparable_embeddings = ComparableEmbeddings(instruction_embedding,'filter','include')
+            await self.arqService.search(ArqDataTaskConstant.CRAWL_DATA_TASK,{'instruction':comparable_embeddings})
+            await self.arqService.search(ArqDataTaskConstant.CRAWL_DATA_TASK,{'urls': comparable_urls},True,filter=comparable_embeddings.filtered)
         
         ingestTask.compute_size()
         metadata = WebCrawlingUriMetadata(uri=uri,
@@ -275,6 +292,7 @@ class DataIngestRessource(BaseHTTPRessource):
             defer_by=ingestTask.defer_by,
             kwargs={**ingestTask.model_dump(mode='json',exclude=('expires','defer_by','name')),
                     **metadata.model_dump(include=('uri','size')),
+                    'instruction':embedding,
                     'request_id':request_id,
                     '_nickname':ArqDataTaskConstant.CRAWL_DATA_TASK,
                     'state':dict(),
@@ -299,13 +317,20 @@ class DataIngestRessource(BaseHTTPRessource):
         Engage a broad research by fetching url concept and crawling those pages
         """
 
-
     async def on_startup(self):
         self.arqService.register_task(DATA_TASK_REGISTRY_NAME)
         await self.arqService.initialize()
+        headers = {"Authorization": f"Bearer {self.remoteAgentService.auth_header}"}
+        base_url = f"http://{self.remoteAgentService.agentic_http_host}/k-graph/"
+
+        async with aiohttp.ClientSession(base_url=base_url,headers=headers) as session:
+            self.session = session
     
     async def on_shutdown(self):
         await self.arqService.close()
+        async with self.session as session:
+            self.session.close()
+
 
     if False:
 

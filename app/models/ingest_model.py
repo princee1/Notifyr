@@ -1,9 +1,11 @@
 from typing import Any, Dict, List, Literal, Optional, Self, Tuple
 from aiohttp_retry import Union
 from pydantic import BaseModel, Field, HttpUrl, PrivateAttr, field_serializer, field_validator, model_validator
+from app.classes.embeddings import EmbeddingWrapper
 from app.classes.url import ComparableURL, URLParam
 from app.models.crawal4ai_model import MAX_URLS, DeepCrawlingStrategyModel, DigestConfigModel,KnowledgeGraphExtractionConfig, PDFLinkPreviewModel, SchemaExtractionConfig, SeedingURLModel, TextsExtractionConfig, URLGeneratorModel
 from app.utils.constant import ArqDataTaskConstant, ParseStrategy
+from app.utils.helper import SliceMode
 from .file_model import FileResponseUploadModel, UriMetadata
 from app.classes.scheduler import TimedeltaSchedulerModel
 
@@ -134,6 +136,9 @@ class WebCrawlingDataIngestModel(DataIngestModel):
 			raise ValueError('If you want to extract a knowledge graph you need to provide a graph_config with at least a domain name and one of those two lists: entities or edges')
 
 		if isinstance(self.extraction,KnowledgeGraphExtractionConfig):
+			if not self.graph_config.instruction:
+				raise ValueError('')
+
 			if self.graph_config != None:
 				if not self.graph_config.entities and not self.graph_config.edges:
 					raise ValueError('If you want to extract a knowledge graph you need to provide a graph_config with at least a domain name and one of those two lists: entities or edges')
@@ -169,6 +174,12 @@ class WebCrawlingDataIngestModel(DataIngestModel):
 		self._url_size = url_size
 		self._description = description
 
+	@property
+	def instruction(self)->str:
+		if isinstance( self.extraction, TextsExtractionConfig):
+			return self.extraction.focus +"+" +self.extraction.instruction
+		return self.extraction.instruction
+
 class CrawlingComparableURL(ComparableURL):
 
 	def __init__(self,ingestTask:WebCrawlingDataIngestModel):
@@ -196,14 +207,25 @@ class CrawlingComparableURL(ComparableURL):
 
 			return params and query
 
-class ComparableInstruction:
-	def __init__(self,ingestTask:WebCrawlingDataIngestModel,threshold:int=0.8):
-		self.ingestTask=ingestTask
-		self.threshold=threshold
-	
-	async def search(self)->bool:
-		...
+class ComparableEmbeddings:
+	def __init__(self,embedding:EmbeddingWrapper, mode:Literal['filter','compare'],filter_mode:SliceMode='include'):
+		self.mode = mode
+		self.filter_mode = filter_mode
+		self.embedding = embedding
+		self.filtered:set[str] = set()
 
+	def __eq__(self,other:dict):
+		target_embedding = EmbeddingWrapper(other)
+		is_similar = (self == target_embedding)
+		
+		if self.mode == 'filter':
+			if is_similar == (self.filter_mode == 'include'):
+				self.filtered.add(target_embedding.vector_id)
+			if (not is_similar) == (self.filter_mode == 'exclude'):
+				self.filtered.add(target_embedding.vector_id)
+			return True
+		else:
+			return is_similar
 
 class WebCrawlingUriMetadata(UriMetadata):
 	description: Optional[str] = None

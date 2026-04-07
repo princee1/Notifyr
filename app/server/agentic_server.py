@@ -42,7 +42,7 @@ async def on_purchase_token_next(tokens:PromptToken):
     cost.purchase('input token',1,tokens['input'])
     cost.purchase('output token',1,tokens['output'])
     bill = cost.generate_bill()
-    costService.deduct_credits(CostConstant.TOKEN_CREDIT,bill)
+    await costService.deduct_credits(CostConstant.TOKEN_CREDIT,bill)
 
 def on_purchase_token_complete():
     ...
