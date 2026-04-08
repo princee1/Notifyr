@@ -232,24 +232,22 @@ class DigestConfigModel(BaseModel):
 
 class BaseExtractionConfig(BaseModel):
     """Common fields shared across all extraction configurations."""
-    strategy: StructuredExtractionStrategy = 'llm'
     instruction: Optional[str] = Field(default=None, description="LLM instruction for extraction")
 
-class BaseSchemaExtractionConfig(BaseExtractionConfig):
-    schema_name: Optional[str] = Field(default=None, description="Schema name for json_css/regex strategy")
-    schema_url: Optional[str] = Field(default=None, description="Example URL to generate schema from")
-
-class TextsExtractionConfig(BaseSchemaExtractionConfig):
+class TextsExtractionConfig(BaseExtractionConfig):
     """Configuration for extracting list of text items (id, name, text)."""
     focus: str
 
-class SchemaExtractionConfig(BaseSchemaExtractionConfig):
-    """Configuration for extracting list of dictionary objects."""
-    custom_schema: Optional[str] = Field(default=None, description="Name of the predefined schema to use (e.g., 'product', 'article')")
+class SchemaExtractionConfig(BaseExtractionConfig):
+	"""Configuration for extracting list of dictionary objects."""
+	schema_name: Optional[str] = Field(default=None, description="Schema name for json_css/regex strategy")
+	schema_url: Optional[str] = Field(default=None, description="Example URL to generate schema from")
+	custom_schema: Optional[str] = Field(default=None, description="Name of the predefined schema to use (e.g., 'product', 'article')")
+	strategy: StructuredExtractionStrategy = 'llm'
 
 class KnowledgeGraphExtractionConfig(BaseExtractionConfig):
     """Configuration for extracting knowledge graph (entities and relationships)."""
-    strategy: Literal['kg-llm'] = 'kg-llm' 
+    strategy: Optional[Literal['kg-llm']] = 'kg-llm' 
 
 
 ###################################################################################################

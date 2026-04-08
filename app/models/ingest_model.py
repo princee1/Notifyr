@@ -208,7 +208,7 @@ class CrawlingComparableURL(ComparableURL):
 			return params and query
 
 class ComparableEmbeddings:
-	def __init__(self,embedding:EmbeddingWrapper, mode:Literal['filter','compare'],filter_mode:SliceMode='include'):
+	def __init__(self,embedding:EmbeddingWrapper|None, mode:Literal['filter','compare'],filter_mode:SliceMode='include'):
 		self.mode = mode
 		self.filter_mode = filter_mode
 		self.embedding = embedding

@@ -79,3 +79,65 @@ between entities or sections.
 Do not infer conversational intent, personal opinions, or user-specific
 context unless explicitly stated within the document text itself.
 """
+
+
+###################################################################################################
+###########################		  Knowledge Graph Extraction Prompts		     ##############################
+###################################################################################################
+KG_EXTRACTION_RULES = """
+# PERSONA
+You are the **Knowledge Graph Architect**. You specialize in ontologies and relationship mapping, transforming prose into rigid, interconnected structures.
+
+# EXTRACTION PARAMETERS
+1. **Entity Identification**: Identify all entities belonging to the provided [ENTITY_TYPES].
+2. **Relationship Mapping**: Connect entities using only the [RELATIONSHIP_TYPES] provided. Every relationship must have a source, a target, and a type.
+3. **Canonical ID Generation**: Create unique, slug-style IDs (e.g., 'machine-learning-model') based on the entity's core meaning to ensure cross-document consistency.
+4. **Relationship Attributes**: If the text describes *how* or *why* a relationship exists, include it in a 'description' field for that edge.
+5. **Title Synthesis**: For every cluster of related entities, provide a 'graph_segment_title' that describes the thematic link.
+"""
+
+from typing import List, Optional
+
+def KG_EXTRACTION_PROMPT(
+    entities: List[str], 
+    relationships: List[str], 
+    special_instructions: Optional[str] = None
+) -> str:
+    """
+    Generates a prompt to transform Markdown into a structured Knowledge Graph.
+    
+    Args:
+        entities: List of allowed entity names (e.g., ['Project', 'Stakeholder']).
+        relationships: List of allowed relationship types (e.g., ['MANAGES', 'PART_OF']).
+        special_instructions: Specific logic for edge cases or metadata.
+    """
+    
+    entity_list = ", ".join(entities)
+    rel_list = ", ".join(relationships)
+    
+    prompt = f"""{KG_EXTRACTION_RULES}
+
+# SCHEMA CONFIGURATION
+- **ALLOWED ENTITY TYPES**: [{entity_list}]
+- **ALLOWED RELATIONSHIP TYPES**: [{rel_list}]
+
+# OUTPUT JSON FORMAT
+Return a JSON object representing the graph segment:
+{{
+  "graph_id": "unique_segment_id",
+  "title": "Comprehensive Title of this Knowledge Cluster",
+  "nodes": [
+    {{ "id": "entity_id", "label": "Entity Name", "type": "ENTITY_TYPE" }}
+  ],
+  "edges": [
+    {{ "source": "entity_id_1", "target": "entity_id_2", "type": "RELATIONSHIP_TYPE", "description": "context" }}
+  ]
+}}
+"""
+
+    if special_instructions:
+        prompt += f"\n# SPECIAL EXTRACTION INSTRUCTIONS\n> {special_instructions}\n"
+
+    prompt += "\n--- BEGIN MARKDOWN SOURCE ---\n"
+    
+    return prompt

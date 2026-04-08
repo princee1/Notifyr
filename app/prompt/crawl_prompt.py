@@ -110,66 +110,6 @@ Return a JSON array of objects. Each object must strictly follow this schema:
     return prompt
 
 ###################################################################################################
-###########################		  Knowledge Graph Extraction Prompts		     ##############################
-###################################################################################################
-KG_EXTRACTION_RULES = """
-# PERSONA
-You are the **Knowledge Graph Architect**. You specialize in ontologies and relationship mapping, transforming prose into rigid, interconnected structures.
-
-# EXTRACTION PARAMETERS
-1. **Entity Identification**: Identify all entities belonging to the provided [ENTITY_TYPES].
-2. **Relationship Mapping**: Connect entities using only the [RELATIONSHIP_TYPES] provided. Every relationship must have a source, a target, and a type.
-3. **Canonical ID Generation**: Create unique, slug-style IDs (e.g., 'machine-learning-model') based on the entity's core meaning to ensure cross-document consistency.
-4. **Relationship Attributes**: If the text describes *how* or *why* a relationship exists, include it in a 'description' field for that edge.
-5. **Title Synthesis**: For every cluster of related entities, provide a 'graph_segment_title' that describes the thematic link.
-"""
-
-from typing import List, Optional
-
-def KG_EXTRACTION_PROMPT(
-    entities: List[str], 
-    relationships: List[str], 
-    special_instructions: Optional[str] = None
-) -> str:
-    """
-    Generates a prompt to transform Markdown into a structured Knowledge Graph.
-    
-    Args:
-        entities: List of allowed entity names (e.g., ['Project', 'Stakeholder']).
-        relationships: List of allowed relationship types (e.g., ['MANAGES', 'PART_OF']).
-        special_instructions: Specific logic for edge cases or metadata.
-    """
-    
-    entity_list = ", ".join(entities)
-    rel_list = ", ".join(relationships)
-    
-    prompt = f"""{KG_EXTRACTION_RULES}
-
-# SCHEMA CONFIGURATION
-- **ALLOWED ENTITY TYPES**: [{entity_list}]
-- **ALLOWED RELATIONSHIP TYPES**: [{rel_list}]
-
-# OUTPUT JSON FORMAT
-Return a JSON object representing the graph segment:
-{{
-  "graph_id": "unique_segment_id",
-  "title": "Comprehensive Title of this Knowledge Cluster",
-  "nodes": [
-    {{ "id": "entity_id", "label": "Entity Name", "type": "ENTITY_TYPE" }}
-  ],
-  "edges": [
-    {{ "source": "entity_id_1", "target": "entity_id_2", "type": "RELATIONSHIP_TYPE", "description": "context" }}
-  ]
-}}
-"""
-
-    if special_instructions:
-        prompt += f"\n# SPECIAL EXTRACTION INSTRUCTIONS\n> {special_instructions}\n"
-
-    prompt += "\n--- BEGIN MARKDOWN SOURCE ---\n"
-    
-    return prompt
-###################################################################################################
 ###########################		  Schema Generation Prompts		     ##############################
 ###################################################################################################
 
@@ -184,7 +124,7 @@ You are the **Crawl4AI Mapping Specialist**. Your expertise is in converting vis
 5. **Collection Logic**: For repeating items (like product cards), identify the 'base_selector' that encompasses the entire repeating unit.
 """
 
-def CRAWL4AI_GENERATION_PROMPT(schema_string: Optional[str]=None, special_instructions: str = None) -> str:
+def CRAWL4AI_GENERATION_PROMPT(schema: dict, special_instructions: str = None) -> str:
     """
     Generates a prompt to direct the mapping of web content to a Crawl4AI CSS/Regex strategy.
     Args:
@@ -200,8 +140,11 @@ def CRAWL4AI_GENERATION_PROMPT(schema_string: Optional[str]=None, special_instru
       3. A **Regex** pattern only if the data is nested within a messy string.
       """
 
-    if schema_string:
-        prompt+=f"\n# TARGET SCHEMA:\n\t{schema_string}"
+    prompt+=f"""\n# TARGET SCHEMA:\n\t[{{
+        "id": "unique_schema_id",
+        "title": "A descriptive, synthesized title",
+        "content": {schema}
+    }}]"""
 
     if special_instructions:
         prompt += f"\n# SPECIAL MAPPING INSTRUCTIONS\n> {special_instructions}\n"

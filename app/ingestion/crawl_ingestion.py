@@ -267,17 +267,10 @@ class WebCrawlerIngestion:
 		"""Build extraction strategy based on configuration."""
 		config = self.ingestTask.extraction
 		markdown_generator = DefaultMarkdownGenerator(
-			content_filter=PruningContentFilter(
-				
-			),
+			content_filter=PruningContentFilter(),
 			options={
 			}
 		)
-		if config.strategy != 'llm':
-			async with aiohttp.ClientSession() as session:
-				strategy = await self.fetch_schema(session)
-				return markdown_generator,strategy
-		
 		if self.schema:
 			schema=self.schema.model_json_schema()
 			
@@ -294,6 +287,11 @@ class WebCrawlerIngestion:
 			extraction_type = 'block'
 
 		elif isinstance(config, SchemaExtractionConfig):
+			if config.strategy == 'json':
+				async with aiohttp.ClientSession() as session:
+					strategy = await self.fetch_schema(session)
+					return markdown_generator,strategy
+
 			instruction = crawl_prompt.SCHEMA_EXTRACTION_PROMPT(
 				target_format='JSON',
 				special_instructions=config.instruction

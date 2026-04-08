@@ -326,13 +326,11 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
                 if not result.chunks:
                     continue
 
-                if vector_config != None:
-                    for chunk in result.chunks:
+                for chunk in result.chunks:
+                    if vector_config != None:
                         chunk.vector = await qdrantService.embed_query(chunk.payload['text'])
-                    await qdrantService.upload_points(vector_config.collection_name,result.chunks,True,)
-                    
-                if graph_config != None:
-                    for chunk in result.chunks:
+
+                    if graph_config != None:
                         await graphitiService.add_chunk_episode(
                             chunk,
                             graph_config.instruction,
@@ -340,6 +338,10 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
                             edges=graph_config.edges,
                             description=result.description
                         )
+
+                if vector_config !=None:
+                    await qdrantService.upload_points(vector_config.collection_name,result.chunks,True,)
+                              
             elif isinstance(crawler.ingestTask.extraction,SchemaExtractionConfig):
 
                 if graph_config == None:

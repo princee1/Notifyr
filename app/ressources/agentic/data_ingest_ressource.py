@@ -272,7 +272,7 @@ class DataIngestRessource(BaseHTTPRessource):
         if mode == 'soft':
             comparable_urls = CrawlingComparableURL(ingestTask=ingestTask)
             comparable_embeddings = ComparableEmbeddings(instruction_embedding,'filter','include')
-            await self.arqService.search(ArqDataTaskConstant.CRAWL_DATA_TASK,{'instruction':comparable_embeddings})
+            await self.arqService.search(ArqDataTaskConstant.CRAWL_DATA_TASK,{'instruction':comparable_embeddings},None,'match')
             await self.arqService.search(ArqDataTaskConstant.CRAWL_DATA_TASK,{'urls': comparable_urls},True,filter=comparable_embeddings.filtered)
         
         ingestTask.compute_size()
