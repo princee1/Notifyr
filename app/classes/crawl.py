@@ -93,10 +93,19 @@ class SchemaCouldNotBeGeneratedError(BaseError):
         self.schema_url = schema_url
         self.strategy = strategy
 
+class SchemaHTMLFormatError(BaseError):
+    def __init__(self, schema_name,schema_url):
+        super().__init__()
+        self.schema_name = schema_name
+        self.schema_url = schema_url
+
 class BadSchemaGenerationStrategyError(BaseError):
     def __init__(self, strategy):
         super().__init__()
         self.strategy = strategy
+
+class SchemaNotFoundError(BaseError):
+	...
 
 class CrawlError(TypedDict):
     name:str
@@ -106,6 +115,11 @@ class CrawlError(TypedDict):
 ###################################################################################################
 ###########################		  Type Definitions					     ##############################
 ###################################################################################################
+
+class CrawlSchemaModel(BaseModel):
+    id:str
+    title:str
+    content:dict
 
 class CrawlText(BaseModel):
     text:str

@@ -96,8 +96,7 @@ Return a JSON array of objects. Each object must strictly follow this schema:
   {{
     "id": "unique_schema_id",
     "title": "A descriptive, synthesized title",
-    "format": "{target_format}",
-    "content": "The full string representation of the schema"
+    "content": "The json representation of the schema"
   }},
 ]
 """
@@ -132,7 +131,7 @@ def CRAWL4AI_GENERATION_PROMPT(schema: dict, special_instructions: str = None) -
         special_instructions: Instructions like "Look for the price in the meta tags if not in the body."
     """
     
-    prompt = f"""{JSON_MAPPING_LOGIC}
+    prompt = f"""{JSON_MAPPING_LOGIC}w
       # TASK
       Analyze the provided Markdown/HTML. For every field in the TARGET SCHEMA, identify:
       1. The most precise **CSS Selector**.

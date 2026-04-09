@@ -175,7 +175,7 @@ class WebCrawlingDataIngestModel(DataIngestModel):
 		self._description = description
 
 	@property
-	def instruction(self)->str:
+	def subject(self)->str:
 		if isinstance( self.extraction, TextsExtractionConfig):
 			return self.extraction.focus +"+" +self.extraction.instruction
 		return self.extraction.instruction
@@ -269,16 +269,18 @@ class APIIngestDataResponse(BaseIngestModelResponse):
 class DeleteIngestUriMetadata(UriMetadata):
 	task:ArqDataTaskConstant._DATA_TASK_TYPE
 
-class DeleteIngestDocumentModel(BaseModel):
-	errors:Dict[str,DeleteIngestUriMetadata]
+class DeleteIngestBaseModel(BaseModel):
 	metadata:List[DeleteIngestUriMetadata] = Field(default_factory=list)
+
+
+class DeleteIngestDocumentModel(DeleteIngestBaseModel):
+	errors:Dict[str,DeleteIngestUriMetadata]
 	job_dequeued:List[str] = Field(default_factory=list)
 	jod_deleted:List[str] = Field(default_factory=list)
 	gateway_body:Optional[Dict] = None
 
 
-class AbortedJobResponse(BaseModel):
-	metadata:List[DeleteIngestUriMetadata] = Field(default_factory=list)
+class AbortedJobResponse(DeleteIngestBaseModel):
 	deleted:bool = False
 	aborted:bool = False
 	dequeued:bool = False

@@ -2,7 +2,7 @@ import functools
 import json
 from typing import Any, Callable, List
 from app.classes.cost_definition import MarkdownCostDefinition
-from app.classes.crawl import CrawlState, CrawlTokenUsageReport, DigestState, MarkdownDocumentSize
+from app.classes.crawl import CrawlState, CrawlTokenUsageReport, DigestState, MarkdownDocumentSize, SchemaNotFoundError
 from app.classes.qdrant import QdrantCollectionDoesNotExistError
 from app.classes.step import SkipStep, Step, StepRunner
 from app.errors.llm_error import LLMConfigNotConfiguredError
@@ -282,8 +282,10 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
     
     if isinstance(ingestTask.extraction,SchemaExtractionConfig):
         schema = ingestTask.extraction.custom_schema
-        schema = customService.to_schemas([schema])[schema]
-
+        schema = customService.to_schemas([schema]).get(schema,None)
+        if not schema:
+            raise SchemaNotFoundError(ingestTask.extraction.custom_schema)
+        
     markdownMaxDef:MarkdownCostDefinition = costService.fetch_definition('crawl',MarkdownCostDefinition(max_html_mb=2,max_pdf_mb=10))
     markdownMaxDef['max_html_mb'] = fileService.bytes_conversion(markdownMaxDef['max_html_mb'],'mb','b')
     markdownMaxDef['max_pdf_mb'] = fileService.bytes_conversion(markdownMaxDef['max_pdf_mb'],'mb','b')

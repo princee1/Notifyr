@@ -257,7 +257,7 @@ class DataIngestRessource(BaseHTTPRessource):
         uri = ingestTask.name
         await self.arqService.exists(uri, True,True)
 
-        embedBody = QdrantEmbedRequestModel(query=ingestTask.instruction,request_id=cost.request_id,issuer=cost.issuer)
+        embedBody = QdrantEmbedRequestModel(query=ingestTask.subject,request_id=cost.request_id,issuer=cost.issuer)
         async with self.session.post('/embed/',json=embedBody.model_dump()) as res:
 
             res_body = await res.json()

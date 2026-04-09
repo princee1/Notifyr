@@ -186,7 +186,7 @@ class WebCrawlerIngestion:
 			self._build_deepCrawl_strategy()
 		
 		self.schema_tokenUsage = TokenUsage()
-		markdown_generator,strategy  = await self.build_strategy(self.ingestTask.extraction)
+		markdown_generator,strategy  = await self.build_strategy()
 	
 		self.strategy: LLMExtractionStrategy | JsonCssExtractionStrategy | RegexExtractionStrategy | None = strategy
 
@@ -328,43 +328,29 @@ class WebCrawlerIngestion:
 				raw_schema = json.load(f)
 			
 		instruction = self.ingestTask.extraction.instruction
-		schema_html= ""
-		bodies = {}
-		requests = []
+
 		if not raw_schema:
-
 			# Generate new schema
-			for url in config.schema_url:
-				async def fetch_example():
-					try:
-						async with session.get(config.schema_url, timeout=10) as response:
-							if response.status == 404:
-								raise SchemaHTMLExampleNotFoundError(config.schema_name,url,"Page does not exist")
-							if response.status == 204:
-								raise SchemaHasNoContentError(config.schema_name,url,'Page has no content')
-							if response.status != 200:
-								SchemaFetchError(response.status,config.schema_name,url,response.reason)
+			async with session.get(config.schema_url, timeout=10) as response:
+				if response.status == 404:
+					raise SchemaHTMLExampleNotFoundError(config.schema_name,config.schema_url,"Page does not exist")
+				if response.status == 204:
+					raise SchemaHasNoContentError(config.schema_name,config.schema_url,'Page has no content')
+				if response.status != 200:
+					SchemaFetchError(response.status,config.schema_name,config.schema_url,response.reason)
 
-							html= await response.text()
-							body = BeautifulSoup(html).find('body')
-							bodies[url]=body
-
-					except SchemaFetchError | SchemaHasNoContentError |SchemaHTMLExampleNotFoundError as e:	
-						self.errors.append(
-							CrawlError(name=config.schema_name,url=url,message=e.reason)
-						)
-				requests.append(fetch_example)
-
-			await asyncio.gather(requests)
-
-			for u,body in bodies.items():
-				schema_html+=body
+				html= await response.text()
+				try:
+					body = BeautifulSoup(html).find('body')
+					schema_html = body.text
+				except :
+					raise SchemaHTMLFormatError(config.schema_name,config.schema_url)
 
 			if not schema_html:
 				raise NoInputHtmlSchemaError(config.schema_name,config.schema_url)
 
 			instruction = crawl_prompt.CRAWL4AI_GENERATION_PROMPT(
-				self.schema.model_json_schema() if self.schema else None,
+				self.schema.model_json_schema(),
 				config.instruction
 			)
 
@@ -386,6 +372,7 @@ class WebCrawlerIngestion:
 					)
 				case _:
 					raise BadSchemaGenerationStrategyError(config.strategy)
+		
 		if not raw_schema:
 			raise SchemaCouldNotBeGeneratedError(config.schema_name,config.schema_url,config.strategy)
 
@@ -544,7 +531,7 @@ class WebCrawlerIngestion:
 								node_id=node_id,
 								chunk_index=i,
 								extension="md",
-								strategy=extraction_config.strategy,
+								strategy='LLM Text Extraction',
 								parser="crawl4ai",
 								language=self.ingestTask.lang,
 								source=metadata.source,
@@ -557,10 +544,20 @@ class WebCrawlerIngestion:
 			if not schema_content:
 				return
 			metadata.extracted_content = []
-			schema_content = json.loads(schema_content)
+			try:
+				schema_content = json.loads(schema_content)
+			except:
+				metadata.success = False
+				metadata.error = "Could not process extract the schema"
+				return 
+
 			for item in schema_content:
-				item = self.schema.model_validate(item)
-				metadata.extracted_content.append(item)
+				try:
+					item = CrawlSchemaModel.model_validate(item)
+					content = self.schema.model_validate(item.content)
+					metadata.extracted_content.append(content)
+				except:
+					continue
 
 		elif isinstance(extraction_config, KnowledgeGraphExtractionConfig):
 			metadata.markdown_content = markdown

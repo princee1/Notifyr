@@ -232,7 +232,8 @@ class DigestConfigModel(BaseModel):
 
 class BaseExtractionConfig(BaseModel):
     """Common fields shared across all extraction configurations."""
-    instruction: Optional[str] = Field(default=None, description="LLM instruction for extraction")
+    focus: str
+    instruction: Optional[str] = Field( description="LLM instruction for extraction",min_length=20,max_length=400)
 
 class TextsExtractionConfig(BaseExtractionConfig):
     """Configuration for extracting list of text items (id, name, text)."""
@@ -240,15 +241,15 @@ class TextsExtractionConfig(BaseExtractionConfig):
 
 class SchemaExtractionConfig(BaseExtractionConfig):
 	"""Configuration for extracting list of dictionary objects."""
-	schema_name: Optional[str] = Field(default=None, description="Schema name for json_css/regex strategy")
-	schema_url: Optional[str] = Field(default=None, description="Example URL to generate schema from")
-	custom_schema: Optional[str] = Field(default=None, description="Name of the predefined schema to use (e.g., 'product', 'article')")
+
+	schema_name: str = Field(description="Schema name for json_css/regex strategy")
+	schema_url: str = Field(description="Example URL to generate schema from")
+	custom_schema: str = Field(description="Name of the predefined schema to use (e.g., 'product', 'article')")
 	strategy: StructuredExtractionStrategy = 'llm'
 
 class KnowledgeGraphExtractionConfig(BaseExtractionConfig):
     """Configuration for extracting knowledge graph (entities and relationships)."""
     strategy: Optional[Literal['kg-llm']] = 'kg-llm' 
-
 
 ###################################################################################################
 ###########################		   PDF Link Preview  Model 			     ##########################
