@@ -39,7 +39,7 @@ from app.models.crawal4ai_model import (
 	SeedingURLModel, URLGeneratorModel
 )
 from app.models.ingest_model import WebCrawlingDataIngestModel
-from app.prompt import crawl_prompt
+from app.prompt import crawl_prompt, graphiti_prompt
 from app.utils.tools import RunAsync
 
 
@@ -279,8 +279,9 @@ class WebCrawlerIngestion:
 
 		if isinstance(config, TextsExtractionConfig):
 			instruction = crawl_prompt.SEMANTIC_TEXT_EXTRACTION_PROMPT_TEMPLATE(
-				config.focus,
-				config.instruction,
+				focus=config.focus,
+				persona=config.persona,
+				special_instructions=config.instruction,
 			)
 			apply_chunking=True
 			schema = CrawlTextModel.model_json_schema(),
@@ -294,10 +295,13 @@ class WebCrawlerIngestion:
 
 			instruction = crawl_prompt.SCHEMA_EXTRACTION_PROMPT(
 				target_format='JSON',
+				persona=config.persona,
+				focus=config.focus,
 				special_instructions=config.instruction
 			)
 			
 		elif isinstance(config, KnowledgeGraphExtractionConfig):
+
 			return markdown_generator,None
 		
 		strategy = LLMExtractionStrategy(
@@ -350,8 +354,10 @@ class WebCrawlerIngestion:
 				raise NoInputHtmlSchemaError(config.schema_name,config.schema_url)
 
 			instruction = crawl_prompt.CRAWL4AI_GENERATION_PROMPT(
-				self.schema.model_json_schema(),
-				config.instruction
+				schema=self.schema.model_json_schema(),
+				persona=config.persona,
+				focus=config.focus,
+				special_instructions=config.instruction
 			)
 
 			match config.strategy:
@@ -561,6 +567,11 @@ class WebCrawlerIngestion:
 
 		elif isinstance(extraction_config, KnowledgeGraphExtractionConfig):
 			metadata.markdown_content = markdown
+			extraction_config.instruction = graphiti_prompt.KG_EXTRACTION_PROMPT(
+				extraction_config.persona,
+				extraction_config.focus,
+				extraction_config.instruction
+			)
 
 		self.documents.append(
 			MarkdownDocumentSize(

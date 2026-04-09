@@ -176,9 +176,7 @@ class WebCrawlingDataIngestModel(DataIngestModel):
 
 	@property
 	def subject(self)->str:
-		if isinstance( self.extraction, TextsExtractionConfig):
-			return self.extraction.focus +"+" +self.extraction.instruction
-		return self.extraction.instruction
+		return self.extraction.subject
 
 class CrawlingComparableURL(ComparableURL):
 
@@ -246,7 +244,6 @@ class ResearchDataIngestModel(DataIngestModel):
 	query:str
 	config:DigestConfigModel
 
-
 class ResearchIngestUriMetadata(UriMetadata):
 	...
 
@@ -272,13 +269,11 @@ class DeleteIngestUriMetadata(UriMetadata):
 class DeleteIngestBaseModel(BaseModel):
 	metadata:List[DeleteIngestUriMetadata] = Field(default_factory=list)
 
-
-class DeleteIngestDocumentModel(DeleteIngestBaseModel):
+class DeleteIngestDataModel(DeleteIngestBaseModel):
 	errors:Dict[str,DeleteIngestUriMetadata]
 	job_dequeued:List[str] = Field(default_factory=list)
 	jod_deleted:List[str] = Field(default_factory=list)
 	gateway_body:Optional[Dict] = None
-
 
 class AbortedJobResponse(DeleteIngestBaseModel):
 	deleted:bool = False

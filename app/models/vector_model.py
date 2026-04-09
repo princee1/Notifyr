@@ -1,8 +1,8 @@
 from typing import Any, Dict, List
 from pydantic import BaseModel, Field
-from app.models.ingest_model import DeleteIngestDocumentModel
+from app.models.ingest_model import DeleteIngestDataModel
 
-class DeleteCollectionModel(DeleteIngestDocumentModel):
+class DeleteCollectionModel(DeleteIngestDataModel):
     collection_name:str
 
 class QdrantCollectionModel(BaseModel):

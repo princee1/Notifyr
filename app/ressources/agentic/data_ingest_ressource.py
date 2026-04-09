@@ -267,12 +267,12 @@ class DataIngestRessource(BaseHTTPRessource):
             embedding:dict = res_body
             embedding['vector_id'] = uri
 
-        instruction_embedding = EmbeddingWrapper(embedding)
+        subject_embedding = EmbeddingWrapper(embedding)
 
         if mode == 'soft':
             comparable_urls = CrawlingComparableURL(ingestTask=ingestTask)
-            comparable_embeddings = ComparableEmbeddings(instruction_embedding,'filter','include')
-            await self.arqService.search(ArqDataTaskConstant.CRAWL_DATA_TASK,{'instruction':comparable_embeddings},None,'match')
+            comparable_embeddings = ComparableEmbeddings(subject_embedding,'filter','include')
+            await self.arqService.search(ArqDataTaskConstant.CRAWL_DATA_TASK,{'subject':comparable_embeddings},None,'match')
             await self.arqService.search(ArqDataTaskConstant.CRAWL_DATA_TASK,{'urls': comparable_urls},True,filter=comparable_embeddings.filtered)
         
         ingestTask.compute_size()
@@ -292,7 +292,7 @@ class DataIngestRessource(BaseHTTPRessource):
             defer_by=ingestTask.defer_by,
             kwargs={**ingestTask.model_dump(mode='json',exclude=('expires','defer_by','name')),
                     **metadata.model_dump(include=('uri','size')),
-                    'instruction':embedding,
+                    'subject':embedding,
                     'request_id':request_id,
                     '_nickname':ArqDataTaskConstant.CRAWL_DATA_TASK,
                     'state':dict(),
