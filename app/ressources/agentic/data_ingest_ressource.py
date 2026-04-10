@@ -1,5 +1,4 @@
 from typing import Annotated, List
-import aiohttp
 from fastapi import Depends, File, HTTPException, Request, Response, UploadFile,status
 from validators.uri import uri
 from app.classes.auth_permission import AuthPermission, Role
@@ -258,14 +257,8 @@ class DataIngestRessource(BaseHTTPRessource):
         await self.arqService.exists(uri, True,True)
 
         embedBody = QdrantEmbedRequestModel(query=ingestTask.subject,request_id=cost.request_id,issuer=cost.issuer)
-        async with self.session.post('/embed/',json=embedBody.model_dump()) as res:
-
-            res_body = await res.json()
-            if res.status != status.HTTP_200_OK:
-               raise aiohttp.ClientPayloadError(res_body,res.status)
-            
-            embedding:dict = res_body
-            embedding['vector_id'] = uri
+        embedding:dict = await self.remoteAgentService.request('POST','/vector/embed/',json=embedBody.model_dump())
+        embedding['vector_id'] = uri
 
         subject_embedding = EmbeddingWrapper(embedding)
 
@@ -320,16 +313,9 @@ class DataIngestRessource(BaseHTTPRessource):
     async def on_startup(self):
         self.arqService.register_task(DATA_TASK_REGISTRY_NAME)
         await self.arqService.initialize()
-        headers = {"Authorization": f"Bearer {self.remoteAgentService.auth_header}"}
-        base_url = f"http://{self.remoteAgentService.agentic_http_host}/k-graph/"
-
-        async with aiohttp.ClientSession(base_url=base_url,headers=headers) as session:
-            self.session = session
     
     async def on_shutdown(self):
         await self.arqService.close()
-        async with self.session as session:
-            self.session.close()
 
 
     if False:

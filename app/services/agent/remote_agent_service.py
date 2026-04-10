@@ -4,6 +4,9 @@ import functools
 from typing import Callable, Generator, Literal, Self
 import grpc
 import aiohttp
+from aiohttp import ClientError, ClientConnectorError, ClientResponseError, ClientTimeout
+from json import JSONDecodeError
+from app.errors.agentic_error import *
 from pydantic import ValidationError
 from app.definition import _service
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BaseService, LinkDep, MiniService, MiniServiceStore, Service, ServiceStatus
@@ -75,6 +78,7 @@ class RemoteAgentService(BaseMiniServiceManager):
         self.grpc_state: grpc.ChannelConnectivity = grpc.ChannelConnectivity.IDLE
 
         self.http_health_task: asyncio.Task | None = None
+        self._http_session: aiohttp.ClientSession | None = None
 
     async def pingService(self, infinite_wait:bool, data:dict, profile:str = None, as_manager:bool = False, **kwargs):
         match self.http_state:
@@ -134,7 +138,6 @@ class RemoteAgentService(BaseMiniServiceManager):
                 continue
 
         return super().build(counter, build_state,True)
-
 
     if APP_MODE == ApplicationMode.worker:
 
@@ -235,6 +238,76 @@ class RemoteAgentService(BaseMiniServiceManager):
                         )
         
         self.http_health_task = asyncio.create_task(_http_health_check())
+
+    async def init_http_session(self, timeout: int = 30):
+        """Initialize a shared aiohttp.ClientSession for HTTP requests to agentic."""
+        if self._http_session and not self._http_session.closed:
+            return
+
+        headers = {"Authorization": f"Bearer {self.auth_header}"}
+        timeout_obj = aiohttp.ClientTimeout(total=timeout)
+        self._http_session = aiohttp.ClientSession(headers=headers, timeout=timeout_obj)
+
+    async def close_http_session(self):
+        if self._http_session:
+            try:
+                await self._http_session.close()
+            except Exception:
+                pass
+            self._http_session = None
+
+    async def request(self, method: str, path: str, *, expected_status=200, **kwargs):
+        """Generic HTTP request helper to agentic.
+
+        - method: 'GET'|'POST'|'DELETE' etc.
+        - path: must start with '/' or be a full path; will be joined with agentic_http_host
+        - expected_status: int or iterable of ints accepted as valid
+        Returns parsed JSON body on success.
+        Raises Agentic* exceptions on failure.
+        """
+
+        if path.startswith('/'):
+            url = f"http://{self.agentic_http_host}{path}"
+        else:
+            url = f"http://{self.agentic_http_host}/{path}"
+
+        method = method.upper()
+        # normalize expected_status
+        if isinstance(expected_status, int):
+            expected = {expected_status}
+        else:
+            expected = set(expected_status)
+
+        try:
+            async with self._http_session.request(method, url, **kwargs) as resp:
+                text = await resp.text()
+                try:
+                    body = await resp.json()
+                except JSONDecodeError:
+                    body = text
+                
+                status = resp.status
+                if status in expected:
+                    return body
+
+                if status == 401 or status == 403:
+                    raise AgenticUnauthorizedError(body, status)
+                if status == 404:
+                    raise AgenticNotFoundError(body, status)
+                if 400 <= status < 500:
+                    raise AgenticClientError(body, status)
+                if 500 <= status < 600:
+                    raise AgenticGatewayError(body, status)
+
+                # Fallback
+                raise AgenticBadResponseError(f"Unexpected status {status}")
+
+        except asyncio.TimeoutError as e:
+            raise AgenticTimeoutError(str(e)) from e
+        except ClientConnectorError as e:
+            raise AgenticConnectionError(str(e)) from e
+        except ClientError as e:
+            raise AgenticConnectionError(str(e)) from e
     
     async def cancel_agentic_health_task(self):
         """Cancel the HTTP health check task and cleanup."""

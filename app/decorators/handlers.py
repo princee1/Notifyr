@@ -10,7 +10,20 @@ import hvac
 from minio import S3Error, ServerError
 import requests
 from app.errors.ingest_error import AgenticDatabaseNotAllowedError, IngestConfigNotPresentError, TaskIngestNameNotValidError
-from app.errors.agentic_error import AgenticServerDisconnectedError, AgenticStreamDoneError, AgenticBadResponseError, AgenticGrpcIdleError, AgenticGrpcShutdownError
+from app.errors.agentic_error import (
+    AgenticServerDisconnectedError,
+    AgenticStreamDoneError,
+    AgenticBadResponseError,
+    AgenticGrpcIdleError,
+    AgenticGrpcShutdownError,
+    AgenticClientError,
+    AgenticUnauthorizedError,
+    AgenticNotFoundError,
+    AgenticGatewayError,
+    AgenticTimeoutError,
+    AgenticConnectionError,
+    AgenticResponseValidationError,
+)
 from app.errors.llm_error import LLMProviderDoesNotExistError, LLMModelNotPermittedError, LLMModelMaxTokenExceededError, LLMRateLimiterError, LLMConfigNotConfiguredError
 from app.services.worker.arq_service import DataTaskNotFoundError, JobAlreadyExistsError, JobDequeueError, JobDoesNotExistsError, JobInProgressError, JobStatusNotValidError,ResultNotFound, UnexpectedJobStatusError
 from app.classes.auth_permission import WSPathNotFoundError
@@ -1086,6 +1099,28 @@ class GatewayHandler(Handler):
         except aiohttp.ClientPayloadError as e:
             body = e.args[0]
             status = e.args[1]
+            raise HTTPException(status_code=status, detail={'message': 'Agentic gateway payload error', 'body': body})
+
+        except AgenticUnauthorizedError as e:
+            raise HTTPException(status_code=401, detail={'message': 'Unauthorized to access agentic', 'body': getattr(e,'body',None)})
+
+        except AgenticNotFoundError as e:
+            raise HTTPException(status_code=404, detail={'message': 'Agentic resource not found', 'body': getattr(e,'body',None)})
+
+        except AgenticClientError as e:
+            raise HTTPException(status_code=getattr(e,'status',400), detail={'message': 'Agentic client error', 'body': getattr(e,'body',None)})
+
+        except AgenticGatewayError as e:
+            raise HTTPException(status_code=getattr(e,'status',502), detail={'message': 'Agentic gateway error', 'body': getattr(e,'body',None)})
+
+        except AgenticTimeoutError as e:
+            raise HTTPException(status_code=504, detail={'message': 'Timeout contacting agentic', 'detail_raw': str(e)})
+
+        except AgenticConnectionError as e:
+            raise HTTPException(status_code=503, detail={'message': 'Cannot connect to agentic', 'detail_raw': str(e)})
+
+        except AgenticResponseValidationError as e:
+            raise HTTPException(status_code=502, detail={'message': 'Invalid response from agentic', 'body': getattr(e,'body',None)})
 
 class LLMHandler(Handler):
 

@@ -19,7 +19,8 @@ from app.services.config_service import ConfigService
 from app.services.database.redis_service import RedisService
 from app.services.worker.arq_service import ArqIngestTaskService
 from app.utils.constant import CostConstant
-import aiohttp
+ 
+BASE_AGENTIC_PATH = '/vector'
 
 @UseHandler(AsyncIOHandler,ServiceAvailabilityHandler)
 @UsePermission(JWTRouteHTTPPermission)
@@ -33,18 +34,6 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
         self.arqService = arqService
         self.remoteAgentService = remoteAgentService
         self.configService = configService
-        self.session: aiohttp.ClientSession | None = None
-   
-    async def on_startup(self):
-        headers = {"Authorization": f"Bearer {self.remoteAgentService.auth_header}"}
-        base_url = f"http://{self.remoteAgentService.agentic_http_host}/vector"
-
-        async with aiohttp.ClientSession(base_url=base_url,headers=headers) as session:
-            self.session = session
-
-    async def on_shutdown(self):
-        async with self.session as session:
-            self.session.close()
     
     @UseLimiter('1/minutes')
     @PingService([RemoteAgentService])
@@ -54,13 +43,10 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
     async def create_collection(self, request:Request,response:Response,collection:QdrantCollectionModel, autPermission:AuthPermission=Depends(get_auth_permission)):
         collection = collection.model_dump()
-
-        async with self.session.post('/',json=collection) as res:
-            res_body = await res.json()
-            if res.status != status.HTTP_201_CREATED:
-               raise aiohttp.ClientPayloadError(res_body,res.status)
-            
-            return {'collection':collection}
+        await self.remoteAgentService.request('POST', f'{BASE_AGENTIC_PATH}/',
+                                            json=collection,
+                                            expected_status=status.HTTP_201_CREATED)
+        return {'collection': collection}
 
     @UseLimiter('30/minutes')
     @HTTPStatusCode(status.HTTP_200_OK)
@@ -70,10 +56,9 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @BaseHTTPRessource.HTTPRoute('/{collection_name}/',methods=[HTTPMethod.GET])
     async def get_collection(self, request:Request,response:Response,collection_name:str,autPermission:AuthPermission=Depends(get_auth_permission)):
         
-        async with ( self.session.get(f'/') if not collection_name else self.session.get(f'/s/{collection_name}') )as res:
-            res_body = await res.json()
-            response.status_code = res.status
-            return res_body
+        path = f'{BASE_AGENTIC_PATH}/' if not collection_name else f'{BASE_AGENTIC_PATH}/s/{collection_name}'
+        gateway_body = await self.remoteAgentService.request('GET', path, expected_status=status.HTTP_200_OK)
+        return gateway_body
     
     @UseLimiter('1/minutes')
     @Throttle(uniform=(800,1500))
@@ -89,12 +74,10 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
         """Delete all results and delete all enqueued job matching the collection_name filtered by the task_name """
 
         meta,jobs_done,jobs_queue,errors =  await self.delete_section('vector_config','collection_name',collection_name)
-        
-        async with self.session.delete(f'/{collection_name}',params={"mode":mode}) as res:
-            res_body = await res.json()
-            if res.status != status.HTTP_200_OK:
-               raise aiohttp.ClientPayloadError(res_body,res.status)
-
+        gateway_body = await self.remoteAgentService.request('DELETE',
+                                                        f'{BASE_AGENTIC_PATH}/{collection_name}',
+                                                        params={"mode": mode},
+                                                        expected_status=status.HTTP_200_OK)
         for j in jobs_queue:
             merchant.payment(
                 self.arqService.abort,
@@ -111,7 +94,7 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
                 'vector_config'
                 )
         
-        return DeleteCollectionModel(metadata=meta,gateway_body=res_body,job_dequeued=jobs_queue,jod_deleted=jobs_done,collection_name=collection_name,errors=errors)
+        return DeleteCollectionModel(metadata=meta,gateway_body=gateway_body,job_dequeued=jobs_queue,jod_deleted=jobs_done,collection_name=collection_name,errors=errors)
             
     @UseLimiter('1/minutes')
     @Throttle(uniform=(800,1500))
@@ -128,15 +111,14 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
 
         meta,collection_name = await self.delete_single_document(job_id,'vector_config','vector','collection_name')
 
-        async with self.session.delete(f'/docs/{collection_name}/{job_id}') as res:
-            res_body = await res.json()
-            if res.status != status.HTTP_200_OK:
-               raise aiohttp.ClientPayloadError(res_body,res.status)
+        gateway_body = await self.remoteAgentService.request('DELETE',
+                                                        f'{BASE_AGENTIC_PATH}/docs/{collection_name}/{job_id}',
+                                                        expected_status=status.HTTP_200_OK)
         
         merchant.payment(
             self.arqService.delete,
             job_id,
             'vector_config'
             )
-        return DeleteCollectionModel(metadata=[meta],gateway_body=res_body,job_dequeued=[],jod_deleted=[job_id],collection_name=collection_name)
+        return DeleteCollectionModel(metadata=[meta],gateway_body=gateway_body,job_dequeued=[],jod_deleted=[job_id],collection_name=collection_name)
        
