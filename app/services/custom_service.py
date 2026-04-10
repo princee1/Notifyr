@@ -1,6 +1,7 @@
 from typing import Dict, List, Tuple
 
 from pydantic import BaseModel
+from app.definition._error import BaseError
 from app.definition._service import DEFAULT_BUILD_STATE, BaseService, Service
 from app.models.custom_model import CustomModel, CustomValidationModel
 from app.services.config_service import ConfigService
@@ -8,6 +9,12 @@ from app.services.database.mongoose_service import MongooseService
 from app.utils.constant import MongooseDBConstant
 from app.utils.model_creation import MODEL_REGISTRY, cerberus_schema_to_pydantic
 from app.utils.validation import Validator
+
+class NoEntitiesCustomSchemaError(BaseError):
+    ...
+
+class NoEdgesCustomSchemaError(BaseError):
+    ...
 
 
 @Service()

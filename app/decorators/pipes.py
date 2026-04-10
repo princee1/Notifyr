@@ -21,9 +21,11 @@ from app.models.call_model import CallCustomSchedulerModel
 from app.models.contacts_model import Status, SubscriptionORM
 from app.models.email_model import BaseEmailSchedulerModel
 from app.models.file_model import FileResponseUploadModel
+from app.models.ingest_model import DataIngestModel
 from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM, GroupClientORM
 from app.models.sms_model import SMSCustomSchedulerModel
+from app.services.custom_service import CustomService, NoEdgesCustomSchemaError, NoEntitiesCustomSchemaError
 from app.services.worker.celery_service import CeleryService, ChannelMiniService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
@@ -784,17 +786,14 @@ class MerchantPipe(Pipe):
         merchant.inject_cost(cost,self.factor)
         return {}
 
-
 async def domain_pipe(domain:str): 
     return {'domain':f'{GraphitiConstant.DOMAIN_PREFIX}{domain}'}
-
 
 class DeleteDocumentIngestUpdatePipe(Pipe):
 
     def __init__(self,db:Literal['vector','graph'] ):
         super().__init__(True)
         self.db = db
-
     
     def pipe(self,cost:DeleteDocumentIngestCost):
         if self.db == 'vector':
@@ -807,4 +806,28 @@ class DeleteDocumentIngestUpdatePipe(Pipe):
         cost.change_definition_name(name)
         cost.change_db_config(db_config)
 
+        return {}
+
+class GraphRelationshipPipe(Pipe):
+
+    def __init__(self,):
+        super().__init__(True)
+        self.customService = Get(CustomService)
+
+    
+    def pipe(self,ingestTask:DataIngestModel):
+
+        if ingestTask.graph_config == None:
+            return {}
+
+        if len(ingestTask.graph_config.entities)>=1:
+            entities = self.customService.to_entities(ingestTask.graph_config.entities)
+            if len(entities) <1:
+                raise NoEntitiesCustomSchemaError()
+
+        if len(ingestTask.graph_config.edges) >=1:    
+            edges = self.customService.to_edge(ingestTask.graph_config.edges)  
+            if len(edges) <1:
+                raise NoEdgesCustomSchemaError()
+        
         return {}

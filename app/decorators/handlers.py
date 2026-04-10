@@ -47,6 +47,7 @@ from app.errors.twilio_error import TwilioCallBusyError, TwilioCallFailedError, 
 from app.classes.profiles import ProfileModelRequestBodyError, ProfileDoesNotExistsError, ProfileHasNotCapabilitiesError, ProfileModelTypeDoesNotExistsError, ProfileNotAvailableError, ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
 from app.services.assets_service import AssetConfusionError, AssetNotFoundError, AssetTypeNotAllowedError, AssetTypeNotFoundError
 from twilio.base.exceptions import TwilioRestException
+from app.services.custom_service import NoEntitiesCustomSchemaError, NoEdgesCustomSchemaError
 
 from tortoise.exceptions import OperationalError, DBConnectionError, ValidationError, IntegrityError, DoesNotExist, MultipleObjectsReturned, TransactionManagementError, UnSupportedError, ConfigurationError, ParamsError, BaseORMException
 from requests.exceptions import SSLError, Timeout
@@ -1266,6 +1267,21 @@ class DataIngestHandler(Handler):
                 }
             )
 
+class CustomSchemaHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await super().handle(function, *args, **kwargs)
+        except NoEntitiesCustomSchemaError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"message": "No valid entity definitions found in custom schema", "error": str(e)}
+            )
+        except NoEdgesCustomSchemaError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"message": "No valid edge definitions found in custom schema", "error": str(e)}
+            )
 
 class EmbeddingHandler(Handler):
 

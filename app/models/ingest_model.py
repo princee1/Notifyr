@@ -19,8 +19,8 @@ class VectorConfig(BaseModel):
 	
 class KGraphConfig(BaseModel):
 	domain:str
-	entities:Optional[list[str]] = []
-	edges:Optional[list[str]] = []
+	entities:Optional[list[str]] = Field(default_factory=list)
+	edges:Optional[list[str]] = Field(default_factory=list)
 	description:Optional[str] = None
 	instruction:Optional[str] = None
 

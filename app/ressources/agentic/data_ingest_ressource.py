@@ -7,9 +7,9 @@ from app.container import Get, InjectInMethod
 from app.cost.file_cost import FileCost
 from app.cost.ingest_cost import DeleteDocumentIngestCost, FileIngestCost, CrawlMarkdownIngestCost, ResearchMarkdownIngestCost
 from app.decorators.guards import ArqDataTaskGuard, DataIngestDatabaseGuard, UploadFilesGuard
-from app.decorators.handlers import GatewayHandler, LLMHandler, ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, FileHandler, MiniServiceHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler, UploadFileHandler, VaultHandler
+from app.decorators.handlers import CustomSchemaHandler, GatewayHandler, LLMHandler, ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, FileHandler, MiniServiceHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler, UploadFileHandler, VaultHandler
 from app.decorators.interceptors import DataCostInterceptor
-from app.decorators.pipes import  DataClassToDictPipe, MerchantPipe, MiniServiceInjectorPipe, QueryToModelPipe, update_status_upon_no_metadata_pipe
+from app.decorators.pipes import  DataClassToDictPipe, GraphRelationshipPipe, MerchantPipe, MiniServiceInjectorPipe, QueryToModelPipe, update_status_upon_no_metadata_pipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, LockService
 from app.depends.class_dep import FileDataIngestQuery
 from app.depends.dependencies import get_auth_permission, get_request_id
@@ -143,7 +143,8 @@ class JobArqRessource(BaseHTTPRessource):
 @PingService([ArqIngestTaskService])
 @IncludeRessource(JobArqRessource)
 @UsePermission(JWTRouteHTTPPermission)
-@UseHandler(ServiceAvailabilityHandler,CostHandler,DataIngestHandler)
+@UsePipe(GraphRelationshipPipe)
+@UseHandler(ServiceAvailabilityHandler,CostHandler,DataIngestHandler,CustomSchemaHandler)
 @HTTPRessource('data-ingest')
 class DataIngestRessource(BaseHTTPRessource):
     
