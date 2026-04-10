@@ -18,7 +18,7 @@ from app.services.agent.remote_agent_service import RemoteAgentService
 from app.services.config_service import ConfigService
 from app.services.database.redis_service import RedisService
 from app.services.worker.arq_service import ArqIngestTaskService
-from app.utils.constant import CostConstant
+from app.utils.constant import AgenticConstant, CostConstant
  
 BASE_AGENTIC_PATH = '/vector'
 
@@ -43,7 +43,7 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
     async def create_collection(self, request:Request,response:Response,collection:QdrantCollectionModel, autPermission:AuthPermission=Depends(get_auth_permission)):
         collection = collection.model_dump()
-        await self.remoteAgentService.request('POST', f'{BASE_AGENTIC_PATH}/',
+        await self.remoteAgentService.request('POST', AgenticConstant.VECTOR_ROUTER('/'),
                                             json=collection,
                                             expected_status=status.HTTP_201_CREATED)
         return {'collection': collection}
@@ -56,7 +56,8 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @BaseHTTPRessource.HTTPRoute('/{collection_name}/',methods=[HTTPMethod.GET])
     async def get_collection(self, request:Request,response:Response,collection_name:str,autPermission:AuthPermission=Depends(get_auth_permission)):
         
-        path = f'{BASE_AGENTIC_PATH}/' if not collection_name else f'{BASE_AGENTIC_PATH}/s/{collection_name}'
+        path = f'/' if not collection_name else f'/s/{collection_name}'
+        path = AgenticConstant.VECTOR_ROUTER(path)
         gateway_body = await self.remoteAgentService.request('GET', path, expected_status=status.HTTP_200_OK)
         return gateway_body
     
@@ -75,7 +76,7 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
 
         meta,jobs_done,jobs_queue,errors =  await self.delete_section('vector_config','collection_name',collection_name)
         gateway_body = await self.remoteAgentService.request('DELETE',
-                                                        f'{BASE_AGENTIC_PATH}/{collection_name}',
+                                                        AgenticConstant.VECTOR_ROUTER(f'/{collection_name}'),
                                                         params={"mode": mode},
                                                         expected_status=status.HTTP_200_OK)
         for j in jobs_queue:
@@ -112,7 +113,7 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
         meta,collection_name = await self.delete_single_document(job_id,'vector_config','vector','collection_name')
 
         gateway_body = await self.remoteAgentService.request('DELETE',
-                                                        f'{BASE_AGENTIC_PATH}/docs/{collection_name}/{job_id}',
+                                                        AgenticConstant.VECTOR_ROUTER(f'/docs/{collection_name}/{job_id}'),
                                                         expected_status=status.HTTP_200_OK)
         
         merchant.payment(

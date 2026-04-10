@@ -11,9 +11,9 @@ from app.services.database.memcached_service import MemCachedService
 from app.services.database.qdrant_service import QdrantService
 from app.services.database.redis_service import RedisService
 from app.services.worker.arq_service import ArqIngestTaskService
-from app.utils.constant import CostConstant
+from app.utils.constant import AgenticConstant, CostConstant
 
-prefix='/vector'
+prefix=AgenticConstant.VECTOR_ROUTER('')
 
 def VectorDBRouter(depends:list=None):
     if depends == None:

@@ -549,3 +549,9 @@ class GraphitiConstant:
     DOMAIN_PREFIX='domain@'
     CONTACT_PREFIX='contact@'
     DATABASE_NAME='notifyr'
+
+
+class AgenticConstant:
+
+    VECTOR_ROUTER = lambda p:f'/vector{p}'
+    K_GRAPH_ROUTER = lambda p:f'/k-graph{p}'

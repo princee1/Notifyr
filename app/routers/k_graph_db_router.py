@@ -6,8 +6,9 @@ from app.services.database.memcached_service import MemCachedService
 from app.services.database.graphiti_service import GraphitiService
 from app.services.database.redis_service import RedisService
 from app.services.worker.arq_service import ArqIngestTaskService
+from app.utils.constant import AgenticConstant
 
-prefix='/k-graph'
+prefix=AgenticConstant.K_GRAPH_ROUTER('')
 
 def KnowledgeGraphDBRouter(depends:list=None):
     if depends == None:

@@ -45,7 +45,7 @@ from app.models.ingest_model import (
 )
 from app.models.file_model import  FileResponseUploadModel, UploadError
 from app.data_ingest_tasks import DATA_TASK_REGISTRY_NAME
-from app.utils.constant import ArqDataTaskConstant, CostConstant
+from app.utils.constant import AgenticConstant, ArqDataTaskConstant, CostConstant
 from app.utils.tools import RunInThreadPool
 from app.depends.variables import DeleteMode, force_update_query, delete_mode_query
 
@@ -257,7 +257,7 @@ class DataIngestRessource(BaseHTTPRessource):
         await self.arqService.exists(uri, True,True)
 
         embedBody = QdrantEmbedRequestModel(query=ingestTask.subject,request_id=cost.request_id,issuer=cost.issuer)
-        embedding:dict = await self.remoteAgentService.request('POST','/vector/embed/',json=embedBody.model_dump())
+        embedding:dict = await self.remoteAgentService.request('POST',AgenticConstant.VECTOR_ROUTER('/embed/'),json=embedBody.model_dump())
         embedding['vector_id'] = uri
 
         subject_embedding = EmbeddingWrapper(embedding)

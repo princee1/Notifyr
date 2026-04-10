@@ -190,9 +190,10 @@ class AppServer(EventInterface):
         FastAPICache.init(RedisBackend(redisService.redis_cache), prefix="fastapi-cache")
         # FastAPICache.init(MemcachedBackend(memcachedService.client),prefix="fastapi-cache")
         # FastAPICache.init(InMemoryBackend(),prefix="fastapi-cache")
-        remoteAgentService = Get(RemoteAgentService)
-        await remoteAgentService.init_http_session()
-        await remoteAgentService.connect_channel()
+        if CAPABILITIES['agentic']:
+            remoteAgentService = Get(RemoteAgentService)
+            await remoteAgentService.init_http_session()
+            await remoteAgentService.connect_channel()
 
         
     @register_hook('shutdown',active=True)
@@ -201,9 +202,10 @@ class AppServer(EventInterface):
         redisService.to_shutdown = True
         await redisService.close_connections()
 
-        remoteAgentService = Get(RemoteAgentService)
-        await remoteAgentService.close_http_session()
-        await remoteAgentService.disconnect_channel()
+        if CAPABILITIES['agentic']:
+            remoteAgentService = Get(RemoteAgentService)
+            await remoteAgentService.close_http_session()
+            await remoteAgentService.disconnect_channel()
 
     @register_hook('startup',)
     async def start_leader_task_election(self):
