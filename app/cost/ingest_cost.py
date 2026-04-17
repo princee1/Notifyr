@@ -185,7 +185,10 @@ class CrawlMarkdownIngestCost(MarkdownResultIngestCost):
 #########################################################################################################
 
 class ResearchMarkdownIngestCost(CrawlMarkdownIngestCost):
-    ...
+    
+    def init(self, default_price, credit_key,refund_mode:RefundDetail ='partial'):
+        return super().init(default_price, credit_key,'Research Ingestion',refund_mode,'Research')
+
     
 #########################################################################################################
 ####################               DeleteDocument CostDefinition         ##############################

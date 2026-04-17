@@ -136,11 +136,8 @@ Return a JSON array of objects. Each object must strictly follow this schema:
 
 JSON_MAPPING_LOGIC = """
 # EXTRACTION & MAPPING PARAMETERS
-1. **Schema Alignment**: Map every property in the provided [TARGET_SCHEMA] to a specific CSS selector found in the source.
-2. **Selector Identification**: Prioritize 'id' and 'class' names that appear stable and semantic.
-3. **Data Type Casting**: Identify if the result should be a string, integer, or a nested object.
-4. **Collection Logic**: For repeating items (like product cards), identify the 'base_selector' that encompasses the entire repeating unit.
-5. **Contextual Extraction**: Apply domain-specific knowledge to identify the most relevant elements for the extraction task.
+1. **Selector Identification**: Prioritize 'id' and 'class' names that appear stable and semantic.
+2. **Contextual Extraction**: Apply domain-specific knowledge to identify the most relevant elements for the extraction task.
 """
 
 def CRAWL4AI_GENERATION_PROMPT(
@@ -167,13 +164,6 @@ def CRAWL4AI_GENERATION_PROMPT(
     prompt += f"that work reliably across similar pages.\n\n"
     
     prompt += JSON_MAPPING_LOGIC
-    
-    prompt += f"\n# CURRENT TASK\n"
-    prompt += f"Analyze the provided Markdown/HTML from the perspective of extracting data{focus_context}. "
-    prompt += f"For every field in the TARGET SCHEMA, identify:\n"
-    prompt += f"1. The most precise **CSS Selector** (prioritize IDs and semantic class names).\n"
-    prompt += f"2. The **Attribute** to extract (default is 'text' for inner content).\n"
-    prompt += f"3. A **Regex** pattern only if necessary (e.g., if the data is nested within a messy string or mixed with other content).\n\n"
 
     prompt += f"# TARGET SCHEMA:\n\t[{{\n"
     prompt += f"    \"id\": \"unique_schema_id\",\n"
@@ -186,8 +176,4 @@ def CRAWL4AI_GENERATION_PROMPT(
 
     prompt += "\n# SOURCE CONTENT TO ANALYZE\n"
     
-    return prompt
-
-    prompt += "\n--- SOURCE CONTENT TO ANALYZE ---\n"
-  
     return prompt

@@ -129,7 +129,7 @@ class WebCrawlerIngestion:
 		extra_headers: Optional[Dict] = None,
 		dc_state_callback: Optional[Callable[[CrawlState], None]] = None,
 		base_dir: Optional[str] = None,
-		schema:Optional[BaseModel] = None,
+		schema:Optional[Type[BaseModel]] = None,
 	):
 		self.session_id: str | Callable[[], str] = ...
 		self.extra_headers = extra_headers
@@ -366,7 +366,8 @@ class WebCrawlerIngestion:
 						html=schema_html,
 						llm_config=self.llm_config,
 						query=instruction,
-						usage=self.schema_tokenUsage
+						usage=self.schema_tokenUsage,
+						target_json_example= None
 					)	
 				case 'regex':
 					raw_schema = await RunAsync(RegexExtractionStrategy.generate_pattern)(

@@ -38,7 +38,6 @@ class StepRunner:
         self.params = params
         self.start_time = time()
 
-
     async def __aenter__(self):
         if self.params != None:
             self.state['current_params'] = self.params
@@ -52,17 +51,21 @@ class StepRunner:
         return SkipStepObj(False)
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
+        meta =  StepMeta(success=True,time=time()-self.start_time,date=now)
+        self.state['steps'][self.step_index] =meta
+
+
         if exc_type is None:
             now = datetime.now().isoformat()
-            meta =  StepMeta(success=True,time=time()-self.start_time,date=now)
-            self.state['steps'][self.step_index] =meta
-            self.state['current_params'] = None
+            #self.state['current_params'] = None
             self.state['current_step'] = self.step_index
             return True  # nothing to propagate
 
         if exc_type is SkipStep:
-            self.state['current_params'] = None
+            #self.state['current_params'] = None
             return True  # suppress SkipStep
+    
+        meta['success'] = False
 
         return False
         

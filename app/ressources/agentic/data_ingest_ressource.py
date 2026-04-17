@@ -4,7 +4,6 @@ from validators.uri import uri
 from app.classes.auth_permission import AuthPermission, Role
 from app.classes.embeddings import EmbeddingWrapper, EmbeddingModel
 from app.container import Get, InjectInMethod
-from app.cost.file_cost import FileCost
 from app.cost.ingest_cost import DeleteDocumentIngestCost, FileIngestCost, CrawlMarkdownIngestCost, ResearchMarkdownIngestCost
 from app.decorators.guards import ArqDataTaskGuard, DataIngestDatabaseGuard, UploadFilesGuard
 from app.decorators.handlers import CustomSchemaHandler, GatewayHandler, LLMHandler, ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, FileHandler, MiniServiceHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler, UploadFileHandler, VaultHandler
@@ -35,7 +34,9 @@ from app.models.ingest_model import (
     ComparableEmbeddings,
     CrawlingComparableURL,
     DeleteIngestUriMetadata,
+    ResearchDataIngestModel,
     ResearchIngestDataResponse,
+    ResearchIngestUriMetadata,
     WebCrawlingIngestDataResponse,
     WebCrawlingUriMetadata,
     WebCrawlingDataIngestModel,
@@ -233,7 +234,7 @@ class DataIngestRessource(BaseHTTPRessource):
 
     @UseLimiter('5/hour')
     @UsePipe(MerchantPipe())
-    @Throttle(normal=(700,1500))
+    @Throttle(normal=(700,150))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
@@ -296,20 +297,55 @@ class DataIngestRessource(BaseHTTPRessource):
     
         return _response
     
-    
-    @Throttle(normal=(300,150))
+    @UseLimiter('5/hour')
     @UsePipe(MerchantPipe())
+    @Throttle(normal=(800,150))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
-    @UseHandler(ArqHandler,AsyncIOHandler,RedisHandler,LLMHandler,RedisHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
-    @LockService(RedisService,ArqIngestTaskService,LLMProviderService,lockType='reader')
+    @UseHandler(ArqHandler,AsyncIOHandler,RedisHandler,LLMHandler,RedisHandler,GatewayHandler)
+    @LockService(RemoteAgentService,RedisService,ArqIngestTaskService,LLMProviderService,lockType='reader')
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.RESEARCH_DATA_TASK),crawl4ai_guard,DataIngestDatabaseGuard(False))
-    @PingService([RedisService,{'cls':LLMProviderService,'kwargs':VerifyLLMConfig(research=True)}])
-    @BaseHTTPRessource.HTTPRoute('/research/{profile}/',methods=[HTTPMethod.POST],response_model=ResearchIngestDataResponse,mount=False)
-    async def ingest_research(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[ResearchMarkdownIngestCost,Depends(ResearchMarkdownIngestCost)], request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
+    @PingService([RemoteAgentService,ArqIngestTaskService,RedisService,{'cls':LLMProviderService,'kwargs':VerifyLLMConfig(research=True)}])
+    @BaseHTTPRessource.HTTPRoute('/research/',methods=[HTTPMethod.POST],response_model=ResearchIngestDataResponse,mount=False)
+    async def ingest_research(self,request:Request,response:Response,ingestTask:ResearchDataIngestModel, broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[ResearchMarkdownIngestCost,Depends(ResearchMarkdownIngestCost)],mode:DeleteMode = Depends(delete_mode_query), request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
         """
         Engage a broad research by fetching url concept and crawling those pages
         """
+        db_config = ingestTask.db_config
+        _response = ResearchIngestDataResponse(db_config[0],db_config[1],ingestTask.expire_date,ingestTask.defer_date)
+
+        uri = ingestTask.name
+        await self.arqService.exists(uri, True,True)
+
+        embedBody = QdrantEmbedRequestModel(query=ingestTask.query,request_id=cost.request_id,issuer=cost.issuer)
+        embedding:dict = await self.remoteAgentService.request('POST',AgenticConstant.VECTOR_ROUTER('/embed/'),json=embedBody.model_dump())
+        embedding['vector_id'] = uri
+
+        query_embedding = EmbeddingWrapper(embedding)
+        if mode == 'soft':
+            comparable_embeddings = ComparableEmbeddings(query_embedding,'filter','include')
+            await self.arqService.search(ArqDataTaskConstant.RESEARCH_DATA_TASK,{'query':comparable_embeddings},True,'single')
+
+        metadata:ResearchIngestUriMetadata = ...
+
+        merchant.safe_payment(
+            None,
+            (metadata,db_config),
+            self.arqService.enqueue_task,ArqDataTaskConstant.RESEARCH_DATA_TASK,
+            job_id=uri,
+            expires=ingestTask.expires,
+            defer_by=ingestTask.defer_by,
+            kwargs={**ingestTask.model_dump(mode='json',exclude=('expires','defer_by','name')),
+                    **metadata.model_dump(include=('uri','size')),
+                    'query':embedding,
+                    'request_id':request_id,
+                    '_nickname':ArqDataTaskConstant.RESEARCH_DATA_TASK,
+                    'state':dict(),
+                    'step':None
+                    }
+        )
+
+        return _response
 
     async def on_startup(self):
         self.arqService.register_task(DATA_TASK_REGISTRY_NAME)

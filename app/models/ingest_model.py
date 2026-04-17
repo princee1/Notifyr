@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Literal, Optional, Self, Tuple
 from aiohttp_retry import Union
 from pydantic import BaseModel, Field, HttpUrl, PrivateAttr, field_serializer, field_validator, model_validator
 from app.classes.embeddings import EmbeddingWrapper
+from app.classes.research import SearchEngine
 from app.classes.url import ComparableURL, URLParam
 from app.models.crawal4ai_model import MAX_URLS, DeepCrawlingStrategyModel, DigestConfigModel,KnowledgeGraphExtractionConfig, PDFLinkPreviewModel, SchemaExtractionConfig, SeedingURLModel, TextsExtractionConfig, URLGeneratorModel
 from app.utils.constant import ArqDataTaskConstant, ParseStrategy
@@ -239,22 +240,29 @@ class WebCrawlingIngestDataResponse(BaseIngestModelResponse):
 ###################################################################################################
 
 class ResearchDataIngestModel(DataIngestModel):
-	engine:Literal['google','bing','duckduckgo','google-scholar'] = 'google'
-	max_pages: int = Field(default=10, gt=0, le=10)
+	engine:SearchEngine = 'google'
+	max_query_pages: int = Field(default=1, gt=0, le=30)
 	query:str
+	name:str = Field(min_length=8,max_length=30)
 	config:DigestConfigModel
+
+	@field_validator("name", mode="after")
+	def parse_uri(cls,v:str)->str:
+		v = v.strip().lower().replace(' ','_')
+		if not v.endswith('.research'):
+			return f"{v}.research"
+		return v
 
 class ResearchIngestUriMetadata(UriMetadata):
 	...
 
 class ResearchIngestDataResponse(BaseIngestModelResponse):
-	...
+	task = ArqDataTaskConstant.RESEARCH_DATA_TASK
 
 
 ###################################################################################################
 ###########################				API Data Ingest Model	     ##############################
 ###################################################################################################
-
 
 class APIIngestDataResponse(BaseIngestModelResponse):
 	...
