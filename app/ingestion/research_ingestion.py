@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from aiohttp_retry import Callable
 from pydantic import BaseModel, ValidationError
@@ -7,6 +8,7 @@ from app.models.crawal4ai_model import PDFLinkPreviewModel, SchemaExtractionConf
 from app.models.ingest_model import ResearchDataIngestModel, WebCrawlingDataIngestModel
 from enum import Enum
 from app.prompt import research_prompt
+from app.utils.constant import Crawl4AIConstant
 from .crawl_ingestion import WebCrawlerIngestion
 from crawl4ai import  AdaptiveCrawler,AdaptiveConfig,LLMConfig
 from typing import Awaitable, Dict, List
@@ -14,14 +16,12 @@ from litellm import ModelResponse, acompletion
 from app.classes.research import EXAMPLE_SCHEMA_NAME, QueryExpansionModel, search_example_url, search_query_creator,SearchLinkResultModel,SearchEngine
 
 class ResearchIngestionStepIndex(int, Enum):
-    CHECK = 1
-    TOKEN_VERIFY = 2
-    QUERY_EXPANSION = 3
-    LINKS_LOOKUP = 4
-    LOOKUP_COST = 5
-    RESEARCH = 6
-    RESULT_COST = 7
-    CLEANUP = 8
+    QUERY_EXPANSION = 1
+    LINKS_LOOKUP = 2
+    LOOKUP_COST = 3
+    RESEARCH = 4
+    RESULT_COST = 5
+    CLEANUP = 6
 
 class ResearchIngestion(WebCrawlerIngestion):
 
@@ -40,10 +40,15 @@ class ResearchIngestion(WebCrawlerIngestion):
         self.digest_callback = digest_callback
         self.research_state = state
 
-        self.concepts:List[str] = []
-        self.research_urls:Dict[str,str] = {}
+        self.research_dir = Path(base_dir) / Crawl4AIConstant.RESEARCH_CACHE_DIR
 
         super().__init__(None, crawl_llm_config,None, extra_headers, None, base_dir, SearchLinkResultModel)
+
+    def clear_cost(self):
+        ...
+    
+    def process_research_content(self):
+        ...
 
     async def set_crawl_task(self,concepts:list[str]):
         url_generator = search_query_creator(concepts)
@@ -60,7 +65,7 @@ class ResearchIngestion(WebCrawlerIngestion):
             name=self.researchTask.name
         )
 
-    async def research(self):
+    async def research(self,urls:dict[str,str]):
         adaptive = AdaptiveCrawler(
             self.crawler,
             config = AdaptiveConfig(
@@ -73,7 +78,7 @@ class ResearchIngestion(WebCrawlerIngestion):
                 )
             )
 
-        for urls,query in self.research_urls.items():
+        for urls,query in urls.items():
             state = await adaptive.digest(
                 start_url=urls,
                 query=query

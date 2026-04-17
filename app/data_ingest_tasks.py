@@ -8,10 +8,11 @@ from app.classes.step import SkipStep, Step, StepRunner
 from app.errors.llm_error import LLMConfigNotConfiguredError
 from app.models.crawal4ai_model import KnowledgeGraphExtractionConfig, SchemaExtractionConfig, TextsExtractionConfig
 from app.models.file_model import FileResponseUploadModel, UriMetadata
+from app.services.agent.llm_provider_service import LLMProviderMiniService
 from app.services.config_service import ConfigService
 from app.services.custom_service import CustomService
 from app.services.profile_service import ProfileService
-from app.utils.constant import CostConstant,ArqDataTaskConstant, ParseStrategy
+from app.utils.constant import CostConstant,ArqDataTaskConstant, Crawl4AIConstant, ParseStrategy
 from app.utils.globals import APP_MODE,ApplicationMode
 from app.utils.helper import slice_dict, uuid_v1_mc
 from app.utils.tools import RunAsync
@@ -19,6 +20,8 @@ from app.models.ingest_model import ResearchDataIngestModel, VectorConfig,KGraph
 
 task_registry = []
 FILE_CLEANUP='file_cleanup'
+CRAWL_PROVIDER_KEY='crawl_llm'
+RESEARCH_PROVIDER_KEY='research_llm'
 DATA_TASK_REGISTRY_NAME = {}
 
 def RegisterTask(nickname:str,active:bool=True,wrap=True):
@@ -76,7 +79,8 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
                 if graph_config != None:
                     graph_config = KGraphConfig(**graph_config)
 
-                return await func(ctx,*args,**kwargs,vector_config=vector_config,graph_config=graph_config,step=step,uri=uri,request_id=request_id,size=size,state=state)
+                issuer = f"arq-job@{uri}"
+                return await func(ctx,*args,**kwargs,vector_config=vector_config,graph_config=graph_config,step=step,uri=uri,request_id=request_id,size=size,state=state,issuer=issuer)
             
             except Retry as e:
                 await arqService.update_job_kwargs(uri,{'step':step},5)
@@ -97,9 +101,8 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
 
     return decorator
 
-
 @RegisterTask(ArqDataTaskConstant.FILE_DATA_TASK,True)
-async def process_file_loader_task(ctx:dict[str,Any],vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,lang:str='en',uri:str=None,size:int=None,step:Step = None,request_id:str=None,strategy:ParseStrategy=None,use_docling:bool=None,sha:str=None,state:dict=None):
+async def process_file_loader_task(ctx:dict[str,Any],vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,lang:str='en',uri:str=None,size:int=None,step:Step = None,request_id:str=None,strategy:ParseStrategy=None,use_docling:bool=None,sha:str=None,state:dict=None,issuer:str=None):
 
     qdrantService:QdrantService = Get(QdrantService)
     fileService:FileService = Get(FileService)
@@ -108,23 +111,10 @@ async def process_file_loader_task(ctx:dict[str,Any],vector_config:VectorConfig|
     arqService:ArqIngestTaskService = Get(ArqIngestTaskService)
 
     file_path = arqService.compute_data_file_upload_path(uri)
-
     extension =  fileService.get_extension(file_path)
     textDataLoader = TextDataLoader(qdrantService.embedding_parse,file_path,lang,extension,vector_config.category,strategy,use_docling)
     token = None
-
-    async with StepRunner(step,FileIngestionStepIndex.CHECK) as skip:
-        skip()
-        if vector_config != None:
-            if not await qdrantService.collection_exists(vector_config.collection_name,reverse=None):
-                raise QdrantCollectionDoesNotExistError(vector_config.collection_name)
-            
-    async with StepRunner(step,FileIngestionStepIndex.TOKEN_VERIFY) as skip:
-        skip()
-        if strategy != ParseStrategy.SEMANTIC:
-            raise SkipStep()
-        await costService.check_enough_credits(CostConstant.TOKEN_CREDIT,size*2)
-        
+    
     async with StepRunner(step,FileIngestionStepIndex.PROCESS) as skip:
         skip()
         await textDataLoader.process()
@@ -142,7 +132,7 @@ async def process_file_loader_task(ctx:dict[str,Any],vector_config:VectorConfig|
         skip()
         if strategy != ParseStrategy.SEMANTIC:
             raise SkipStep()
-        cost = TokenCost(request_id,f"arq-job@{uri}")
+        cost = TokenCost(request_id,issuer)
         cost.purchase(f'Ai token data process: {uri}',1,step['current_params'])
         bill = cost.generate_bill()
         await costService.deduct_credits(CostConstant.TOKEN_CREDIT,bill)
@@ -154,11 +144,10 @@ async def process_file_loader_task(ctx:dict[str,Any],vector_config:VectorConfig|
     return {"size":size,"collection_name":vector_config.collection_name,"tokens":step['current_params']}
 
 @RegisterTask(ArqDataTaskConstant.CRAWL_DATA_TASK,False)
-async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,size:int=None,lang:str='en',step:Step = None,request_id:str=None,uri:str=None,state:CrawlState=None,**kwargs):
+async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,size:int=None,lang:str='en',step:Step = None,request_id:str=None,uri:str=None,state:CrawlState=None,issuer:str=None,**kwargs):
 
     qdrantService:QdrantService = Get(QdrantService)
     configService:ConfigService = Get(ConfigService)
-    llMProviderService:LLMProviderService = Get(LLMProviderService)
     fileService:FileService = Get(FileService)
     profileService:ProfileService = Get(ProfileService)
     graphitiService:GraphitiService = Get(GraphitiService)
@@ -173,11 +162,6 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
         state['deep_crawl'] = dc_state
         await arqService.update_job_kwargs(uri,{'state':state},5)
     
-    crawlLLMProvider = llMProviderService.crawl_config.get('llmConfig',None)
-    if not crawlLLMProvider:
-        raise LLMConfigNotConfiguredError('crawl_config')
-
-    llmProvider = llMProviderService.MiniServiceStore.get(crawlLLMProvider)
     ingestTask = WebCrawlingDataIngestModel(vector_config=vector_config,graph_config=graph_config,lang=lang,name=uri,**slice_dict(kwargs,['subject'],'exclude'))
     
     if isinstance(ingestTask.extraction,SchemaExtractionConfig):
@@ -190,34 +174,21 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
     markdownMaxDef['max_html_mb'] = fileService.bytes_conversion(markdownMaxDef['max_html_mb'],'mb','b')
     markdownMaxDef['max_pdf_mb'] = fileService.bytes_conversion(markdownMaxDef['max_pdf_mb'],'mb','b')
 
+    crawlLLMProvider:LLMProviderMiniService = ctx[CRAWL_PROVIDER_KEY]
+
     crawler = WebCrawlerIngestion(
         ingestTask=ingestTask,
         crawl_state=state,
-        crawl_llm_config=llmProvider.crawl_llm,
+        crawl_llm_config=crawlLLMProvider.crawl_llm,
         dc_state_callback=deep_crawl_callback,
-        base_dir=f"{configService.DATA_INGESTION_DIR}crawl4ai/",
+        base_dir=f"{configService.DATA_INGESTION_DIR}{Crawl4AIConstant.INGEST_PARENT_DIR}/",
         schema=schema,
         markdownCostDefinition=markdownMaxDef,
     )
-
-    async with StepRunner(step,CrawlIngestionStepIndex.CHECK) as skip:
-        skip()
-        if vector_config != None:
-            if not await qdrantService.collection_exists(vector_config.collection_name,reverse=None):
-                raise QdrantCollectionDoesNotExistError(vector_config.collection_name)
-        if graph_config != None:
-            ... # check graph edges/entities existence
-    
-    async with StepRunner(step,CrawlIngestionStepIndex.TOKEN_VERIFY) as skip:
-        skip()
-        await costService.check_enough_credits(CostConstant.TOKEN_CREDIT,size*5)
     
     async with StepRunner(step,CrawlIngestionStepIndex.CRAWL) as skip:
         skip()
-
-        await crawler.initialize_folders()
         await crawler.initialize_config()
-
         await crawler.start()
 
         async for result in crawler.crawl():
@@ -290,8 +261,7 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
     async with StepRunner(step,CrawlIngestionStepIndex.TOTAL_COST) as skip:
         skip()
         ingestTask.compute_size()
-        issuer = f"arq-job@{uri}"
-
+    
         url_size = ingestTask._url_size or 0
         pdf_size = ingestTask.pdf_size or 0
 
@@ -319,32 +289,23 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
     return 
 
 @RegisterTask(ArqDataTaskConstant.RESEARCH_DATA_TASK,False)
-async def process_research_task(ctx:dict[str,Any],vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,size:int=None,lang:str='en',step:Step = None,request_id:str=None,state:dict=None,uri:str=None,**kwargs):
+async def process_research_task(ctx:dict[str,Any],vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,size:int=None,lang:str='en',step:Step = None,request_id:str=None,state:dict=None,uri:str=None,issuer:str=None,**kwargs):
 
     qdrantService:QdrantService = Get(QdrantService)
     graphitiService:GraphitiService = Get(GraphitiService)
-    llMProviderService:LLMProviderService = Get(LLMProviderService)
     costService:CostService = Get(CostService)
     fileService:FileService = Get(FileService)
     arqService:ArqIngestTaskService = Get(ArqIngestTaskService)
     customService:CustomService = Get(CustomService)
     configService:ConfigService = Get(ConfigService)
-
-    crawlLLMProvider = llMProviderService.crawl_config.get('llmConfig',None)
-    researchLLMProvider = llMProviderService.research_config.get('llmConfig',None)
-    if not crawlLLMProvider:
-        raise LLMConfigNotConfiguredError('crawl_config')
-
-    if not researchLLMProvider:
-        raise LLMConfigNotConfiguredError('research_config')
-
-    crawlLLMProvider = llMProviderService.MiniServiceStore.get(crawlLLMProvider)
-    researchLLMProvider = llMProviderService.MiniServiceStore.get(researchLLMProvider)
-
+    
     async def digest_callback(digest_state:DigestState):
         state.clear()
         state.update(digest_state)
         await arqService.update_job_kwargs(uri,{'state':state},5)
+    
+    researchLLMProvider:LLMProviderMiniService = ctx[RESEARCH_PROVIDER_KEY]
+    crawlLLMProvider:LLMProviderMiniService = ctx[CRAWL_PROVIDER_KEY]
 
     researcher =  ResearchIngestion(
         researchTask=ResearchDataIngestModel(lang=lang,vector_config=vector_config,graph_config=graph_config,lang=lang,name=uri,**slice_dict(kwargs,['subject'],'exclude')),
@@ -354,21 +315,8 @@ async def process_research_task(ctx:dict[str,Any],vector_config:VectorConfig|Non
         base_dir=f"{configService.DATA_INGESTION_DIR}crawl4ai/",
     )
 
-    await researcher.initialize_folders()
     await researcher.initialize_config()
 
-    async with StepRunner(step,ResearchIngestionStepIndex.CHECK) as skip:
-        skip()
-        if vector_config != None:
-            if not await qdrantService.collection_exists(vector_config.collection_name,reverse=None):
-                raise QdrantCollectionDoesNotExistError(vector_config.collection_name)
-        if graph_config != None:
-            ... # check graph edges/entities existence
-    
-    async with StepRunner(step,ResearchIngestionStepIndex.TOKEN_VERIFY) as skip:
-        skip()
-        await costService.check_enough_credits(CostConstant.TOKEN_CREDIT,size*10)
-    
     async with StepRunner(step,ResearchIngestionStepIndex.QUERY_EXPANSION) as skip:
         skip()
         concepts = await researcher.query_expansion()
@@ -376,26 +324,52 @@ async def process_research_task(ctx:dict[str,Any],vector_config:VectorConfig|Non
 
     async with StepRunner(step,ResearchIngestionStepIndex.LINKS_LOOKUP) as skip:
         skip()
+        urls = {}
+        concepts = step['current_params']
+        researcher.set_crawl_task(concepts)
+    
         await researcher.start()
         async for result in researcher.crawl():
-            ...
+            if not result.success:
+                continue
+
         await researcher.close()
-        
-        step['currents'] = ...
+        step['currents_params'] = {
+            'urls':urls,
+            'token':researcher.token_usage()
+        }
     
     async with StepRunner(step,ResearchIngestionStepIndex.LOOKUP_COST) as skip:
         skip()
-        ... # compute lookup cost and deduct credits
-    
+        token:CrawlTokenUsageReport = step['current_params']['token']
+        tokenCost = TokenCost(request_id,issuer)
+
+        for usage in token.tokens:
+            tokenCost.purchase(token.model,token.provider,token.provider_id,'input',f"Crawl token usage for {usage['step']} tokens",usage['input_tokens'])
+            tokenCost.purchase(token.model,token.provider,token.provider_id,'output',f"Crawl token usage for {usage['step']} tokens",usage['output_tokens'])
+
+        token_bill = tokenCost.generate_bill()
+        await costService.deduct_credits(CostConstant.TOKEN_CREDIT,token_bill)
+        step['current_params'] = {}
+
     async with StepRunner(step,ResearchIngestionStepIndex.RESEARCH) as skip:
         skip()
+        researcher.clear_cost()
         await researcher.start()
         async for result in researcher.research():
             ...
+
+            if graph_config != None:
+                graphitiService.add_content_episode()
+
         await researcher.close()
+        step['current_params']['token'] = researcher.token_usage()
+        step['current_params']['document']
     
     async with StepRunner(step,ResearchIngestionStepIndex.RESULT_COST) as skip:
         skip()
+        token:CrawlTokenUsageReport = step['current_params']['token']
+        document:List[MarkdownDocumentSize] = step['current_params']['document']
         ... # compute research result cost and deduct credits
     
     async with StepRunner(step,ResearchIngestionStepIndex.CLEANUP) as skip:
@@ -435,14 +409,13 @@ if APP_MODE == ApplicationMode.arq:
     from arq import Retry
 
     build_container(quiet=True)
-
+    
     arqService = Get(ArqIngestTaskService)
     arqService.register_task(DATA_TASK_REGISTRY_NAME)
 
     from app.cost.file_cost import FileCost
     from app.cost.token_cost import TokenCost
     from app.cost.ingest_cost import MarkdownResultIngestCost
-
 
     class WorkerSettings:
         functions = task_registry
@@ -458,14 +431,43 @@ if APP_MODE == ApplicationMode.arq:
     
     @staticmethod
     async def on_job_start(ctx:dict[str,Any]):
-        ...
+        costService = Get(CostService)  
+        qdrantService = Get(QdrantService)
+
+        job_id = ctx['job_id']
+        info = await arqService.info(job_id)
+
+        size = info.kwargs.get('size')
+        _nickname = info.kwargs.get('_nickname')
+        vector_config = info.kwargs.get('vector_config',None)
+        graph_config = info.kwargs.get('graph_config',None)
+
+        match _nickname:
+            case ArqDataTaskConstant.CRAWL_DATA_TASK:
+                size*=30
+            case ArqDataTaskConstant.RESEARCH_DATA_TASK:
+                size*=20
+            case ArqDataTaskConstant.FILE_DATA_TASK:
+                if info.kwargs.get('strategy',ParseStrategy.STRUCTURED) != ParseStrategy.SEMANTIC:
+                    size *= 5
+                else:
+                    size *=10
+            case _:
+                ...
+
+        if vector_config != None:
+            if not await qdrantService.collection_exists(vector_config['collection_name'],reverse=None):
+                raise QdrantCollectionDoesNotExistError(vector_config['collection_name'])
+        if graph_config != None:
+            ... # check graph edges/entities existence
+            
+        await costService.check_enough_credits(CostConstant.TOKEN_CREDIT,size*2)
     
     @staticmethod
     async def on_job_end(ctx:dict[str,Any]):
         """ coroutine function to run on job end"""
         job_id = ctx['job_id']
         print('On job end:',ctx)
-    
     
     @staticmethod
     async def after_job_end(ctx:dict[str,Any]):
@@ -475,9 +477,27 @@ if APP_MODE == ApplicationMode.arq:
         arqService.update_job_kwargs(job_id,{'step':{}})
         arqService.update_job_kwargs(job_id,{'state':{}})
 
-
     @staticmethod
     async def startup(ctx:dict[str,Any]):
+        llMProviderService = Get(LLMProviderService)
+        fileService = Get(FileService)
+
+        crawlLLMProvider = llMProviderService.crawl_config.get('llmConfig',None)
+        researchLLMProvider = llMProviderService.research_config.get('llmConfig',None)
+
+        if ArqDataTaskConstant.CRAWL_DATA_TASK in DATA_TASK_REGISTRY_NAME or ArqDataTaskConstant.RESEARCH_DATA_TASK in DATA_TASK_REGISTRY_NAME:
+            if not crawlLLMProvider:
+                raise LLMConfigNotConfiguredError('crawl_config')
+            crawlLLMProvider = llMProviderService.MiniServiceStore.get(crawlLLMProvider)
+            ctx[CRAWL_PROVIDER_KEY] = crawlLLMProvider
+
+        if ArqDataTaskConstant.RESEARCH_DATA_TASK in DATA_TASK_REGISTRY_NAME:
+            if not researchLLMProvider:
+                raise LLMConfigNotConfiguredError('research_config')
+            researchLLMProvider = llMProviderService.MiniServiceStore.get(researchLLMProvider)
+            ctx[RESEARCH_PROVIDER_KEY] = researchLLMProvider
+
+        fileService.init_crawl4ai_folders()
         await arqService.initialize()
 
     @staticmethod

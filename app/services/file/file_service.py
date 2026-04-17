@@ -1,8 +1,9 @@
 import math
-from pathlib import PurePath
+from pathlib import Path, PurePath
 from app.definition._service import BaseService,Service,AbstractServiceClass
 from typing import Literal, Union
 from app.services.config_service import ConfigService
+from app.utils.constant import Crawl4AIConstant
 from app.utils.globals import DIRECTORY_SEPARATOR
 from app.utils.fileIO import FDFlag, get_file_info, is_file, readFileContent,listFilesExtension,listFilesExtensionCertainPath, getFileOSDir, getFilenameOnly
 from app.utils.helper import PointerIterator
@@ -235,3 +236,16 @@ class FileService(BaseService,):
         else:
             # Standard hex encoding: 64 characters
             return  sha
+    
+    def init_crawl4ai_folders(self):
+        base_dir = f"{self.configService.DATA_INGESTION_DIR}{Crawl4AIConstant.INGEST_PARENT_DIR}/"
+        
+        crawl_base_dir = Path(base_dir) / Crawl4AIConstant.CRAWL_CACHE_DIR
+        research_base_dir = Path(base_dir) / Crawl4AIConstant.RESEARCH_CACHE_DIR
+
+        cache_dir = crawl_base_dir / "cache"
+        schema_dir = crawl_base_dir / "schemas"
+
+        cache_dir.mkdir(parents=True, exist_ok=True) 
+        schema_dir.mkdir(parents=True, exist_ok=True)
+        research_base_dir.mkdir(parents=True,exist_ok=True)

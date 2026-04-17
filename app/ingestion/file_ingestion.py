@@ -34,11 +34,9 @@ TEXT_READERS: dict[str, type[BaseReader]] = {
 }
 
 class FileIngestionStepIndex(int, Enum):
-    CHECK = 1
-    TOKEN_VERIFY = 2
-    PROCESS = 3
-    TOKEN_COST = 4
-    CLEANUP = 5
+    PROCESS = 1
+    TOKEN_COST = 2
+    CLEANUP = 3
 
 class BaseDataLoader:
     def __init__(self,embedding_model:BaseEmbedding ,file_path: str, lang: str, extension: str,category:str):

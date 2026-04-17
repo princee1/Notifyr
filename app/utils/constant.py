@@ -555,3 +555,8 @@ class AgenticConstant:
 
     VECTOR_ROUTER = lambda p:f'/vector{p}'
     K_GRAPH_ROUTER = lambda p:f'/k-graph{p}'
+
+class Crawl4AIConstant:
+    INGEST_PARENT_DIR ='crawl4ai'
+    CRAWL_CACHE_DIR = '.crawl_cache'
+    RESEARCH_CACHE_DIR = '.research_cache'

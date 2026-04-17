@@ -40,6 +40,7 @@ from app.models.crawal4ai_model import (
 )
 from app.models.ingest_model import WebCrawlingDataIngestModel
 from app.prompt import crawl_prompt, graphiti_prompt
+from app.utils.constant import Crawl4AIConstant
 from app.utils.tools import RunAsync
 
 
@@ -103,12 +104,9 @@ AD_AND_SPAM_DOMAINS = [
 
 
 class CrawlIngestionStepIndex(int, Enum):
-	CHECK = 1
-	TOKEN_VERIFY = 2
-	INITIALIZE = 3
-	CRAWL = 4
-	TOTAL_COST = 6
-	CLEANUP = 7
+	CRAWL = 1
+	TOTAL_COST = 2
+	CLEANUP = 3
 
 class WebCrawlerIngestion:
 	"""
@@ -141,7 +139,7 @@ class WebCrawlerIngestion:
 		self.schema = schema
 
 		self.max_markdown_def = markdownCostDefinition
-		self.base_dir = Path(base_dir) if base_dir else Path.cwd() / ".crawl_cache"
+		self.base_dir = Path(base_dir) / Crawl4AIConstant.CRAWL_CACHE_DIR
 		
 		self.errors: list[CrawlError]  = []
 		self.crawler: Optional[AsyncWebCrawler] = None
@@ -151,13 +149,6 @@ class WebCrawlerIngestion:
 		self.urls: List[str] = []
 		self.documents:List[MarkdownDocumentSize] = []
 	
-	def initialize_folders(self):
-	    # Create cache and schema directories
-		self.cache_dir = self.base_dir / "cache"
-		self.schema_dir = self.base_dir / "schemas"
-		self.cache_dir.mkdir(parents=True, exist_ok=True)
-		self.schema_dir.mkdir(parents=True, exist_ok=True)
-
 	async def initialize_config(self):
 		"""Build crawler and LLM configuration."""
 		
