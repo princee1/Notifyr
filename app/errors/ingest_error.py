@@ -17,7 +17,6 @@ class IngestConfigNotPresentError(BaseError):
         self.config_name = config_name
         self.database = database
 
-
 class TaskIngestNameNotValidError(BaseError):
     def __init__(self, task:str,database:Database):
         super().__init__(task)
@@ -30,3 +29,8 @@ class SizeIngestNotFoundError(BaseError):
         self.task = task
         self.uri = uri
         self.database = database
+
+class IngestTaskNotSupportedError(BaseError):
+    def __init__(self, task:str):
+        super().__init__()
+        self.task = task

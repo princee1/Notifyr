@@ -10,5 +10,5 @@ class CacheTool(Tool):
         self.qdrantService = qdrantService
         self.memcachedService = memcachedService
 
-    async def __call__(self, *args, **kwds):
-        return super().__call__(*args, **kwds)
+    async def __call__(self,):
+        ...

@@ -27,6 +27,7 @@ MS_1000 = 1000
 ENGINE_KEY = 'engine'
 DB_KEY = 'db'
 
+NOTIFYR_HOST = 'redis'
 
 
 @Service()
@@ -44,7 +45,6 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
 
         self.consumer_name = f'notifyr-consumer={self.uvicornWorkerService.INSTANCE_ID}'
 
-
     def dynamic_context(func:Callable):
         
         async def async_wrapper(self:Self,topic:str,data:Any|dict):
@@ -55,7 +55,6 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         
         return async_wrapper  if APP_MODE == ApplicationMode.server else sync_wrapper
         
-
     @dynamic_context
     def stream_data(self,stream:str,data:dict):
         if stream not in self.callbacks.keys():
@@ -198,7 +197,6 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         return wrapper
 
     def build(self,build_state=-1):
-        host = 'redis'
         self.creds = self.vaultService.database_engine.generate_credentials(VaultConstant.REDIS_ROLE)
         self.backend_creds = self.vaultService.database_engine.generate_credentials(VaultConstant.CELERY_BACKEND_ROLE)
         
@@ -206,30 +204,33 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
             self.broker_creds = self.vaultService.database_engine.generate_credentials(VaultConstant.CELERY_BACKEND_ROLE)
 
         self.redis_celery = Redis(host=self.configService.REDIS_HOST,db=RedisConstant.CELERY_DB,username=self.backend_creds['data']['username'],password=self.backend_creds['data']['password'])
-        self.redis_limiter = Redis(host=host,db=RedisConstant.LIMITER_DB,username=self.db_user,password=self.db_password)
-        self.redis_cache = Redis(host=host,db=RedisConstant.CACHE_DB,decode_responses=True,username=self.db_user,password=self.db_password)
+        self.redis_limiter = Redis(host=NOTIFYR_HOST,db=RedisConstant.LIMITER_DB,username=self.db_user,password=self.db_password)
+        self.redis_cache = Redis(host=NOTIFYR_HOST,db=RedisConstant.CACHE_DB,decode_responses=True,username=self.db_user,password=self.db_password)
+        self.redis_config = Redis(host=NOTIFYR_HOST,db=RedisConstant.CONFIG_DB,decode_responses=True,username=self.db_user,password=self.db_password)
 
         if APP_MODE == ApplicationMode.server:
-            self.redis_events=Redis(host=host,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user,password=self.db_password)
+            self.redis_events=Redis(host=NOTIFYR_HOST,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user,password=self.db_password)
         else :
-            self.redis_events = SyncRedis(host=host,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user,password=self.db_password)
+            self.redis_events = SyncRedis(host=NOTIFYR_HOST,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user,password=self.db_password)
         
         if build_state == DEFAULT_BUILD_STATE:
             super().build(build_state)
 
-        self.db:Dict[Literal['celery','limiter','events','cache',0,1,2,3],Redis] = {
+        self.db:Dict[Literal['celery','limiter','events','cache','config',0,1,2,3,4],Redis] = {
             RedisConstant.CELERY_DB:self.redis_celery,
             RedisConstant.LIMITER_DB:self.redis_limiter,
             RedisConstant.EVENT_DB:self.redis_events,
             RedisConstant.CACHE_DB:self.redis_cache,
+            RedisConstant.CONFIG_DB:self.redis_config,
             'celery':self.redis_celery,
             'limiter':self.redis_limiter,
             'events': self.redis_events,
             'cache':self.redis_cache,
+            'config':self.redis_config
         }
 
         try:
-            temp_redis = SyncRedis(host=host,password=self.db_password,username=self.db_user)
+            temp_redis = SyncRedis(host=NOTIFYR_HOST,password=self.db_password,username=self.db_user)
             pong = temp_redis.ping()
             if not pong:
                 raise ConnectionError("Redis ping failed")

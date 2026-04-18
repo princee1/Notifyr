@@ -39,7 +39,7 @@ from graphiti_core.driver.neo4j_driver import Neo4jDriver
 
 
 from app.utils.helper import uuid_v1_mc
-from app.utils.constant import GraphitiConstant, LLMProviderConstant, VaultConstant, VaultTTLSyncConstant
+from app.utils.constant import GraphitiConstant, LLMProviderConstant, RedisConstant, VaultConstant, VaultTTLSyncConstant
 import app.prompt.graphiti_prompt as graphiti_prompt
 from app.utils.globals import APP_MODE, ApplicationMode
 
@@ -53,6 +53,7 @@ CLIENT_MAP:Dict[LLMProviderConstant.LLMProvider,Type[LLMClient]] = {
 }
 
 GRAPHITI_BUILD_STATE = 421
+GRAPHITI_INIT_KEY= 'graphiti'
 
 @Service(
     links=[LinkDep(service=LLMProviderService,to_build=True,build_state=GRAPHITI_BUILD_STATE)]
@@ -142,7 +143,13 @@ class GraphitiService(TempCredentialsDatabaseService):
     
     async def build_communities(self):
         await self.graphiti.build_communities()
-
+    
+    async def init_database(self,):
+        built = self.redisService.retrieve(RedisConstant.CONFIG_DB,GRAPHITI_INIT_KEY)
+        if not bool(built):
+            await self.graphiti.build_indices_and_constraints()
+            await self.redisService.store(RedisConstant.CONFIG_DB,GRAPHITI_INIT_KEY,True)
+      
     ##########################################################################
     #######################                             ######################
     #######################                             ######################
@@ -220,7 +227,7 @@ class GraphitiService(TempCredentialsDatabaseService):
 
         return result
 
-    async def add_message_episode(self,subject:str,description:str,message:Any,contact_id:str):
+    async def add_message_episode(self,subject:str,description:str,message:Any,contact_id:str,update_communities=False):
         contact_id=f'{GraphitiConstant.CONTACT_PREFIX}{contact_id}'
 
         description = graphiti_prompt.CONVERSATION_DESCRIPTION_PROMPT(
@@ -232,6 +239,7 @@ class GraphitiService(TempCredentialsDatabaseService):
         
         result = await self.graphiti.add_episode(
             name=episode_name,
+            update_communities=update_communities,
             episode_body=message,
             source_description=description,
             source=EpisodeType.message,
@@ -244,13 +252,6 @@ class GraphitiService(TempCredentialsDatabaseService):
         )
 
         return result
-
-    async def add_fact_triplet(self,domain:str=None):
-        """"""
-        return
-        await self.graphiti.add_triplet(...,...,...)
-        # EntityNode()
-        # EntityEdge()
 
     ##########################################################################
     #######################                             ######################
@@ -337,12 +338,6 @@ class GraphitiService(TempCredentialsDatabaseService):
     #######################                             ######################
     #######################                             ######################
     ##########################################################################
-
-    async def init_database(self,):
-        try:
-            await self.graphiti.build_indices_and_constraints()
-        except:
-            ...
 
     def _setup_llm_provider(self):
 

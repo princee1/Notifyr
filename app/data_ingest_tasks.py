@@ -5,6 +5,7 @@ from app.classes.cost_definition import MarkdownCostDefinition
 from app.classes.crawl import CrawlState, CrawlTokenUsageReport, DigestState, MarkdownDocumentSize, SchemaNotFoundError
 from app.classes.qdrant import QdrantCollectionDoesNotExistError
 from app.classes.step import SkipStep, Step, StepRunner
+from app.errors.ingest_error import IngestTaskNotSupportedError
 from app.errors.llm_error import LLMConfigNotConfiguredError
 from app.models.crawal4ai_model import KnowledgeGraphExtractionConfig, SchemaExtractionConfig, TextsExtractionConfig
 from app.models.file_model import FileResponseUploadModel, UriMetadata
@@ -23,7 +24,42 @@ FILE_CLEANUP='file_cleanup'
 CRAWL_PROVIDER_KEY='crawl_llm'
 RESEARCH_PROVIDER_KEY='research_llm'
 DATA_TASK_REGISTRY_NAME = {}
+BASE_JOB_KWARGS_KEYS = {'uri','size','_nickname'}
 
+###################################################################################################################
+###################################################################################################################
+
+async def verify_token_credit(**kwargs):
+        costService = Get(CostService)  
+        qdrantService = Get(QdrantService)
+
+        size = kwargs.get('size')
+        _nickname = kwargs.get('_nickname')
+        vector_config = kwargs.get('vector_config',None)
+        graph_config = kwargs.get('graph_config',None)
+
+        match _nickname:
+            case ArqDataTaskConstant.CRAWL_DATA_TASK:
+                size*=30
+            case ArqDataTaskConstant.RESEARCH_DATA_TASK:
+                size*=20
+            case ArqDataTaskConstant.FILE_DATA_TASK:
+                strategy = kwargs.get('strategy',ParseStrategy.STRUCTURED)
+                size *= 5 if strategy != ParseStrategy.SEMANTIC else 10
+            case _:
+                raise IngestTaskNotSupportedError(_nickname)
+
+        factor = 0
+        if vector_config != None:
+            factor +=1
+            if not await qdrantService.collection_exists(vector_config['collection_name'],reverse=None):
+                raise QdrantCollectionDoesNotExistError(vector_config['collection_name'])
+        if graph_config != None:
+            factor+=1
+            ... # check graph edges/entities existence
+            
+        await costService.check_enough_credits(CostConstant.TOKEN_CREDIT,size*factor)
+    
 def RegisterTask(nickname:str,active:bool=True,wrap=True):
 
     match nickname:
@@ -41,17 +77,16 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
                 if step['current_step'] < FileIngestionStepIndex.CLEANUP:
                     _step = Step(current_step=FileIngestionStepIndex.CLEANUP-1,steps={},current_params=None)
                     await func(ctx,*args,**kwargs,step=_step,uri=uri,request_id=request_id,size=size,state=state)
-                    
+
         case ArqDataTaskConstant.CRAWL_DATA_TASK:
             async def refund():
                 ...
-        
+
         case ArqDataTaskConstant.RESEARCH_DATA_TASK:
             async def refund():
                 ...
-        
         case _:
-            raise ValueError('Task Name:',nickname,'not supported')
+            raise IngestTaskNotSupportedError(nickname)
 
     def decorator(func:Callable):
         """
@@ -78,8 +113,11 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
                 
                 if graph_config != None:
                     graph_config = KGraphConfig(**graph_config)
-
+                
                 issuer = f"arq-job@{uri}"
+                ctx['_nickname'] = _nickname
+                
+                await verify_token_credit(vector_config=vector_config,graph_config=graph_config,size=size,_nickname=nickname,strategy=kwargs.get('strategy',ParseStrategy.STRUCTURED))
                 return await func(ctx,*args,**kwargs,vector_config=vector_config,graph_config=graph_config,step=step,uri=uri,request_id=request_id,size=size,state=state,issuer=issuer)
             
             except Retry as e:
@@ -100,6 +138,9 @@ def RegisterTask(nickname:str,active:bool=True,wrap=True):
             return func
 
     return decorator
+
+###################################################################################################################
+###################################################################################################################
 
 @RegisterTask(ArqDataTaskConstant.FILE_DATA_TASK,True)
 async def process_file_loader_task(ctx:dict[str,Any],vector_config:VectorConfig|None=None,graph_config:KGraphConfig|None = None,lang:str='en',uri:str=None,size:int=None,step:Step = None,request_id:str=None,strategy:ParseStrategy=None,use_docling:bool=None,sha:str=None,state:dict=None,issuer:str=None):
@@ -384,10 +425,12 @@ if False:
         costService:CostService = Get(CostService)
         arqService:ArqIngestTaskService = Get(ArqIngestTaskService)
 
+###################################################################################################################
+###################################################################################################################
+
 if APP_MODE == ApplicationMode.arq:
     
     from arq.connections import RedisSettings
-
     from app.ingestion.file_ingestion import TextDataLoader, FileIngestionStepIndex
     from app.ingestion.crawl_ingestion import CrawlIngestionStepIndex, WebCrawlerIngestion
     from app.ingestion.research_ingestion import ResearchIngestion, ResearchIngestionStepIndex
@@ -431,52 +474,30 @@ if APP_MODE == ApplicationMode.arq:
     
     @staticmethod
     async def on_job_start(ctx:dict[str,Any]):
-        costService = Get(CostService)  
-        qdrantService = Get(QdrantService)
+        job_id:str = ctx['job_id']
 
-        job_id = ctx['job_id']
-        info = await arqService.info(job_id)
-
-        size = info.kwargs.get('size')
-        _nickname = info.kwargs.get('_nickname')
-        vector_config = info.kwargs.get('vector_config',None)
-        graph_config = info.kwargs.get('graph_config',None)
-
-        match _nickname:
-            case ArqDataTaskConstant.CRAWL_DATA_TASK:
-                size*=30
-            case ArqDataTaskConstant.RESEARCH_DATA_TASK:
-                size*=20
-            case ArqDataTaskConstant.FILE_DATA_TASK:
-                if info.kwargs.get('strategy',ParseStrategy.STRUCTURED) != ParseStrategy.SEMANTIC:
-                    size *= 5
-                else:
-                    size *=10
-            case _:
-                ...
-
-        if vector_config != None:
-            if not await qdrantService.collection_exists(vector_config['collection_name'],reverse=None):
-                raise QdrantCollectionDoesNotExistError(vector_config['collection_name'])
-        if graph_config != None:
-            ... # check graph edges/entities existence
-            
-        await costService.check_enough_credits(CostConstant.TOKEN_CREDIT,size*2)
-    
     @staticmethod
     async def on_job_end(ctx:dict[str,Any]):
-        """ coroutine function to run on job end"""
-        job_id = ctx['job_id']
-        print('On job end:',ctx)
-    
+        job_id:str = ctx['job_id']
+
     @staticmethod
     async def after_job_end(ctx:dict[str,Any]):
         """coroutine function to run after job has ended and results have been recorded"""
         job_id = ctx['job_id']
-        print('After job end:',ctx)
-        arqService.update_job_kwargs(job_id,{'step':{}})
-        arqService.update_job_kwargs(job_id,{'state':{}})
-
+        nickname:str = ctx['_nickname']
+        match nickname:
+            case ArqDataTaskConstant.CRAWL_DATA_TASK:
+                await arqService.update_job_kwargs(job_id,data=BASE_JOB_KWARGS_KEYS.union(('urls','subject')),mode='include')
+                
+            case ArqDataTaskConstant.FILE_DATA_TASK:
+                await arqService.update_job_kwargs(job_id,data=BASE_JOB_KWARGS_KEYS.union(('sha',)),mode='include')
+                
+            case ArqDataTaskConstant.RESEARCH_DATA_TASK:
+                await arqService.update_job_kwargs(job_id,data=BASE_JOB_KWARGS_KEYS.union(('query',)),mode='include')
+            
+            case _:
+                raise IngestTaskNotSupportedError(nickname)
+                
     @staticmethod
     async def startup(ctx:dict[str,Any]):
         llMProviderService = Get(LLMProviderService)
@@ -514,3 +535,6 @@ if APP_MODE == ApplicationMode.arq:
         graphitiService.revoke_lease()
         
         vaultService.revoke_auth_token()
+
+###################################################################################################################
+###################################################################################################################

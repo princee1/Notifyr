@@ -326,6 +326,7 @@ class RedisConstant:
     CELERY_DB=2
     LIMITER_DB=1
     CACHE_DB=3
+    CONFIG_DB=4
 
 ########################                     ########################################
 
