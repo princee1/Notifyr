@@ -139,7 +139,8 @@ class WebCrawlerIngestion:
 		self.schema = schema
 
 		self.max_markdown_def = markdownCostDefinition
-		self.base_dir = Path(base_dir) / Crawl4AIConstant.CRAWL_CACHE_DIR
+		self.schema_dir = Path(base_dir) / Crawl4AIConstant.CRAWL_CACHE_DIR / 'schemas'
+		self.cache_dir = Path(base_dir) / Crawl4AIConstant.CRAWL_CACHE_DIR / 'cache'
 		
 		self.errors: list[CrawlError]  = []
 		self.crawler: Optional[AsyncWebCrawler] = None
@@ -149,6 +150,18 @@ class WebCrawlerIngestion:
 		self.urls: List[str] = []
 		self.documents:List[MarkdownDocumentSize] = []
 	
+	def init_crawler(self):
+		self.crawler = AsyncWebCrawler(
+			config=BrowserConfig(
+				headless=True,
+				use_managed_browser=False,
+				accept_downloads=False,
+				user_agent_mode='random',
+			),
+			session_id=self.session_id() if callable(self.session_id) else self.session_id,
+			#base_directory=self.base_dir
+		)
+
 	async def initialize_config(self):
 		"""Build crawler and LLM configuration."""
 		
@@ -159,18 +172,6 @@ class WebCrawlerIngestion:
 			**self.crawlLlmConfig.model.model_dump(exclude={'model'}),
 			api_token=self.crawlLlmConfig.api_token
 		)
-
-		self.crawler = AsyncWebCrawler(
-			config=BrowserConfig(
-				headless=True,
-				use_managed_browser=False,
-				accept_downloads=False,
-				user_agent_mode='random',
-			),
-			session_id=self.session_id() if callable(self.session_id) else self.session_id,
-			#base_directory=self.base_dir
-		)	
-
 		self.urls = await self.generate_urls()
 
 		if self.ingestTask.deep_crawling:
@@ -483,8 +484,14 @@ class WebCrawlerIngestion:
 				external_links = result.links.get("external", [])
 
 				for link in (internal_links+external_links):
-					pdf_links.append(link['href'])
-				
+					link:str = link.get('href',None)
+					if doctype == 'pdf' and link and link.endswith(f'.{doctype}'):
+						pdf_links.append(link['href'])
+					elif doctype == 'html' and link and not link.endswith(f'.pdf'):
+						pdf_links.append(link['href'])
+					else:
+						...
+
 			return metadata
 		except Exception as e:
 			metadata.error = str(e)
@@ -552,8 +559,8 @@ class WebCrawlerIngestion:
 			for item in schema_content:
 				try:
 					item = CrawlSchemaModel.model_validate(item)
-					content = self.schema.model_validate(item.content)
-					metadata.extracted_content.append(content)
+					self.schema.model_validate(item.content)
+					metadata.extracted_content.append(item)
 				except:
 					continue
 

@@ -13,7 +13,7 @@ from .crawl_ingestion import WebCrawlerIngestion
 from crawl4ai import  AdaptiveCrawler,AdaptiveConfig,LLMConfig
 from typing import Awaitable, Dict, List
 from litellm import ModelResponse, acompletion
-from app.classes.research import EXAMPLE_SCHEMA_NAME, QueryExpansionModel, search_example_url, search_query_creator,SearchLinkResultModel,SearchEngine
+from app.classes.research import EXAMPLE_SCHEMA_NAME, QueryExpansionModel, ResearchResultMetadata, SearchLinkState, extract_query, search_example_url, search_query_creator,SearchLinkResultModel,SearchEngine
 
 class ResearchIngestionStepIndex(int, Enum):
     QUERY_EXPANSION = 1
@@ -50,6 +50,27 @@ class ResearchIngestion(WebCrawlerIngestion):
     def process_research_content(self):
         ...
 
+    async def crawl(self)->dict[str,SearchLinkState]:
+        view_urls = set()
+        urls = {}
+        async for result in super().crawl():
+            if not result.success:
+                continue
+
+            if not result.extracted_content:
+                continue
+                
+            query = extract_query(result.url,self.researchTask.engine)
+            
+            for item in result.extracted_content:
+                url = item.content.get('url',None)
+                if url and url not in view_urls:
+                    urls[url] = {
+                        'query':query,
+                        'content':item.content,
+                    }
+        return urls
+
     async def set_crawl_task(self,concepts:list[str]):
         url_generator = search_query_creator(concepts)
         schema_url = search_example_url(self.researchTask.engine)
@@ -65,10 +86,12 @@ class ResearchIngestion(WebCrawlerIngestion):
             name=self.researchTask.name
         )
 
-    async def research(self,urls:dict[str,str]):
+    async def research(self,urls:dict[str,SearchLinkState]):
         adaptive = AdaptiveCrawler(
             self.crawler,
             config = AdaptiveConfig(
+                save_state=True,
+                save_path=...,
                 embedding_llm_config=LLMConfig(
                     provider=self.digest_llm_config.formatted_provider(),
                     api_token=self.digest_llm_config.api_token,
@@ -77,14 +100,23 @@ class ResearchIngestion(WebCrawlerIngestion):
                 **self.researchTask.config.model_dump()
                 )
             )
+        
+        for url,results in urls.items():
+            query = results['query']
+            content = SearchLinkResultModel(**results['content'])
 
-        for urls,query in urls.items():
+        for url in []:
             state = await adaptive.digest(
-                start_url=urls,
-                query=query
+                start_url=url,
+                query=query,
+                resume_from=...,
             )
 
-            yield {}
+            if state.metrics.get('is_irrelevant', False):
+                continue
+            
+        for doc in adaptive.get_relevant_content(top_k=self.researchTask.top_k):
+            yield ResearchResultMetadata()
 
     async def query_expansion(self)->List[str]:
         try:

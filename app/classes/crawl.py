@@ -144,7 +144,7 @@ class CrawlResultMetadata:
     success: bool = False
     result: Optional[dict] = None
     error: Optional[str] = None
-    extracted_content: list[Any] = None
+    extracted_content: list[CrawlSchemaModel] = None
     markdown_content: Optional[str] = None
     chunks: List[Chunk] = field(default_factory=list)
     doc_type:DocType = 'html'

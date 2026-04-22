@@ -1,7 +1,12 @@
+from dataclasses import dataclass
+
 from pydantic import BaseModel, Field
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, TypedDict
 from datetime import datetime
 from urllib.parse import quote
+
+from requests.compat import urlparse
+from urllib.parse import parse_qs
 from app.classes.url import URLConfigModel, URLParam
 from app.definition._error import BaseError
 
@@ -116,3 +121,24 @@ def search_example_url(engine:SearchEngine):
 
 
 
+def extract_query(url: str, engine: SearchEngine):
+    url_obj = urlparse(url)
+    params = parse_qs(url_obj.query)
+    match engine:
+        case 'yahoo':
+            return params.get('p', [None])[0]
+        case _:
+            return params.get('q', [None])[0]
+        
+
+class SearchLinkState(TypedDict):
+    query:str
+    content:dict
+
+@dataclass
+class ResearchResultMetadata:
+    url:str
+    score:float
+    content:str
+    index:int
+    

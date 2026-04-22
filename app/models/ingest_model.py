@@ -244,6 +244,7 @@ class ResearchDataIngestModel(DataIngestModel):
 	max_query_pages: int = Field(default=1, gt=0, le=30)
 	query:str
 	name:str = Field(min_length=8,max_length=30)
+	top_k: int = Field(default=5, ge=1,le=100,description="Top K links to consider, must be at least 1")
 	config:DigestConfigModel
 
 	@field_validator("name", mode="after")

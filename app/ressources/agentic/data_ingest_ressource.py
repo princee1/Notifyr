@@ -326,7 +326,7 @@ class DataIngestRessource(BaseHTTPRessource):
             comparable_embeddings = ComparableEmbeddings(query_embedding,'filter','include')
             await self.arqService.search(ArqDataTaskConstant.RESEARCH_DATA_TASK,{'query':comparable_embeddings},True,'single')
 
-        metadata:ResearchIngestUriMetadata = ...
+        metadata:ResearchIngestUriMetadata = ResearchIngestUriMetadata(uri=uri,)
 
         merchant.safe_payment(
             None,
@@ -354,9 +354,7 @@ class DataIngestRessource(BaseHTTPRessource):
     async def on_shutdown(self):
         await self.arqService.close()
 
-
     if False:
-
         @UseLimiter('5/hour')
         @UsePipe(MerchantPipe())
         @Throttle(normal=(300,150))

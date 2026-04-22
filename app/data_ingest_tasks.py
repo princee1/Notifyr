@@ -229,6 +229,7 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
     
     async with StepRunner(step,CrawlIngestionStepIndex.CRAWL) as skip:
         skip()
+        crawler.init_crawler()
         await crawler.initialize_config()
         await crawler.start()
 
@@ -291,7 +292,7 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
                     body=result.markdown_content,
                     uuid=uuid,
                     domain=graph_config.domain,
-                    instruction=graph_config.instruction,
+                    instruction=crawler.ingestTask.extraction.instruction,
                     entities=graph_config.entities,
                     edges=graph_config.edges
                 )
@@ -355,8 +356,7 @@ async def process_research_task(ctx:dict[str,Any],vector_config:VectorConfig|Non
         crawl_llm_config=crawlLLMProvider.crawl_llm,
         base_dir=f"{configService.DATA_INGESTION_DIR}crawl4ai/",
     )
-
-    await researcher.initialize_config()
+    researcher.init_crawler()
 
     async with StepRunner(step,ResearchIngestionStepIndex.QUERY_EXPANSION) as skip:
         skip()
@@ -365,16 +365,14 @@ async def process_research_task(ctx:dict[str,Any],vector_config:VectorConfig|Non
 
     async with StepRunner(step,ResearchIngestionStepIndex.LINKS_LOOKUP) as skip:
         skip()
-        urls = {}
         concepts = step['current_params']
         researcher.set_crawl_task(concepts)
-    
-        await researcher.start()
-        async for result in researcher.crawl():
-            if not result.success:
-                continue
+        await researcher.initialize_config()
 
+        await researcher.start()
+        urls = await researcher.crawl()
         await researcher.close()
+
         step['currents_params'] = {
             'urls':urls,
             'token':researcher.token_usage()
@@ -391,22 +389,30 @@ async def process_research_task(ctx:dict[str,Any],vector_config:VectorConfig|Non
 
         token_bill = tokenCost.generate_bill()
         await costService.deduct_credits(CostConstant.TOKEN_CREDIT,token_bill)
-        step['current_params'] = {}
 
     async with StepRunner(step,ResearchIngestionStepIndex.RESEARCH) as skip:
         skip()
         researcher.clear_cost()
+        urls = step['current_params']['urls']
+
         await researcher.start()
         async for result in researcher.research():
-            ...
-
-            if graph_config != None:
-                graphitiService.add_content_episode()
-
+            graphitiService.add_content_episode(
+                name=...,
+                source=...,
+                description=...,
+                body=...,
+                instruction=...,
+                domain=graph_config.domain,
+                edges=graph_config.edges,
+                entities=graph_config.entities
+            )
         await researcher.close()
+        
         step['current_params']['token'] = researcher.token_usage()
         step['current_params']['document']
-    
+        del step['current_params']['urls'] 
+
     async with StepRunner(step,ResearchIngestionStepIndex.RESULT_COST) as skip:
         skip()
         token:CrawlTokenUsageReport = step['current_params']['token']
@@ -415,6 +421,7 @@ async def process_research_task(ctx:dict[str,Any],vector_config:VectorConfig|Non
     
     async with StepRunner(step,ResearchIngestionStepIndex.CLEANUP) as skip:
         skip()
+
         
 if False:
     @RegisterTask(ArqDataTaskConstant.API_DATA_TASK,False)

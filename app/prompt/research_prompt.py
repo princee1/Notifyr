@@ -25,6 +25,11 @@ These should range from broad "parent" topics to specific "child" niches and lat
 
 **Seed Query:** "{query}"
 
+### Query Formulation
+Use specific, descriptive queries
+Include key terms you expect to find
+Avoid overly broad queries
+
 ### Expansion Constraints:
 1. **Quantity:** Provide exactly {num_concepts} unique entries.
 2. **Diversity:** Ensure at least one concept is "Broad" (macro-level), one is "Specific" (micro-level), and one is "Relative" (contextually linked).
