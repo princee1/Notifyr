@@ -272,7 +272,7 @@ class DataIngestRessource(BaseHTTPRessource):
         
         ingestTask.compute_size()
         metadata = WebCrawlingUriMetadata(uri=uri,
-                                          size=cost.total_size(ingestTask._url_size or 0,ingestTask.pdf_size),
+                                          size=cost.total_size(ingestTask._url_size or 0,ingestTask.pdf_size or 0),
                                           description=ingestTask._description,
                                           url_size=ingestTask._url_size,
                                           pdf_size=ingestTask.pdf_size)
@@ -311,9 +311,7 @@ class DataIngestRessource(BaseHTTPRessource):
         """
         Engage a broad research by fetching url concept and crawling those pages
         """
-        db_config = ingestTask.db_config
-        _response = ResearchIngestDataResponse(db_config[0],db_config[1],ingestTask.expire_date,ingestTask.defer_date)
-
+        _response = ResearchIngestDataResponse(ingestTask.expire_date,ingestTask.defer_date)
         uri = ingestTask.name
         await self.arqService.exists(uri, True,True)
 
@@ -327,10 +325,11 @@ class DataIngestRessource(BaseHTTPRessource):
             await self.arqService.search(ArqDataTaskConstant.RESEARCH_DATA_TASK,{'query':comparable_embeddings},True,'single')
 
         metadata:ResearchIngestUriMetadata = ResearchIngestUriMetadata(uri=uri,)
+        _response.metadata = metadata
 
         merchant.safe_payment(
             None,
-            (metadata,db_config),
+            metadata,
             self.arqService.enqueue_task,ArqDataTaskConstant.RESEARCH_DATA_TASK,
             job_id=uri,
             expires=ingestTask.expires,

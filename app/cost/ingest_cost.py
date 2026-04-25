@@ -1,6 +1,6 @@
 import math
 import sys
-from typing import List, Literal, Tuple
+from typing import Any, List, Literal, Tuple
 from fastapi import UploadFile
 from app.classes.cost_definition import MarkdownCostDefinition
 from app.classes.crawl import MarkdownDocumentSize
@@ -8,10 +8,8 @@ from app.container import Get
 from app.cost.file_cost import FileCost
 from app.definition._cost import Cost, DataCost
 from app.models.file_model import FileResponseUploadModel
-from app.models.ingest_model import DeleteIngestUriMetadata, FileUploadDataIngestModel, WebCrawlingDataIngestModel, WebCrawlingUriMetadata
+from app.models.ingest_model import DeleteIngestUriMetadata, FileUploadDataIngestModel, ResearchDataIngestModel, ResearchIngestDataResponse, ResearchIngestUriMetadata, WebCrawlingDataIngestModel, WebCrawlingIngestDataResponse, WebCrawlingUriMetadata
 from app.services.file.file_service import FileService
-
-
 class FileIngestCost(FileCost):
 
     INGEST_PRENAME = FileCost.PRE_NAME('document')
@@ -58,7 +56,6 @@ class FileIngestCost(FileCost):
             for d,c,q in prices:
                 self.refund(d,c,q)
 
-
 #########################################################################################################
 ####################               MarkdownCostDefinition          ######################################
 #########################################################################################################
@@ -87,6 +84,8 @@ class MarkdownResultIngestCost(DataCost):
         total_cost = 0
 
         for document in results:
+
+            document['size'] = self.fileService.bytes_conversion(document['size'],'b','kb')
             if document['doc_type'] == 'pdf':
                 pdf_cptr+=1
                 cost_size = self.max_html_kb - document['size']
@@ -140,7 +139,7 @@ class CrawlMarkdownIngestCost(MarkdownResultIngestCost):
         ingestTask.compute_size()
         self.compute(ingestTask)
         
-    def post_purchase(self,ingestTask:WebCrawlingDataIngestModel):
+    def post_purchase(self,response:WebCrawlingIngestDataResponse,ingestTask:WebCrawlingDataIngestModel):
         self.compute(ingestTask)
 
     def post_refund(self,metadata: WebCrawlingUriMetadata,db_config:Tuple[bool,bool]):
@@ -179,21 +178,26 @@ class CrawlMarkdownIngestCost(MarkdownResultIngestCost):
     def total_max_kb(self):
         return self.max_html_kb + self.max_pdf_kb
 
-
 #########################################################################################################
 ####################               ResearchMarkdown CostDefinition         ##############################
 #########################################################################################################
-
 class ResearchMarkdownIngestCost(MarkdownResultIngestCost):
     
     def init(self, default_price, credit_key,refund_mode:RefundDetail ='partial'):
         return super().init(default_price, credit_key,'Research Ingestion',refund_mode,'Research')
-
     
+    def pre_purchase(self,ingestTask:ResearchDataIngestModel):
+        self.purchase(f'Ingest of the {ingestTask.name}',ingestTask.top_k,self.max_html_kb)
+    
+    def post_purchase(self, response:ResearchIngestDataResponse,ingestTask:ResearchDataIngestModel):
+        self.pre_purchase(ingestTask)
+
+    def post_refund(self,metadata:ResearchIngestUriMetadata,_:Any=None):
+        self.refund(f'Refund of the research: {metadata.uri}',metadata.size,1)
+        
 #########################################################################################################
 ####################               DeleteDocument CostDefinition         ##############################
 #########################################################################################################
-
 
 class DeleteDocumentIngestCost(DataCost):
     
@@ -206,25 +210,18 @@ class DeleteDocumentIngestCost(DataCost):
     def post_refund(self, results:List[DeleteIngestUriMetadata]):
         for result in results:
             match result.task:
-                case 'api':
-                    ...
-                
                 case 'crawl':
                     cost = CrawlMarkdownIngestCost(self.request_id,self.issuer)
                     cost.init(1,self.credit_key,'full')
-                    
                 case 'file':
                     cost = FileIngestCost(self.request_id,self.issuer)
                     cost.init(1,self.credit_key)
                     result = FileResponseUploadModel(metadata=[result])
-                
                 case 'research':
                     cost = ResearchMarkdownIngestCost(self.request_id,self.issuer)
                     cost.init(1,self.credit_key,'full')
-                
                 case _:
-                    ...
-
+                    continue
             cost.post_refund(result,self.db_config)
             self += cost
             

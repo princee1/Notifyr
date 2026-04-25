@@ -91,6 +91,7 @@ if APP_MODE == ApplicationMode.arq and CAPABILITIES['agentic']:
     from app.services.worker.arq_service import ArqIngestTaskService
     from app.services.custom_service import CustomService
     from app.services.system_service import SystemService
+    from app.services.setting_service import SettingService
 
 
 if APP_MODE == ApplicationMode.gunicorn and CAPABILITIES['object']:

@@ -10,6 +10,7 @@ from app.utils.helper import PointerIterator
 import base64
 import os
 import hashlib
+import shutil
 from app.utils.tools import RunInThreadPool
 from app.utils.helper import b64_encode
 
@@ -249,3 +250,10 @@ class FileService(BaseService,):
         cache_dir.mkdir(parents=True, exist_ok=True) 
         schema_dir.mkdir(parents=True, exist_ok=True)
         research_base_dir.mkdir(parents=True,exist_ok=True)
+    
+
+    def delete_dir(self,path:str|Path):
+        if isinstance(path,str):
+            path = Path(path)
+        if path.exists() and path.is_dir():
+            shutil.rmtree(path)

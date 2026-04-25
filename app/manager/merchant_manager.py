@@ -58,7 +58,7 @@ class Merchant:
                     try:
                         self.cost.reset_bill()
                         self.cost.post_payment(p)
-                        await self._refund()
+                        await self.refund()
                     except:
                         return
             except Exception as e:
@@ -79,7 +79,7 @@ class Merchant:
                 else:
                     self.cost.refund(*items)
                     
-                await self._refund()
+                await self.refund()
                 
         self.backgroundTasks.add_task(wrapper,*args,**kwargs)
         self._set_indexes()
@@ -87,7 +87,7 @@ class Merchant:
     def wait(self,seconds:int|float):
         self.backgroundTasks.add_task(asyncio.sleep(seconds))
 
-    async def _refund(self):
+    async def refund(self):
         bill = self.cost.generate_bill()
         bill['total']*=self.factor
         if self.factor == 1:

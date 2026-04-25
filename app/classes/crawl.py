@@ -155,7 +155,7 @@ class MarkdownDocumentSize(TypedDict):
     doc_type:DocType
 
 
-class CrawlState(TypedDict):
+class WebCrawlState(TypedDict):
     deep_crawl:Dict
     cancelled:bool
 

@@ -14,6 +14,10 @@ from app.classes.scheduler import TimedeltaSchedulerModel
 ###################################################################################################
 ###########################	          Base Ingest Model				 ##############################
 ###################################################################################################
+
+VECTOR_INDEX=0
+GRAPH_INDEX=1
+
 class VectorConfig(BaseModel):
 	collection_name: str
 	category: str
@@ -244,7 +248,7 @@ class ResearchDataIngestModel(DataIngestModel):
 	max_query_pages: int = Field(default=1, gt=0, le=30)
 	query:str
 	name:str = Field(min_length=8,max_length=30)
-	top_k: int = Field(default=5, ge=1,le=100,description="Top K links to consider, must be at least 1")
+	top_k: int = Field(default=5, ge=1,le=100,description="Top K research to consider, must be at least 1")
 	config:DigestConfigModel
 
 	@field_validator("name", mode="after")
@@ -258,6 +262,9 @@ class ResearchIngestUriMetadata(UriMetadata):
 	...
 
 class ResearchIngestDataResponse(BaseIngestModelResponse):
+	vector:bool = False
+	graph:bool = True
+	metadata: Optional[ResearchIngestUriMetadata] = None
 	task = ArqDataTaskConstant.RESEARCH_DATA_TASK
 
 

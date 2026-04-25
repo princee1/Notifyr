@@ -177,12 +177,18 @@
             }
         },
         "ai": {
-            "models_access": []
+            "models_access": {
+                
+            }
         },
         "web":{
             "crawl":{
                 "max_html_mb":5,
                 "max_pdf_mb":12
+            },
+            "research":{
+                "max_html_mb":12,
+                "max_pdf_mb":0
             }
         }
     },

@@ -137,8 +137,15 @@ class SearchLinkState(TypedDict):
 
 @dataclass
 class ResearchResultMetadata:
+    markdown:str
+    source:str
+    description:str
+    title:str
+    error_message:str
+    success:bool
+
+class ResearchDocument(TypedDict):
     url:str
     score:float
     content:str
     index:int
-    

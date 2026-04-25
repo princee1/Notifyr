@@ -123,9 +123,9 @@ class WebCrawlerIngestion:
 		ingestTask: WebCrawlingDataIngestModel,
 		crawl_llm_config: CrawlLLMConfig,
 		markdownCostDefinition:MarkdownCostDefinition,
-		crawl_state: Optional[CrawlState] = None,
+		crawl_state: Optional[WebCrawlState] = None,
 		extra_headers: Optional[Dict] = None,
-		dc_state_callback: Optional[Callable[[CrawlState], None]] = None,
+		dc_state_callback: Optional[Callable[[WebCrawlState], None]] = None,
 		base_dir: Optional[str] = None,
 		schema:Optional[Type[BaseModel]] = None,
 	):
@@ -508,7 +508,7 @@ class WebCrawlerIngestion:
 			return 
 
 		markdown = result.markdown.fit_markdown
-		markdown = self.slice_markdown(markdown,doctype)  # Example slicing to fit token limits
+		markdown,size = self.slice_markdown(markdown,doctype)  # Example slicing to fit token limits
 		
 		if isinstance(extraction_config, TextsExtractionConfig): 
 			semanticsTexts = result.extracted_content
@@ -574,7 +574,7 @@ class WebCrawlerIngestion:
 
 		self.documents.append(
 			MarkdownDocumentSize(
-				size=sys.getsizeof(markdown),
+				size=size,
 				description=f"Markdown size of {metadata.url} with title {metadata.title} from a {doctype} source",
 				doc_type=doctype,
 				)
@@ -717,7 +717,7 @@ class WebCrawlerIngestion:
 			# Remove last sentence/character if still over
 			result = result.rsplit(' ', 1)[0] if ' ' in result else result[:-1]
 		
-		return result
+		return result,current_size
 
 def _build_scorers(self, model: DeepCrawlingStrategyModel) -> List:
 	"""Build list of scorers from model."""
