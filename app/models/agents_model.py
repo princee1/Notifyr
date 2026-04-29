@@ -15,27 +15,34 @@ class GraphitiSearchConfig(str, Enum):
 Effort=Literal['high','medium','low']
 
 class ToolModel(BaseDocument):
+    description:str
+    name:str
 
-    tool_description:str
-    tool:str
-    outbound_service:str
-
-class VectorPipelineModel(ToolModel):
-    enabled_cache:Optional[bool] = True
-
+class VectorToolModel(ToolModel):
+    ...
+    
 class CacheToolModel(ToolModel):
     ...
 
-class KGraphPipelineModel(ToolModel):
+class KnowledgeGraphToolModel(ToolModel):
     ...
 
-class ApiTool(ToolModel):
+class APIToolModel(ToolModel):
     ...
 
-class MCPTool(ToolModel):
+class APIControlModel(APIToolModel):
     ...
 
-class SearchTool(ToolModel):
+class MCPToolModel(ToolModel):
+    ...
+
+class SearchToolModel(ToolModel):
+    ...
+
+class MemoryToolModel(ToolModel):
+    ...
+
+class ConversationToolModel(ToolModel):
     ...
 
 class System(BaseModel):
@@ -49,7 +56,7 @@ class AgentModel(BaseDocument):
     
     memory:List[str] = []
     model: str
-    tools: List[VectorPipelineModel | KGraphPipelineModel | ApiTool | MCPTool | SearchTool] = []
+    tools: List[VectorToolModel | KnowledgeGraphToolModel | APIToolModel | MCPToolModel | SearchToolModel|MemoryToolModel|ConversationToolModel] = []
 
     provider: str
     temperature: float = 0.7

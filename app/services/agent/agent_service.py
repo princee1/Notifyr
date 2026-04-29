@@ -8,7 +8,7 @@ from app.classes.prompt import PromptToken
 from app.definition import _service
 from app.errors.service_error import BuildFailureError, MiniServiceDoesNotExistsError
 from app.grpc.agent_interceptor import AgentServerInterceptor, HandlerType
-from app.models.agents_model import AgentModel, AgentValidationModel
+from app.models.agents_model import *
 from app.services.config_service import ConfigService
 from app.services.cost_service import CostService
 from app.services.custom_service import CustomService
@@ -21,6 +21,14 @@ from app.services.profile_service import  ProfileMiniService, ProfileService
 from app.services.database.graphiti_service import GraphitiService
 from app.services.reactive_service import ReactiveService
 from app.services.vault_service import VaultService
+from app.tools.api_tool import APIControlTool, APIFetchTool
+from app.tools.cache_tool import CacheTool
+from app.tools.conversation_tool import ConversationTool
+from app.tools.graph_tool import KnowledgeGraphTool
+from app.tools.mcp_tool import MCPTool
+from app.tools.memory_tool import MemoryTool
+from app.tools.search_tool import SearchTool
+from app.tools.vector_tool import VectorRagTool
 from app.utils.constant import CostConstant, MongooseDBConstant
 from app.utils.helper import subset_model
 from pydantic import SecretStr
@@ -35,7 +43,7 @@ from langchain_cohere import ChatCohere
 from langchain_groq import ChatGroq
 from langchain_core.language_models import BaseChatModel
 from langchain.agents.factory import create_agent
-from langchain.tools import tool, ToolRuntime
+from langchain.tools import tool as tool_factory, ToolRuntime
 from langgraph.graph.state import CompiledStateGraph
 
 
@@ -106,9 +114,31 @@ class AgentMiniService(BaseMiniService):
 
     def _init_tools(self)->list:
         tools = []
-        for tool_model in self.agent_model.tools:
-            ...
-        
+        for model in self.agent_model.tools:
+            if isinstance(model,VectorToolModel):
+                tool = VectorRagTool(self.qdrantService,self.configService,self.customService,self.memcachedService,model)
+            elif isinstance(model,CacheToolModel):
+                tool = CacheTool(self.configService,self.qdrantService,self.memcachedService)
+            elif isinstance(model,KnowledgeGraphToolModel):
+                tool = KnowledgeGraphTool(self.graphitiService,self.configService,self.customService,self.memcachedService,self.qdrantService)
+            elif isinstance(model,(APIToolModel,APIControlModel)):
+                outboundService = self.outboundServices.get(model.outbound_id,None)
+                if not outboundService:
+                    continue
+                types = APIFetchTool if isinstance(model,APIToolModel) else APIControlTool
+                tool = types(self.configService,outboundService)
+            elif isinstance(model,MCPToolModel):
+                tool = MCPTool(self.configService)
+            elif isinstance(model,SearchToolModel):
+                tool = SearchTool(self.configService,self.customService,self.memcachedService,self.qdrantService)        
+            elif isinstance(model,MemoryToolModel):
+                tool = MemoryTool(self.memcachedService,self.qdrantService,self.configService)
+            elif isinstance(model,ConversationToolModel):
+                tool = ConversationTool(self.configService,self.memcachedService,self.qdrantService)
+
+            tool = tool_factory(tool.name,tool,description=tool.description,return_direct=tool.return_direct)
+            tools.append()
+
     def _init_middleware(self):
         ...
         

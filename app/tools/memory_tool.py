@@ -1,8 +1,8 @@
-from app.definition._tool import Tool
+from app.definition._tool import ContextPipelineTool, Tool
 from app.services.config_service import ConfigService
 from app.services.database.graphiti_service import GraphitiService
 
-class MemoryTool(Tool):
+class MemoryTool(ContextPipelineTool):
     
     def __init__(self,configService:ConfigService,graphitiService:GraphitiService):
         super().__init__()

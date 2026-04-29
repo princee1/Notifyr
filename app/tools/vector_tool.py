@@ -1,11 +1,11 @@
-from app.definition._tool import Pipeline
-from app.models.agents_model import VectorPipelineModel
+from app.definition._tool import ContextPipelineTool
+from app.models.agents_model import VectorToolModel
 from app.services.config_service import ConfigService
 from app.services.custom_service import CustomService
 from app.services.database.memcached_service import MemCachedService
 from app.services.database.qdrant_service import QdrantService
 
-class VectorRagPipeline(Pipeline):
+class VectorRagTool(ContextPipelineTool):
 	"""
 	1. Embed the user query
 	2. look up the cache if hit return response else
@@ -18,13 +18,13 @@ class VectorRagPipeline(Pipeline):
 	9. store the response in a cache or in the vector database
 	"""
 
-	def __init__(self,qdrantService:QdrantService,configService:ConfigService,customService:CustomService,memcachedService:MemCachedService,vectorModel:VectorPipelineModel):
-			super().__init__()
+	def __init__(self,qdrantService:QdrantService,configService:ConfigService,customService:CustomService,memcachedService:MemCachedService,config:VectorToolModel):
+			super().__init__(config)
 			self.qdrantService = qdrantService
 			self.configService = configService
 			self.customService = customService
 			self.memcachedService = memcachedService
-			self.vectorConfig = vectorModel
+			self.config = config
 	
 	async def __call__(self,query:str):
 			...
