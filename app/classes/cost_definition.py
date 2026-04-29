@@ -5,6 +5,9 @@ from pydantic import BaseModel
 from app.classes.celery import TaskTypeLiteral
 from app.definition._error import BaseError
 from dataclasses import dataclass, field
+import math
+
+from app.utils.constant import LLMProviderConstant
 
 
 @dataclass
@@ -16,6 +19,7 @@ class BillItem:
 
     def __post_init__(self) -> None:
         self.subtotal = self.amount * self.quantity
+        self.subtotal = math.ceil(self.subtotal)
 
 class Bill(TypedDict):
     plan:str
@@ -30,6 +34,10 @@ class Bill(TypedDict):
     balance_before: Optional[int]
     balance_after: Optional[int]
 
+#############################################################################################################
+#######################################                                      ################################
+#############################################################################################################
+
 
 class CostCredits(TypedDict):
     email:int
@@ -39,6 +47,10 @@ class CostCredits(TypedDict):
     client:int
     profile:int
     link:int
+
+#############################################################################################################
+#######################################                                      ################################
+#############################################################################################################
 
 class CostRules(TypedDict):
     bonus_percentage_on_topup: float
@@ -54,6 +66,10 @@ class CostRules(TypedDict):
     retry_allowed: bool
     track_allowed:bool
 
+#############################################################################################################
+#######################################                                      ################################
+#############################################################################################################
+
 class FileCostDefinition(TypedDict):
     max_file_size:int
     max_file_size_extra_per_mb:int
@@ -62,6 +78,18 @@ class MarkdownCostDefinition(TypedDict):
     max_html_mb:int
     max_pdf_mb:int
 
+#############################################################################################################
+#######################################                                      ################################
+#############################################################################################################
+
+Model = str
+Factor = float
+ModelMultiplierCostDefinition = Dict[Model,Factor]
+ProviderMultiplierCostDefinition = Dict[LLMProviderConstant.LLMProvider,Factor] 
+
+#############################################################################################################
+#######################################                                      ################################
+#############################################################################################################
 
 class SimpleTaskCostDefinition(TypedDict):
     __api_usage_cost__:int
@@ -80,7 +108,6 @@ class TaskCostDefinition(SimpleTaskCostDefinition):
     __retry_cost__:int
     __allowed_task_option__:list[str]
     __task_type_cost__:Dict[TaskTypeLiteral,int]
-
 
 class EmailCostDefinition(TaskCostDefinition):
     class Attachement(TypedDict):
@@ -114,11 +141,19 @@ class PhoneCostDefinition(TaskCostDefinition):
 
     time:Time
 
+#############################################################################################################
+#######################################                                      ################################
+#############################################################################################################
+
 class ObjectCostDefinition(TypedDict):
     count: int
     max_size: 10000
     max_version_count:int
 
+
+#############################################################################################################
+#######################################                                      ################################
+#############################################################################################################
 
 class CostException(BaseError):
     ...

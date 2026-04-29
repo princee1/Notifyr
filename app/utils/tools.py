@@ -60,7 +60,7 @@ def Time(func: Callable):
         return result
     return wrapper_async if asyncio.iscoroutinefunction(func) else wrapper
 
-def Cache(cache_type:Literal['custom-in-memory','fastapi-default-cache'] = 'custom-in-memory'):
+def Cache(cache_type:Literal['custom-in-memory','fastapi-cache'] = 'custom-in-memory'):
     def hash_args(args):
         a, k = args
         return str(a)+"<==>"+str(k)
@@ -119,17 +119,17 @@ def Cache(cache_type:Literal['custom-in-memory','fastapi-default-cache'] = 'cust
         Returns:
             Callable: A decorator that caches the function's return value.
         """
-        def callback(func:Callable):
-            return cache(*args, **kwargs)(func)
+        async def callback(func:Callable):
+            return await cache(*args, **kwargs)(func)
 
         return callback
 
     if cache_type == 'in-memory':
         return CustomInMemoryCache
-    elif cache_type == 'fastapi-default-cache':
+    elif cache_type == 'fastapi-cache':
         return DefaultCache
     else:
-        raise ValueError("Invalid cache type. Choose 'in-memory' or 'fastapi-default-cache'.")
+        raise ValueError("Invalid cache type. Choose 'in-memory' or 'fastapi-cache'.")
 
 def Mock(sleep:float=2,result:Any = None,same:bool=False):
     """

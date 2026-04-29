@@ -177,8 +177,12 @@
             }
         },
         "ai": {
-            "models_access": {
-                
+            "models": {
+                "gpt-5.1":1.25
+            },
+            "providers":{
+                "anthropic":1.25,
+                "gemini":1.15
             }
         },
         "web":{

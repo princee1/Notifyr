@@ -99,19 +99,18 @@ class AgentMiniService(BaseMiniService):
             if build_state == DEFAULT_BUILD_STATE:
                 m = AgentValidationModel.model_validate(self.agent_model).model_dump()
                 self.agent_model = AgentValidationModel.model_construct(**m)
-            
-            self.base_chat = self.ChatAgentFactory(self.agent_model)
-
-            self._init_tools()
-            self._init_middleware()
-            self._init_system_prompt()
-            self._init_response_format()
-            self.init_long_term_memory()
-            self.agent = self.create_agent()
-
         except ValidationError as e:
             raise BuildFailureError('Could not validate the agent model')
 
+        self.base_chat = self.ChatAgentFactory(self.agent_model)
+        self._init_tools()
+        self._init_middleware()
+        self._init_system_prompt()
+        self._init_response_format()
+        self.init_long_term_memory()
+        self.agent = self.create_agent()
+
+        
     def _init_tools(self)->list:
         tools = []
         for model in self.agent_model.tools:
@@ -137,7 +136,7 @@ class AgentMiniService(BaseMiniService):
                 tool = ConversationTool(self.configService,self.memcachedService,self.qdrantService)
 
             tool = tool_factory(tool.name,tool,description=tool.description,return_direct=tool.return_direct)
-            tools.append()
+            tools.append(tool)
 
     def _init_middleware(self):
         ...

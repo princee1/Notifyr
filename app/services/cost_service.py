@@ -4,22 +4,23 @@ from pathlib import Path
 import traceback
 from typing import Any, Callable, Self
 
-from fastapi import Response
 from redis import WatchError
 from app.classes.cost_definition import CostCredits, CostDefinitionNotFoundError, CostRules, CreditDeductionFailedError, EmailCostDefinition, FileCostDefinition, InsufficientCreditsError, InvalidPurchaseRequestError, PhoneCostDefinition, CostPlanNotFoundError, SMSCostDefinition, SimpleTaskCostDefinition,Bill
 from app.definition._service import BaseService, BuildAbortError, BuildWarningError, Service, ServiceStatus
 from app.errors.service_error import BuildFailureError
 from app.services.config_service import MODE, ConfigService
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from app.services.database.redis_service import RedisService
 from app.services.file.file_service import FileService
 from app.utils.constant import CostConstant, RedisConstant
 from app.utils.fileIO import JSONFile
-from app.classes.auth_permission import AuthPermission
 from app.utils.helper import flatten_dict
 from datetime import datetime
-from app.utils.globals import  CAPABILITIES
+from app.utils.globals import  CAPABILITIES,APP_MODE,ApplicationMode
+
+if APP_MODE == ApplicationMode.server:
+    from slowapi import Limiter
+    from slowapi.util import get_remote_address
+
 
 REDIS_CREDIT_KEY_BUILDER= lambda credit_key: f"notifyr/credit:{credit_key}"
 
@@ -95,9 +96,10 @@ class CostService(BaseService):
             raise BuildFailureError('Redis Service not available')
 
     def build(self,build_state=-1):
-
-        storage_uri = None if self.configService.MODE == MODE.DEV_MODE else None # TODO redis url + f'/{RedisConstant.LIMITER_DB}'
-        self.GlobalLimiter = Limiter(get_remote_address, storage_uri=storage_uri, headers_enabled=True)
+        
+        if APP_MODE == ApplicationMode.server:
+            storage_uri = None if self.configService.MODE == MODE.DEV_MODE else None # TODO redis url + f'/{RedisConstant.LIMITER_DB}'
+            self.GlobalLimiter = Limiter(get_remote_address, storage_uri=storage_uri, headers_enabled=True)
 
         if self.configService.MODE == MODE.PROD_MODE:
             try:
@@ -112,7 +114,7 @@ class CostService(BaseService):
                 raise BuildWarningError(f'Could not mount the cost file so limit will revert too default settings')
         else:
             self.service_status = ServiceStatus.AVAILABLE
-    
+ 
     ###################################################                        #######################################
 
     ###################################################                        #######################################

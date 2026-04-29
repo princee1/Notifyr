@@ -78,10 +78,22 @@ class CacheInterceptor(Interceptor):
         self.inject_headers = inject_headers
 
     def intercept_before(self,request:Request,response:Response):
-        ...
+        key = self.key_builder(request)
+        result = self.memcachedService.get(key,None,)
 
-    def intercept_after(self, result:dict|list):
-        ...
+        if result == None:
+            if self.inject_headers:
+                response.headers["X-Cache"] = "MISS"
+            return 
+
+        if self.inject_headers:
+            response.headers["X-Cache"] = "HIT"
+
+        raise InterceptorDefaultException(response=copy_response(JSONResponse(result),response))
+
+    def intercept_after(self, result:dict|list|str,request:Request,backgroundTasks:BackgroundTasks):
+        key = self.key_builder(request)
+        backgroundTasks.add_task(self.memcachedService.set,key,result,self.expires)
 
 class TaskCostInterceptor(Interceptor):
 

@@ -69,9 +69,9 @@ class Cost:
         self.costService = Get(CostService)
         
     def purchase(self,description:str,amount:int,quantity=1):
-        item = BillItem(description,int(amount),quantity)
+        item = BillItem(description,amount,quantity)
         self.purchase_items.append(item)
-        self.purchase_cost += item.amount * item.quantity
+        self.purchase_cost += item.subtotal
 
     def reset_bill(self,force =False):
         self.purchase_items.clear()
@@ -83,7 +83,7 @@ class Cost:
             self.last_total = 0
     
     def refund(self,description:str,amount:int,quantity=1):
-        item = BillItem(description,int(amount),quantity)
+        item = BillItem(description,amount,quantity)
         self.refund_items.append(item)
         self.refund_cost += item.subtotal
 
