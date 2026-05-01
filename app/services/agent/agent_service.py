@@ -3,12 +3,14 @@ import functools
 from typing import Any, Callable, Dict, List, Self,Any
 from fastapi import HTTPException
 from pydantic import ValidationError
+from app.classes.agents import ChatAgentFactory
 from app.classes.cost_definition import InsufficientCreditsError, InvalidPurchaseRequestError
 from app.classes.prompt import PromptToken
 from app.definition import _service
 from app.errors.service_error import BuildFailureError, MiniServiceDoesNotExistsError
 from app.grpc.agent_interceptor import AgentServerInterceptor, HandlerType
 from app.models.agents_model import *
+from app.prompt import agents_prompt
 from app.services.config_service import ConfigService
 from app.services.cost_service import CostService
 from app.services.custom_service import CustomService
@@ -30,21 +32,15 @@ from app.tools.memory_tool import MemoryTool
 from app.tools.search_tool import SearchTool
 from app.tools.vector_tool import VectorRagTool
 from app.utils.constant import CostConstant, MongooseDBConstant
-from app.utils.helper import subset_model
-from pydantic import SecretStr
 from .llm_provider_service import LLMProviderMiniService, LLMProviderService
 from .remote_agent_service import  RemoteAgentMiniService, RemoteAgentService
 from concurrent import futures
 import grpc
 from app.grpc import agent_pb2_grpc,agent_pb2,agent_message
-from langchain_openai import ChatOpenAI
-from langchain_anthropic import ChatAnthropic
-from langchain_cohere import ChatCohere
-from langchain_groq import ChatGroq
-from langchain_core.language_models import BaseChatModel
 from langchain.agents.factory import create_agent
 from langchain.tools import tool as tool_factory, ToolRuntime
-from langgraph.graph.state import CompiledStateGraph
+from langgraph.checkpoint.mongodb import MongoDBSaver
+from langchain.messages import SystemMessage, HumanMessage
 
 
 AVOID_RE_VALIDATE_BUILD_STATE = -100
@@ -56,13 +52,7 @@ factory_include = ('temperature','model','timeout')
 
 @MiniService(mirror=RemoteAgentMiniService,links=[LinkDep(LLMProviderMiniService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)])
 class AgentMiniService(BaseMiniService):
-    ...
-    """
-    will register the tools
-    and store the agent config
-    graph of tools
-    call the provider
-    """
+
     def __init__(self,
                 configService:ConfigService,
                 graphitiService:GraphitiService,
@@ -71,7 +61,9 @@ class AgentMiniService(BaseMiniService):
                 llmProviderMService:LLMProviderMiniService,
                 customService:CustomService,
                 memcachedService:MemCachedService,
+                costService:CostService,
                 agent_model:dict,
+                checkpointer:MongoDBSaver,
                 outboundServices:Dict[str,HTTPOutboundMiniService]={}):
             
             self.depService = llmProviderMService
@@ -84,11 +76,13 @@ class AgentMiniService(BaseMiniService):
             self.customService = customService
             self.outboundServices = outboundServices
             self.agent_model=agent_model
+            self.checkpointer = checkpointer
+            self.costService = costService
 
             for outbound in self.outboundServices.values():
                 self.register(outbound)
 
-            self.executors ={}
+            self.executors = {}
     
     def verify_dependency(self):
         if self.depService.service_status != ServiceStatus.AVAILABLE:
@@ -102,173 +96,77 @@ class AgentMiniService(BaseMiniService):
         except ValidationError as e:
             raise BuildFailureError('Could not validate the agent model')
 
-        self.base_chat = self.ChatAgentFactory(self.agent_model)
-        self._init_tools()
-        self._init_middleware()
-        self._init_system_prompt()
-        self._init_response_format()
-        self.init_long_term_memory()
-        self.agent = self.create_agent()
-
+        self.chat_model = ChatAgentFactory(self.agent_model,self.depService.model,self.depService.credentials)
+        tools = self._init_tools()
+        middleware = self._init_middleware()
+        prompt = agents_prompt.SYSTEM_PROMPT(self.agent_model.system)
+        prompt = SystemMessage([{'type':'text','text':prompt,"cache_control": {"type": "ephemeral"}}])
         
+        self.agent = create_agent(
+                model=self.chat_model,
+                middleware=middleware,
+                tools=tools,
+                system_prompt=prompt,
+                name=self.agent_name,
+                checkpointer=self.checkpointer
+            )
+        return
+    
     def _init_tools(self)->list:
         tools = []
         for model in self.agent_model.tools:
             if isinstance(model,VectorToolModel):
-                tool = VectorRagTool(self.qdrantService,self.configService,self.customService,self.memcachedService,model)
+                tool = VectorRagTool(self.qdrantService,self.configService,self.customService,model)
             elif isinstance(model,CacheToolModel):
-                tool = CacheTool(self.configService,self.qdrantService,self.memcachedService)
+                tool = CacheTool(self.configService,self.qdrantService)
             elif isinstance(model,KnowledgeGraphToolModel):
-                tool = KnowledgeGraphTool(self.graphitiService,self.configService,self.customService,self.memcachedService,self.qdrantService)
+                tool = KnowledgeGraphTool(self.graphitiService,self.configService,self.customService,self.qdrantService)
             elif isinstance(model,(APIToolModel,APIControlModel)):
                 outboundService = self.outboundServices.get(model.outbound_id,None)
                 if not outboundService:
                     continue
                 types = APIFetchTool if isinstance(model,APIToolModel) else APIControlTool
                 tool = types(self.configService,outboundService)
+            elif isinstance(model,SearchToolModel):
+                tool = SearchTool(self.configService,self.qdrantService,self.customService)
             elif isinstance(model,MCPToolModel):
                 tool = MCPTool(self.configService)
-            elif isinstance(model,SearchToolModel):
-                tool = SearchTool(self.configService,self.customService,self.memcachedService,self.qdrantService)        
             elif isinstance(model,MemoryToolModel):
-                tool = MemoryTool(self.memcachedService,self.qdrantService,self.configService)
+                tool = MemoryTool(self.configService,self.graphitiService)
             elif isinstance(model,ConversationToolModel):
-                tool = ConversationTool(self.configService,self.memcachedService,self.qdrantService)
+                tool = ConversationTool(self.configService,self.mongooseService)
 
             tool = tool_factory(tool.name,tool,description=tool.description,return_direct=tool.return_direct)
             tools.append(tool)
+        
+        return tools
 
     def _init_middleware(self):
         ...
+            
+    async def invoke(self,thread:str,prompt:str):
+        config = {"configurable": {"thread_id": thread,"checkpoint_ns": self.agent_model.id}} 
+        message = [{'role':'user','content':prompt}]
+        await self.costService.check_enough_credits(CostConstant.TOKEN_CREDIT,self.agent_model.max_tokens*2)
+
+        response = await self.agent.ainvoke(message,config)
         
-    def _init_system_prompt(self)->str:
-        ...
-    
-    def _init_response_format(self):
-        ...
+    async def stream(self,thread:str,prompt:str):
+        config = {"configurable": {"thread_id": thread,"checkpoint_ns": self.agent_model.id}} 
+        message = [{'role':'user','content':prompt}]
+        await self.costService.check_enough_credits(CostConstant.TOKEN_CREDIT,self.agent_model.max_tokens*2)
 
-    def _build_graph(self):
-        ...
+        async for chunk in self.agent.astream(message,config):
+            yield
+        
+    async def completion(self,):
+        await self.costService.check_enough_credits(CostConstant.TOKEN_CREDIT,self.agent_model.max_tokens*2)
+        await self.chat_model.ainvoke()
 
-    def init_long_term_memory(self):
-        ...
+    @property
+    def agent_name(self)->str:
+        return f"agent:{self.agent_model.id}#{self.agent_model.id}"
 
-    async def update_long_term_memory(self):
-        ...  
-
-    def create_agent(self,ref_id=None,memory=None):
-        agent = create_agent(
-                model=self.base_chat,
-            )
-
-        return agent
-
-    async def fetch_chat_history(self):
-        ...
-    
-    async def fetch_contact_memory(self):
-        ...
-
-    def ChatAgentFactory(self,agentModel:AgentModel)->BaseChatModel:
-        api_key =lambda: self.depService.depService.credentials.to_plain()
-
-        max_output_token = self.depService.model.max_output_tokens
-        max_tokens = agentModel.max_tokens
-        if max_output_token:
-            max_tokens = max_output_token
-
-        provider = self.depService.model.provider
-        match provider:
-            case 'anthropic': 
-                return ChatAnthropic(
-                    streaming=True,
-                    model_name=agentModel.model,
-                    max_retries=agentModel.max_retries,
-                    temperature=agentModel.temperature,
-                    top_p=agentModel.top_p,
-                    top_k=agentModel.top_k,
-                    timeout=agentModel.timeout,
-                    effort=agentModel.effort,
-                    anthropic_proxy=agentModel.proxy_url,
-                    base_url=self.depService.model.base_url
-                )
-            
-            case 'cohere': 
-                return ChatCohere(
-                    streaming=True,
-                    temperature=agentModel.temperature,
-                    model=agentModel.model,
-                    cohere_api_key=SecretStr(api_key()),
-                    timeout_seconds=agentModel.timeout, 
-                    base_url=self.depService.model.base_url
-
-                )
-
-            case 'deepseek'| 'openai' | 'gemini':
-
-                match provider:
-                    case 'deepseek':
-                        base_url = self.depService.model.base_url or "https://api.deepseek.com"
-                    case 'gemini':
-                        base_url= self.depService.model.base_url or "https://generativelanguage.googleapis.com/v1beta"
-                    case _:
-                        base_url = self.depService.model.base_url or None
-
-                return ChatOpenAI(
-                    streaming=True,
-                    max_completion_tokens=max_tokens,
-                    api_key=api_key,
-                    base_url= base_url,
-                    temperature=agentModel.temperature,
-                    max_retries=agentModel.max_retries,
-                    timeout=agentModel.timeout,
-                    top_p=agentModel.top_p,
-                    model=agentModel.model,
-                    frequency_penalty=agentModel.frequency_penalty,
-                    presence_penalty=agentModel.presence_penalty,
-                    n=agentModel.n,
-                    reasoning_effort=agentModel.effort,
-                    openai_proxy=agentModel.proxy_url
-            )
-            
-            case 'groq': 
-                return ChatGroq(
-                    streaming=True,
-                    max_tokens=max_tokens,
-                    max_retries=agentModel.max_retries,
-                    timeout=agentModel.timeout,
-                    n=agentModel.n,
-                    api_key=api_key,
-                    model=agentModel.model,
-                    temperature=agentModel.temperature,
-                    groq_proxy=agentModel.proxy_url,
-                    reasoning_effort=agentModel.effort,
-                    reasoning_format=agentModel.reasoning_format,
-                    base_url=self.depService.model.base_url
-                )
-            
-            case 'ollama': raise NotImplementedError()
-    
-    @staticmethod
-    def Base_Agent(function:Callable):
-        @functools.wraps(function)
-        async def wrapper(self:Self,agent:CompiledStateGraph=None):
-            if agent == None:
-                agent = self.agent
-
-            return await function(self,agent)
-
-        return wrapper
-
-    @Base_Agent
-    async def invoke(self,agent:CompiledStateGraph):
-        ...
-    
-    @Base_Agent
-    async def stream(self,agent:CompiledStateGraph):
-        ...
-
-    
 @Service(is_manager=True,links=[LinkDep(LLMProviderService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)],mirror=RemoteAgentService)
 class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
 
@@ -305,10 +203,11 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
         async with self.statusLock.reader as lock:
             service = self.MiniServiceStore.get(request.agent)
             async with service.statusLock.reader as l:
-                await self.costService.check_enough_credits(CostConstant.TOKEN_CREDIT,service.agent_model.max_tokens*2)
+               
+                await service.invoke()
 
                 reply = agent_message.PromptAnswer()
-                reply.to_proto()
+                reply = reply.to_proto()
                 
                 self.purchase_token()
                 return reply
@@ -321,9 +220,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
             service = self.MiniServiceStore.get(request.agent)
             async with service.statusLock.reader as l:
 
-                for i in range(5): # stream
-                    await self.costService.check_enough_credits(CostConstant.TOKEN_CREDIT,service.agent_model.max_tokens*2)
-                    
+                async for response in service.stream():                    
                     reply = agent_message.PromptAnswer()
                     reply = reply.to_proto()
                     self.purchase_token()
@@ -341,9 +238,10 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
 
         async with self.statusLock.reader as lock:
             service = self.MiniServiceStore.get(request.agent)
+
             async with service.statusLock.reader as l:
-                await self.costService.check_enough_credits(CostConstant.TOKEN_CREDIT,service.agent_model.max_tokens*2)
-                
+                await service.invoke()
+
                 reply = agent_message.PromptAnswer()         
                 reply = reply.to_proto()
 
@@ -359,14 +257,12 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
                 service = self.MiniServiceStore.get(request.agent)
 
                 async with service.statusLock.reader as l:
-                    await self.costService.check_enough_credits(CostConstant.TOKEN_CREDIT,service.agent_model.max_tokens*2)
-
-                    asyncio.sleep(0.1)
                     reply = agent_message.PromptAnswer()
                     reply = reply.to_proto()
 
                     self.purchase_token()
                     yield reply
+                    asyncio.sleep(0.1)
 
     def verify_auth(self,token:str)->bool:
         if self.auth_header != token:
@@ -439,6 +335,12 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
                 sid_type='message'
             )
 
+        self.checkpointer = MongoDBSaver(self.mongooseService.sync_client,
+                                    MongooseDBConstant.DATABASE_NAME,
+                                    MongooseDBConstant.CHAT_COLLECTION,
+                                    MongooseDBConstant.CHAT_WRITE_COLLECTION,
+                                    )
+
         models:list[dict] = self.mongooseService.sync_find(MongooseDBConstant.AGENT_COLLECTION,AgentModel)
         counter = self.StatusCounter(len(models))
         self.MiniServiceStore.clear()
@@ -456,7 +358,9 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
                     provider,
                     self.customService,
                     self.memcachedService,
-                    model
+                    self.costService,
+                    model,
+                    self.checkpointer
                 )
                 agent._builder(_service.BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
                 counter.count(agent)

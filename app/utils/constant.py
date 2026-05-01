@@ -164,6 +164,8 @@ class MongooseDBConstant:
     COMMUNICATION_PROFILE_COLLECTION = 'communication'
     WEBHOOK_PROFILE_COLLECTION = 'webhook'
     CHAT_COLLECTION = 'chat'
+    CHAT_WRITE_COLLECTION = 'chat_write'
+
     WORKFLOW_COLLECTION ='workflow'
     EDGE_COLLECTION='edge'
     NODE_COLLECTION='node'

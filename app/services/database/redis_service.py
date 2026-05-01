@@ -98,7 +98,7 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
                         subject = self.reactiveService[subject_id]
                         match state:
                             case 'completed':
-                                self.reactiveService.delete_subject(subject_id)
+                                self.reactiveService.complete_subject(subject_id)
                             case 'error':
                                 error  = json_to_exception(error)
                                 subject.on_error(error)
@@ -112,7 +112,6 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         else:
             async def handler_wrapper(message):
                 try:
-                    
                     if 'data' not in message: 
                         return
                     data= json.loads(message["data"])
@@ -180,6 +179,17 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
                 if self.to_shutdown:
                     return
 
+    async def close_connections(self,):
+        for config in self.callbacks.values():
+            if 'channel_tasks' in config and  config['channel_tasks']:
+                config['channel_tasks'].cancel()
+            if 'stream_tasks' in config and config['stream_tasks']:
+                config['stream_tasks'].cancel()
+            
+        len_db = len(self.db.keys())//2
+        for i in range(len_db):
+            await self.db[i].close()
+
     @staticmethod
     def check_db(func:Callable):
 
@@ -208,10 +218,10 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         self.redis_cache = Redis(host=NOTIFYR_HOST,db=RedisConstant.CACHE_DB,decode_responses=True,username=self.db_user,password=self.db_password)
         self.redis_config = Redis(host=NOTIFYR_HOST,db=RedisConstant.CONFIG_DB,decode_responses=True,username=self.db_user,password=self.db_password)
 
-        if APP_MODE == ApplicationMode.server:
-            self.redis_events=Redis(host=NOTIFYR_HOST,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user,password=self.db_password)
-        else :
+        if APP_MODE == ApplicationMode.beat or APP_MODE == ApplicationMode.worker:
             self.redis_events = SyncRedis(host=NOTIFYR_HOST,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user,password=self.db_password)
+        else:
+            self.redis_events=Redis(host=NOTIFYR_HOST,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user,password=self.db_password)
         
         if build_state == DEFAULT_BUILD_STATE:
             super().build(build_state)
@@ -306,18 +316,7 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
     @check_db
     async def append(self,database:int|str,key:str,data:Any,redis:Redis=None):
         return await redis.append(key,data)
-        
-    async def close_connections(self,):
-        for config in self.callbacks.values():
-            if 'channel_tasks' in config and  config['channel_tasks']:
-                config['channel_tasks'].cancel()
-            if 'stream_tasks' in config and config['stream_tasks']:
-                config['stream_tasks'].cancel()
-            
-        len_db = len(self.db.keys())//2
-        for i in range(len_db):
-            await self.db[i].close()
-
+    
     @check_db
     async def increment(self,database:int|str,name:str,amount:int,redis:Redis=None):
         return await redis.incrby(name,amount)

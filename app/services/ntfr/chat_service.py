@@ -15,12 +15,25 @@ class ChatService(BaseService):
         self.redisService = redisService
         self.configService = configService
     
+    def start_chat(self):
+        ...
     
-    async def answer(self,message:str,profile_id:str|None):
-        """Answer message with priority because of the rate limit """
+    def end_chat(self):
+        ...
     
-    async def answer_stream(self,message:str,profile_id:str|None):
+    async def answer(self,message:str,agent:str|None,thread:str):
         """Answer message with priority because of the rate limit """
+        async with self.remoteAgentService.statusLock.reader:
+            remoteAgent = self.remoteAgentService.MiniServiceStore.get(agent)
+            async with remoteAgent.statusLock.reader:
+                reply = await remoteAgent.Prompt()
 
+    async def answer_stream(self,message:str,agent:str|None,thread:str):
+        """Answer message with priority because of the rate limit """
+        async with self.remoteAgentService.statusLock.reader:
+            remoteAgent = self.remoteAgentService.MiniServiceStore.get(agent)
+            async with remoteAgent.statusLock.reader:
+                reply = await remoteAgent.PromptStream()
 
-
+    async def fetch_chat(self,):
+        ...

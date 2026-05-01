@@ -18,12 +18,11 @@ class VectorRagTool(ContextPipelineTool):
 	9. store the response in a cache or in the vector database
 	"""
 
-	def __init__(self,qdrantService:QdrantService,configService:ConfigService,customService:CustomService,memcachedService:MemCachedService,config:VectorToolModel):
+	def __init__(self,qdrantService:QdrantService,configService:ConfigService,customService:CustomService,config:VectorToolModel):
 			super().__init__(config)
 			self.qdrantService = qdrantService
 			self.configService = configService
 			self.customService = customService
-			self.memcachedService = memcachedService
 			self.config = config
 	
 	async def __call__(self,query:str):

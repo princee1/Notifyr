@@ -80,6 +80,10 @@ class LLMProviderMiniService(BaseMiniService):
     def model(self) -> LLMProfileModel:
         return self.depService.model
     
+    @property
+    def credentials(self):
+        return self.depService.credentials
+        
     def build(self, build_state = DEFAULT_BUILD_STATE):
         
         provider = self.model.provider.lower()

@@ -1,6 +1,7 @@
 from typing import ClassVar, List, Literal, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, PrivateAttr
 from app.classes.mongo import BaseDocument
+from app.classes.prompt import System
 from app.utils.constant import LLMProviderConstant, MongooseDBConstant
 from enum import Enum
 from app.utils.helper import subset_model
@@ -45,11 +46,6 @@ class MemoryToolModel(ToolModel):
 class ConversationToolModel(ToolModel):
     ...
 
-class System(BaseModel):
-    persona:str
-    behaviors:list[str] = []
-    task:str 
-
 class AgentModel(BaseDocument):
     
     _collection:ClassVar[str] = MongooseDBConstant.AGENT_COLLECTION
@@ -57,7 +53,8 @@ class AgentModel(BaseDocument):
     memory:List[str] = []
     model: str
     tools: List[VectorToolModel | KnowledgeGraphToolModel | APIToolModel | MCPToolModel | SearchToolModel|MemoryToolModel|ConversationToolModel] = []
-
+    system:Optional[System] = None
+    
     provider: str
     temperature: float = 0.7
     timeout:float = 20
@@ -65,7 +62,6 @@ class AgentModel(BaseDocument):
     top_p:Optional[float] = None
     top_k:Optional[int] = None
     n:Optional[int] = None
-    system:Optional[System] = None
     frequency_penalty:Optional[float] = None
     presence_penalty:Optional[float] = None
     organisation:Optional[str] =None
@@ -76,6 +72,5 @@ class AgentModel(BaseDocument):
 
     class Settings:
         name = MongooseDBConstant.AGENT_COLLECTION
-
 
 AgentValidationModel = subset_model(AgentModel,f'Validation{AgentModel.__class__.__name__}')

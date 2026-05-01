@@ -6,10 +6,9 @@ from app.services import MemCachedService
 
 class CacheTool(ContextPipelineTool):
     
-    def __init__(self,configService:ConfigService,qdrantService:QdrantService,memcachedService:MemCachedService,config:CacheToolModel):
+    def __init__(self,configService:ConfigService,qdrantService:QdrantService,config:CacheToolModel):
         self.configService = configService
         self.qdrantService = qdrantService
-        self.memcachedService = memcachedService
 
     async def __call__(self,query:str)->str:
         ...

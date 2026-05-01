@@ -98,7 +98,7 @@ class ReactiveService(BaseService):
         self._subscriptions[rxSub.subject_id]=rxSub
         return rxSub
     
-    def delete_subject(self,subject_id:str):
+    def complete_subject(self,subject_id:str):
         rx_subject = self[subject_id]
         rx_subject.on_completed()
         del self._subscriptions[subject_id]
