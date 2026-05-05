@@ -83,4 +83,4 @@ class VectorRagTool(ContextPipelineTool):
 
 	@property
 	def sparse_config(self):
-		return self.config.sparse_search
+		return self.config.disperse_search
