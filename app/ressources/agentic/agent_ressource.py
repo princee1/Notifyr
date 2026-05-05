@@ -17,7 +17,7 @@ from app.errors.llm_error import LLMModelMaxTokenExceededError, LLMModelNotPermi
 from app.manager.broker_manager import Broker
 from app.depends.dependencies import get_auth_permission
 from app.manager.merchant_manager import Merchant
-from app.models.agents_model import AgentModel
+from app.models.odm.agents_model import AgentModel
 from app.services  import MongooseService
 from app.services.agent.llm_provider_service import LLMProviderService
 from app.services.agent.remote_agent_service import RemoteAgentMiniService

@@ -4,7 +4,7 @@ from langchain_cohere import ChatCohere
 from langchain_groq import ChatGroq
 from langchain_core.language_models import BaseChatModel
 from app.classes.secrets import ChaCha20Poly1305SecretsWrapper
-from app.models.agents_model import AgentModel
+from app.models.odm.agents_model import AgentModel
 from app.models.llm_model import LLMProfileModel
 from app.utils.helper import subset_model
 from pydantic import SecretStr

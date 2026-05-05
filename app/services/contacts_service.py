@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from app.classes.auth_permission import ContactPermissionScope
 from app.definition._service import BaseService, BuildFailureError, Service, ServiceStatus
 from app.errors.contact_error import ContactAlreadyExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
-from app.models.contacts_model import *
+from app.models.orm.contacts_model import *
 from app.services.config_service import ConfigService
 from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.link_service import LinkService

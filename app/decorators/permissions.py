@@ -3,7 +3,7 @@ from app.classes.celery import SchedulerModel
 from app.classes.cost_definition import SimpleTaskCostDefinition
 from app.definition._cost import Cost
 from app.manager.task_manager import TaskManager
-from app.models.contacts_model import ContactORM
+from app.models.orm.contacts_model import ContactORM
 from app.models.email_model import BaseEmailSchedulerModel
 from app.models.security_model import ChallengeORM, ClientORM
 from app.definition._utils_decorator import Permission

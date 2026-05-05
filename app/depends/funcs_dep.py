@@ -5,8 +5,8 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, Role, filter_asset_permission
 from app.container import Get
 from app.definition._error import ServerFileError
-from app.models.contacts_model import ContactORM, ContentSubscriptionORM
-from app.models.link_model import LinkORM
+from app.models.orm.contacts_model import ContactORM, ContentSubscriptionORM
+from app.models.orm.link_model import LinkORM
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientORM, GroupClientORM, PolicyMappingORM, PolicyORM
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService, SecurityService

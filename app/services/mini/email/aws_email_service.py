@@ -2,12 +2,12 @@ from typing import Dict, List
 from app.definition._error import BaseError
 from app.definition._service import BaseMiniService, LinkDep, MiniService
 from app.interface.email import EmailReadInterface, EmailSendInterface, Mode
-from app.models.communication_model import AWSProfileModel
+from app.models.odm.communication_model import AWSProfileModel
 from app.services.config_service import ConfigService
 from app.services.profile_service import ProfileMiniService
 from botocore.exceptions import BotoCoreError, ClientError
 from app.interface.email import EmailReadInterface, EmailSendInterface, Mode
-from app.models.communication_model import AWSProfileModel
+from app.models.odm.communication_model import AWSProfileModel
 from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileMiniService
 from app.services.reactive_service import ReactiveService

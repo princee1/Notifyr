@@ -38,8 +38,8 @@ from app.utils.tools import RunInThreadPool
 from ..meta.server_meta import *
 from .middleware import MIDDLEWARE
 from app.definition._service import PROCESS_SERVICE_REPORT
-from app.models.communication_model import *
-from app.models.webhook_model import *
+from app.models.odm.communication_model import *
+from app.models.odm.webhook_model import *
 
 from app.utils.globals import CAPABILITIES
 from app.classes.profiles import ProfilModelValues

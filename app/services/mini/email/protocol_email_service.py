@@ -12,7 +12,7 @@ from bs4 import BeautifulSoup
 
 from app.classes.profiles import ProfileState,ProfileModelException
 from app.errors.service_error import BuildFailureError, BuildWarningError
-from app.models.communication_model import IMAPProfileModel, ProtocolProfileModel, SMTPProfileModel
+from app.models.odm.communication_model import IMAPProfileModel, ProtocolProfileModel, SMTPProfileModel
 from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileMiniService
 from app.services.reactive_service import ReactiveService

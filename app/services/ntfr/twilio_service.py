@@ -12,8 +12,8 @@ from app.definition import _service
 from app.interface.profile_event import ProfileEventInterface
 from app.interface.twilio import TwilioInterface
 from app.models.otp_model import GatherDtmfOTPModel, GatherOTPBaseModel, GatherSpeechOTPModel, OTPModel
-from app.models.communication_model import TwilioProfileModel
-from app.models.twilio_model import CallEventORM, CallStatusEnum, SMSEventORM, SMSStatusEnum
+from app.models.odm.communication_model import TwilioProfileModel
+from app.models.orm.twilio_model import CallEventORM, CallStatusEnum, SMSEventORM, SMSStatusEnum
 from app.services.database.mongoose_service import MongooseService
 from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileMiniService, ProfileService

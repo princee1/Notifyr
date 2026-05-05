@@ -7,7 +7,7 @@ from app.services.config_service import ConfigService
 from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileMiniService
 from app.services.mini.outbound.http_outbound_service import HTTPOutboundMiniService
-from app.models.webhook_model import DiscordWebhookModel, MakeHTTPWebhookModel, SlackHTTPWebhookModel, ZapierHTTPWebhookModel
+from app.models.odm.webhook_model import DiscordWebhookModel, MakeHTTPWebhookModel, SlackHTTPWebhookModel, ZapierHTTPWebhookModel
 from discord_webhook import DiscordEmbed,DiscordWebhook,AsyncDiscordWebhook
 
 

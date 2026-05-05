@@ -18,7 +18,7 @@ from app.errors.service_error import MiniServiceStrictValueNotValidError, Servic
 from app.manager.merchant_manager import Merchant
 from app.manager.task_manager import TaskManager
 from app.models.call_model import CallCustomSchedulerModel
-from app.models.contacts_model import Status, SubscriptionORM
+from app.models.orm.contacts_model import Status, SubscriptionORM
 from app.models.email_model import BaseEmailSchedulerModel
 from app.models.file_model import FileResponseUploadModel
 from app.models.ingest_model import DataIngestModel
@@ -38,7 +38,7 @@ from app.utils.constant import GraphitiConstant, SpecialKeyAttributesConstant
 from app.utils.helper import DICT_SEP, AsyncAPIFilterInject, PointerIterator, SliceMode, copy_response, issubclass_of, parseToBool, slice_dict
 from app.utils.validation import email_validator, phone_number_validator
 from app.depends.orm_cache import ContactSummaryORMCache
-from app.models.contacts_model import ContactSummary
+from app.models.orm.contacts_model import ContactSummary
 from app.services.database.object_service import Object,DeleteError,ObjectWriteResult
 from app.utils.globals import CAPABILITIES
 

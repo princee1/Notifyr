@@ -9,7 +9,7 @@ from aiohttp_retry import Callable
 from app.definition._error import BaseError
 from app.errors.webhook_error import DeliveryError, NonRetryableError
 from app.interface.timers import IntervalParams, SchedulerInterface
-from app.models.webhook_model import BatchConfig, WebhookProfileModel
+from app.models.odm.webhook_model import BatchConfig, WebhookProfileModel
 from aiorwlock import RWLock
 from app.utils.helper import generateId
 

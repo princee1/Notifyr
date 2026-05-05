@@ -3,7 +3,7 @@ from urllib.parse import urlparse
 from fastapi import HTTPException, Request, Response, status
 from app.classes.template import HTMLTemplate
 from app.definition._service import BaseService, BuildFailureError, Service, ServiceStatus
-from app.models.link_model import LinkORM, QRCodeModel
+from app.models.orm.link_model import LinkORM, QRCodeModel
 from app.services.config_service import ConfigService
 from app.services.database.redis_service import RedisService
 from app.services.database.tortoise_service import TortoiseConnectionService

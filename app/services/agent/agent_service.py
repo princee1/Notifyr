@@ -9,7 +9,7 @@ from app.classes.prompt import PromptToken
 from app.definition import _service
 from app.errors.service_error import BuildFailureError, MiniServiceDoesNotExistsError
 from app.grpc.agent_interceptor import AgentServerInterceptor, HandlerType
-from app.models.agents_model import *
+from app.models.odm.agents_model import *
 from app.prompt import agents_prompt
 from app.services.config_service import ConfigService
 from app.services.cost_service import CostService
@@ -23,12 +23,12 @@ from app.services.profile_service import  ProfileMiniService, ProfileService
 from app.services.database.graphiti_service import GraphitiService
 from app.services.reactive_service import ReactiveService
 from app.services.vault_service import VaultService
+from app.models.tools_model import *
 from app.tools.api_tool import APIControlTool, APIFetchTool
 from app.tools.cache_tool import CacheTool
 from app.tools.conversation_tool import ConversationTool
-from app.tools.graph_tool import KnowledgeGraphTool
+from app.tools.graph_tool import KnowledgeGraphTool,MemoryTool
 from app.tools.mcp_tool import MCPTool
-from app.tools.memory_tool import MemoryTool
 from app.tools.search_tool import SearchTool
 from app.tools.vector_tool import VectorRagTool
 from app.utils.constant import CostConstant, MongooseDBConstant

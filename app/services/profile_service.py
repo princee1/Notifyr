@@ -14,7 +14,7 @@ from app.services.logger_service import LoggerService
 from app.services.vault_service import VaultService
 from app.utils.constant import MongooseDBConstant, VaultConstant
 from app.utils.helper import flatten_dict, subset_model
-from app.models.communication_model import  BaseProfileModel, ProfilModelValues
+from app.models.odm.communication_model import  BaseProfileModel, ProfilModelValues
 from app.classes.profiles import ErrorProfileModel
 from typing import Generic, TypeVar
 from app.utils.tools import RunInThreadPool

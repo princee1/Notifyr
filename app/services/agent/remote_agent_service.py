@@ -13,7 +13,7 @@ from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMi
 from app.errors.service_error import BuildFailureError, BuildOkError, BuildSkipError, BuildWarningError, MiniServiceDoesNotExistsError, ServiceNotAvailableError
 from app.errors.agentic_error import AgenticServerDisconnectedError, AgenticStreamDoneError, AgenticBadResponseError, AgenticGrpcIdleError, AgenticGrpcShutdownError
 from app.grpc.agent_interceptor import  AgentClientInterceptor,AgentClientAsyncInterceptor
-from app.models.agents_model import AgentModel, AgentValidationModel
+from app.models.odm.agents_model import AgentModel, AgentValidationModel
 from app.services.agent.llm_provider_service import LLMProviderMiniService, LLMProviderService
 from app.services.config_service import ConfigService
 from app.services.vault_service import VaultService

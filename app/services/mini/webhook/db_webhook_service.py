@@ -6,7 +6,7 @@ from app.definition._error import BaseError
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, MiniService
 from app.errors.service_error import BuildFailureError, BuildWarningError
 from app.interface.webhook_adapter import WebhookAdapterInterface
-from app.models.webhook_model import AuthConfig, DBWebhookModel, MongoDBWebhookModel, PostgresWebhookModel
+from app.models.odm.webhook_model import AuthConfig, DBWebhookModel, MongoDBWebhookModel, PostgresWebhookModel
 from app.services.config_service import ConfigService
 from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileMiniService

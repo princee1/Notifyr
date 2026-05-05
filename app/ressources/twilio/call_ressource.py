@@ -15,10 +15,10 @@ from app.definition._cost import SimpleTaskCost
 from app.manager.broker_manager import Broker
 from app.manager.keep_alive_manager import KeepAliveManager
 from app.manager.task_manager import TaskManager
-from app.models.contacts_model import ContactORM
+from app.models.orm.contacts_model import ContactORM
 from app.models.otp_model import GatherDtmfOTPModel, GatherSpeechOTPModel, OTPModel
 from app.models.call_model import  CallCustomSchedulerModel, CallStatusModel, CallTemplateSchedulerModel, CallTwimlSchedulerModel, GatherResultModel, OnGoingTwimlVoiceCallModel, OnGoingCustomVoiceCallModel
-from app.models.twilio_model import CallEventORM, CallStatusEnum
+from app.models.orm.twilio_model import CallEventORM, CallStatusEnum
 from app.services.worker.celery_service import CeleryService, ChannelMiniService
 from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileService

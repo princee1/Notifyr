@@ -7,7 +7,7 @@ from redbeat import RedBeatSchedulerEntry
 from app.classes.celery import CeleryNotAvailableError, CeleryTask, CeleryTaskNotFoundError, InspectMode, SchedulerModel, TaskExecutionResult, TaskType, add_warnings, due_entry_timedelta
 from app.definition._service import BaseMiniService, BaseMiniServiceManager, BaseService, LinkDep, MiniService, MiniServiceStore, Service, ServiceStatus
 from app.interface.timers import IntervalInterface
-from app.models.communication_model import BaseProfileModel
+from app.models.odm.communication_model import BaseProfileModel
 from app.services.config_service import ConfigService
 from app.services.cost_service import CostService
 from app.services.database.rabbitmq_service import RabbitMQService

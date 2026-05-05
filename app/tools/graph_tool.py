@@ -1,5 +1,5 @@
 from app.definition._tool import ContextPipelineTool
-from app.models.agents_model import KnowledgeGraphToolModel
+from app.models.tools_model import KnowledgeGraphToolModel
 from app.services.config_service import ConfigService
 from app.services.custom_service import CustomService
 from app.services.database.graphiti_service import GraphitiService
@@ -27,4 +27,14 @@ class KnowledgeGraphTool(ContextPipelineTool):
         ...
     
     async def _search(self):
+        ...
+
+class MemoryTool(ContextPipelineTool):
+    
+    def __init__(self,configService:ConfigService,graphitiService:GraphitiService):
+        super().__init__()
+        self.configService = configService
+        self.graphitiService = graphitiService
+    
+    async def __call__(self,query:str ):
         ...

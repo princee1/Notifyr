@@ -1,7 +1,7 @@
 
 from typing import Type
 from app.definition import _service
-from app.models.communication_model import IMAPProfileModel, SMTPProfileModel
+from app.models.odm.communication_model import IMAPProfileModel, SMTPProfileModel
 from app.services.config_service import ConfigService
 #from app.services.email.api_email_service import EmailAPIService
 from app.services.database.redis_service import RedisService

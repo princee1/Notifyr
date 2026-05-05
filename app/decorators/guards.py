@@ -11,10 +11,10 @@ from app.errors.ingest_error import AgenticDatabaseNotAllowedError
 from app.errors.llm_error import LLMModelMaxTokenExceededError, LLMModelNotPermittedError, LLMProviderDoesNotExistError, LLMConfigNotConfiguredError
 from app.errors.service_error import MiniServiceDoesNotExistsError
 from app.manager.task_manager import TaskManager
-from app.models.agents_model import AgentModel
-from app.models.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, ContentSubscriptionORM, SubscriptionContactStatusORM
+from app.models.odm.agents_model import AgentModel
+from app.models.orm.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, ContentSubscriptionORM, SubscriptionContactStatusORM
 from app.models.ingest_model import DataIngestModel, WebCrawlingDataIngestModel
-from app.models.link_model import LinkORM
+from app.models.orm.link_model import LinkORM
 from app.models.llm_model import LLMProfileModel
 from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM

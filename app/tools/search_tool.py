@@ -1,5 +1,5 @@
 from app.definition._tool import  DiscoveryTool
-from app.models.agents_model import SearchToolModel
+from app.models.odm.agents_model import SearchToolModel
 from app.services.config_service import ConfigService
 from app.services.custom_service import CustomService
 from app.services.database.qdrant_service import QdrantService

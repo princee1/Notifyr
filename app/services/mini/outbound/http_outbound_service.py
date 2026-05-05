@@ -7,7 +7,7 @@ import requests
 import aiohttp
 from app.definition._service import BaseMiniService, LinkDep, MiniService
 from app.interface.webhook_adapter import WebhookAdapterInterface
-from app.models.webhook_model import AuthConfig, HTTPWebhookModel, SignatureConfig
+from app.models.odm.webhook_model import AuthConfig, HTTPWebhookModel, SignatureConfig
 from app.services.config_service import ConfigService
 from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileMiniService
