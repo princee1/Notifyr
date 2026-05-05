@@ -29,21 +29,8 @@ from app.services.vault_service import VaultService
 from app.decorators.permissions import JWTRouteHTTPPermission, ProfilePermission
 from app.definition._ressource import UseLimiter
 from app.services.worker.arq_service import ArqIngestTaskService, JobAlreadyExistsError, JobInProgressError,JobStatus, UnexpectedJobStatusError
-from app.models.ingest_model import (
-    AbortedJobResponse,
-    ComparableEmbeddings,
-    CrawlingComparableURL,
-    DeleteIngestUriMetadata,
-    ResearchDataIngestModel,
-    ResearchIngestDataResponse,
-    ResearchIngestUriMetadata,
-    WebCrawlingIngestDataResponse,
-    WebCrawlingUriMetadata,
-    WebCrawlingDataIngestModel,
-    FileIngestUriMetadata,
-    FileUploadIngestEnqueueResponse,
-    FileUploadDataIngestModel,
-)
+from app.models.ingest_model import AbortedJobResponse,ComparableEmbeddings,CrawlingComparableURL,DeleteIngestUriMetadata,ResearchDataIngestModel,ResearchIngestDataResponse
+from app.models.ingest_model import ResearchIngestUriMetadata,WebCrawlingIngestDataResponse,WebCrawlingUriMetadata,WebCrawlingDataIngestModel,FileIngestUriMetadata,FileUploadIngestEnqueueResponse,FileUploadDataIngestModel
 from app.models.file_model import  FileResponseUploadModel, UploadError
 from app.data_ingest_tasks import DATA_TASK_REGISTRY_NAME
 from app.utils.constant import AgenticConstant, ArqDataTaskConstant, CostConstant

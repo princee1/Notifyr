@@ -1,6 +1,6 @@
 from app.definition._tool import ExecutionTool
 from app.services import ConfigService
-from app.models.agents_model import ToolModel, MCPToolModel
+from app.models.tools_model import ToolModel, MCPToolModel
 
 class MCPTool(ExecutionTool):
     

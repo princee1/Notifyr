@@ -2,11 +2,9 @@
 Complete Web Crawler Ingestion with support for multiple extraction modes.
 Handles URL generation, content extraction, chunk splitting, and token tracking.
 """
-import asyncio
 from enum import Enum
 import json
 from pathlib import Path
-import sys
 from typing import AsyncGenerator, Callable, Dict, List, Literal, Optional, Type
 
 import aiohttp
@@ -27,9 +25,10 @@ from crawl4ai.deep_crawling.filters import (
 from crawl4ai.models import TokenUsage
 
 from pydantic import BaseModel
-from app.classes.chunk import ChunkPayload, Chunk, TextDetector
+from app.classes.chunk import ChunkPayload, ChunkWrapper
 from app.classes.cost_definition import MarkdownCostDefinition
 from app.classes.crawl import *
+from app.classes.text_detector import TextDetector
 from app.classes.url import fetch_jsonld, generate_urls
 import re
 from app.models.crawal4ai_model import (
@@ -42,6 +41,7 @@ from app.models.ingest_model import WebCrawlingDataIngestModel
 from app.prompt import crawl_prompt, graphiti_prompt
 from app.utils.constant import Crawl4AIConstant
 from app.utils.tools import RunAsync
+from uuid import uuid1
 
 
 ###################################################################################################
@@ -519,11 +519,11 @@ class WebCrawlerIngestion:
 			
 			model = CrawlTextModel.model_validate(**semanticsTexts)
 			for i,chunk in enumerate(model.texts):
-				node_id = f""
+				chunk_id =f"{uuid1()}"
 				detector = TextDetector(chunk.text)
 				stats  = await detector.analyze()
 				chunk_meta = chunk.model_dump(exclude=('id',))
-				chunk = Chunk(chunk_id=node_id,
+				chunk = ChunkWrapper(chunk_id=chunk_id,
 							lang=self.ingestTask.lang,
 							payload=ChunkPayload(
 								document_id=metadata.url,
@@ -533,14 +533,14 @@ class WebCrawlerIngestion:
 								bbox=None,
 								**chunk_meta,
 								**stats,
-								node_id=node_id,
-								chunk_index=i,
+								chunk_id=chunk_id,
+								index=i,
 								extension="md",
 								strategy='LLM Text Extraction',
 								parser="crawl4ai",
 								language=self.ingestTask.lang,
 								source=metadata.source,
-								category=...,
+								relationship=[]
 							))
 				metadata.chunks.append(chunk)
 

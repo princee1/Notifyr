@@ -1,5 +1,5 @@
 from app.definition._tool import Tool,ContextPipelineTool
-from app.models.agents_model import CacheToolModel
+from app.models.tools_model import CacheToolModel
 from app.services import ConfigService
 from app.services import QdrantService
 from app.services import MemCachedService

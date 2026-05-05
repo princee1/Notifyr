@@ -397,7 +397,7 @@ class LLMProviderConstant:
 
     LLMProvider = Literal['openai','anthropic','cohere','groq','deepseek']
     
-    MODELS: dict[str, dict[Literal['models','default'], list[str]]] = {
+    MODELS: dict[str, dict[Literal['models','default','embedding_model'], list[str]]] = {
         "openai": {
             "models": [
                 "gpt-5.2", "gpt-5.2-pro", "gpt-5.1", "gpt-5", "gpt-5-mini", "gpt-5-nano",
@@ -407,6 +407,9 @@ class LLMProviderConstant:
                 "gpt-realtime", "gpt-realtime-mini", "gpt-audio", "gpt-audio-mini",
                 "gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo",
                 "gpt-4o-mini", "gpt-4o", "o1-mini", "o1-preview", "o3-mini", "o3-mini-high"
+            ],
+            "embedding_model":[
+
             ],
             "default": "gpt-4o"
         },

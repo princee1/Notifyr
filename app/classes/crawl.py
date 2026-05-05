@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, Optional, TypedDict
 from pydantic import BaseModel
-from app.classes.chunk import Chunk
+from app.classes.chunk import ChunkWrapper
 from app.definition._error import BaseError
 from app.models.llm_model import CrawlLLMConfigModel, WebResearchConfigModel
 
@@ -124,7 +124,6 @@ class CrawlSchemaModel(BaseModel):
 class CrawlText(BaseModel):
     text:str
     title:str
-    id:str
     topics:List[str]
     keywords:List[str]
     section: str
@@ -146,7 +145,7 @@ class CrawlResultMetadata:
     error: Optional[str] = None
     extracted_content: list[CrawlSchemaModel] = None
     markdown_content: Optional[str] = None
-    chunks: List[Chunk] = field(default_factory=list)
+    chunks: List[ChunkWrapper] = field(default_factory=list)
     doc_type:DocType = 'html'
 
 class MarkdownDocumentSize(TypedDict):

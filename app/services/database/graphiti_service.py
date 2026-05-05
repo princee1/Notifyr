@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict, Iterator, Type
 from typing_extensions import Literal
-from app.classes.chunk import Chunk
+from app.classes.chunk import ChunkWrapper
 from app.definition._service import DEFAULT_BUILD_STATE, BaseService, LinkDep, Service, ServiceStatus
 from app.errors.service_error import BuildError, BuildFailureError, BuildNotImplementedError
 from app.services.agent.llm_provider_service import LLMProviderMiniService, LLMProviderService
@@ -155,13 +155,13 @@ class GraphitiService(TempCredentialsDatabaseService):
     #######################                             ######################
     ##########################################################################
 
-    async def add_chunk_episode(self,chunk:Chunk,instruction:str=None,entities:list[str]=None,edges:list[str]=None,description:str=None ):
+    async def add_chunk_episode(self,chunk:ChunkWrapper,domain:str,instruction:str=None,entities:list[str]=None,edges:list[str]=None,description:str=None ):
         name = f"{chunk.payload['document_name']} - {chunk.payload['chunk_id']} - {chunk.payload['title']}"
         source = chunk.payload['source']
 
         description = description or graphiti_prompt.CHUNK_DESCRIPTION_PROMPT(
             chunk.payload['document_name'],
-            chunk.category,
+            domain,
             chunk.payload['section'] or '',
             chunk.payload['title'] or '',
             chunk.payload['topics'] or [],
@@ -170,7 +170,6 @@ class GraphitiService(TempCredentialsDatabaseService):
             chunk.lang,
         )
 
-        domain = chunk.category
         body = f"""
         text: {chunk.payload['text']}
         -----

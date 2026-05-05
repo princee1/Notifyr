@@ -1,4 +1,4 @@
-from app.models.agents_model import ToolModel
+from app.models.tools_model import ToolModel
 
 class Tool:
     def __init__(self,config:ToolModel):

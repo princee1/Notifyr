@@ -15,6 +15,9 @@ from app.utils.constant import AgenticConstant, CostConstant
 
 prefix=AgenticConstant.VECTOR_ROUTER('')
 
+MAX_TOKEN_EMBEDDING = 9182
+DIMENSION = 512
+
 def VectorDBRouter(depends:list=None):
     if depends == None:
         depends =[]
@@ -28,7 +31,7 @@ def VectorDBRouter(depends:list=None):
         ...
     
     async def on_shutdown():
-        ...
+        await qdrantService.close()
     
     router = APIRouter(prefix=prefix,on_startup=[on_startup],on_shutdown=[on_shutdown])
 
@@ -91,16 +94,18 @@ def VectorDBRouter(depends:list=None):
     @lock_service_wrapper(QdrantService)
     @exception_handler({InvalidPurchaseRequestError:HandlerDetails(400),InsufficientCreditsError:HandlerDetails(402)})
     async def embed_query(request:Request,response:Response,backgroundTasks:BackgroundTasks,query:QdrantEmbedRequestModel):
-        await costService.check_enough_credits(CostConstant.TOKEN_CREDIT,8192*2)
+        await costService.check_enough_credits(CostConstant.TOKEN_CREDIT,MAX_TOKEN_EMBEDDING)
 
         embedding,usage = await qdrantService.embed_query(
-            query=query.query
+            query=query.query,
+            model={'openai':'text-embedding-3-small','gemini':'smallest'},
+            dimension=DIMENSION,
         )
 
         async def purchase_embed_token(usage:EmbeddingUsage):
             cost = TokenCost(query.request_id,query.issuer)
-            cost.purchase(usage.model,usage.provider,...,'input','Embedding Query',usage.prompt_tokens)
-            cost.purchase(usage.model,usage.provider,...,'output','Embedding Query',usage.embed_tokens)
+            cost.purchase(usage.model,usage.provider,qdrantService.embedding_id,'input','Embedding Query',usage.prompt_tokens)
+            cost.purchase(usage.model,usage.provider,qdrantService.embedding_id,'output','Embedding Query',usage.embed_tokens)
             await costService.deduct_credits(CostConstant.TOKEN_CREDIT,cost.generate_bill())
 
         backgroundTasks.add_task(purchase_embed_token,usage)

@@ -154,7 +154,7 @@ async def process_file_loader_task(ctx:dict[str,Any],vector_config:VectorConfig|
 
     file_path = arqService.compute_data_file_upload_path(uri)
     extension =  fileService.get_extension(file_path)
-    textDataLoader = TextDataLoader(qdrantService.embedding_parse,file_path,lang,extension,vector_config.category,strategy,use_docling)
+    textDataLoader = TextDataLoader(qdrantService.embedding_parse,file_path,lang,extension,strategy,use_docling)
     token = None
     
     async with StepRunner(step,FileIngestionStepIndex.PROCESS) as skip:
@@ -168,7 +168,7 @@ async def process_file_loader_task(ctx:dict[str,Any],vector_config:VectorConfig|
         
         if graph_config != None:
             for chunk in textDataLoader.chunks:
-                await graphitiService.add_chunk_episode(chunk,graph_config.instruction,graph_config.entities,graph_config.edges,graph_config.description)
+                await graphitiService.add_chunk_episode(chunk,graph_config.domain,graph_config.instruction,graph_config.entities,graph_config.edges,graph_config.description)
 
     async with StepRunner(step,FileIngestionStepIndex.TOKEN_COST) as skip:
         skip()
@@ -246,6 +246,7 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
                     if graph_config != None:
                         await graphitiService.add_chunk_episode(
                             chunk,
+                            graph_config.domain,
                             graph_config.instruction,
                             entities=graph_config.entities,
                             edges=graph_config.edges,

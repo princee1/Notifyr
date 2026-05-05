@@ -1,11 +1,11 @@
-from typing import ClassVar, List, Literal, Optional
-from pydantic import BaseModel, PrivateAttr
+from typing import Any, ClassVar, List, Literal, Optional
 from app.classes.mongo import BaseDocument
 from app.classes.prompt import System
-from app.utils.constant import LLMProviderConstant, MongooseDBConstant
+from app.utils.constant import MongooseDBConstant
 from enum import Enum
 from app.utils.helper import subset_model
 
+from app.models.tools_model import ToolModels
 class GraphitiSearchConfig(str, Enum):
     PERSONALIZED_MEMORY = "personalized_memory"
     PRECISE_QA = "precise_qa"
@@ -15,36 +15,6 @@ class GraphitiSearchConfig(str, Enum):
 
 Effort=Literal['high','medium','low']
 
-class ToolModel(BaseDocument):
-    description:str
-    name:str
-
-class VectorToolModel(ToolModel):
-    ...
-    
-class CacheToolModel(ToolModel):
-    ...
-
-class KnowledgeGraphToolModel(ToolModel):
-    ...
-
-class APIToolModel(ToolModel):
-    ...
-
-class APIControlModel(APIToolModel):
-    ...
-
-class MCPToolModel(ToolModel):
-    ...
-
-class SearchToolModel(ToolModel):
-    ...
-
-class MemoryToolModel(ToolModel):
-    ...
-
-class ConversationToolModel(ToolModel):
-    ...
 
 class AgentModel(BaseDocument):
     
@@ -52,7 +22,7 @@ class AgentModel(BaseDocument):
     
     memory:List[str] = []
     model: str
-    tools: List[VectorToolModel | KnowledgeGraphToolModel | APIToolModel | MCPToolModel | SearchToolModel|MemoryToolModel|ConversationToolModel] = []
+    tools: List[ToolModels] = []
     system:Optional[System] = None
     
     provider: str

@@ -12,6 +12,8 @@ from llama_index.readers.file import (
     HTMLTagReader, PptxReader,XMLReader
 )
 
+from app.classes.text_detector import TextDetector
+
 DOCLING_INSTALLED = True
 # Docling Integration
 try:
@@ -20,7 +22,7 @@ try:
 except ImportError as e:
     DOCLING_INSTALLED = False
 
-from app.classes.chunk import Chunk, ChunkPayload, TextDetector
+from app.classes.chunk import ChunkWrapper, ChunkPayload
 from app.utils.constant import ParseStrategy
 from app.utils.tools import Mock, RunAsync
 
@@ -30,7 +32,16 @@ TEXT_READERS: dict[str, type[BaseReader]] = {
     "md": MarkdownReader,
     "html": HTMLTagReader,
     "pptx": PptxReader,
-    "xml":XMLReader
+    "xml":XMLReader,
+    "txt":...,
+}
+
+MEDIA_READERS :dict[str,type[BaseReader]] = {
+
+}
+
+TABULAR_READERS :dict[str,type[BaseReader]] = {
+
 }
 
 class FileIngestionStepIndex(int, Enum):
@@ -50,11 +61,23 @@ class BaseDataLoader:
         raise NotImplementedError
 
     @staticmethod
-    def Factory(ext: str) -> 'BaseDataLoader':
+    def Factory(ext: str) -> type['BaseDataLoader']:
         # Docling handles PDF, DOCX, PPTX, HTML, MD, etc.
-        if ext.lower() in ["pdf", "docx", "md", "html", "pptx", "txt",'xml']:
+        ext = ext.lower()
+        if ext in TEXT_READERS:
             return TextDataLoader
-        return None
+
+        if ext in TABULAR_READERS:
+            ...
+        
+        if ext in MEDIA_READERS:
+            match ext:
+                case '':
+                    ...
+                case _:
+                    raise TypeError('Media Extension not supported')
+        
+        raise TypeError('File not supported')
 
 class TextDataLoader(BaseDataLoader):
     
@@ -118,34 +141,38 @@ class TextDataLoader(BaseDataLoader):
                 "text": node.text,
                 "document_name": self.file_path,
                 "document_id": node.ref_doc_id,
-                "node_id": node.node_id,
+                "chunk_id": node.node_id,
                 "source": node.metadata.get("file_name", node.metadata.get('file_path', None)),
                 "extension": self.extension,
                 "strategy": self.strategy.value,
                 "parser": "docling" if self.use_docling else "llama",
                 "page": node.metadata.get("page_label"),
                 "bbox": node.metadata.get("bbox", None),
-                "chunk_id": f"{node.ref_doc_id}_{i}",
-                "chunk_index": i,
+                "index": i+1,
                 "title": node.metadata.get("title", ""),
                 "section": current_section,
                 "language": self.lang,
                 "document_type":"textfile",
-                "category":self.category, 
                 "relationship": rel_ids,
                 **stats
             })
 
-            self.chunks.append(Chunk(
+            self.chunks.append(ChunkWrapper(
                 chunk_id=node.node_id,
                 vector=node.embedding,
                 payload=payload,
-                category=self.category,
                 lang=self.lang
             ))
 
     def compute_token(self):
         return randint(2000,30000)
+
+
+class AudioDataLoader(BaseDataLoader):
+    ...
+
+class ImageDataLoader(BaseDataLoader):
+    ...
 
 class VideoDataLoader(BaseDataLoader):
 
@@ -185,4 +212,6 @@ class VideoDataLoader(BaseDataLoader):
                     "video": video_path,
                     "timestamp": timestamps[i]
                 }
-        
+
+class TabularDataLoader(BaseDataLoader):
+    ...      
