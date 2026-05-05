@@ -331,7 +331,6 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
     
     @check_db
     async def hash_set(self,database:int|str,hash_name:str,key:str=None,value:Any=None,mapping:dict=None,redis:Redis=None):
-        redis.hset
         return await redis.hset(hash_name,key,value,mapping)
     
     @check_db

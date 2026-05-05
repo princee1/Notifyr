@@ -14,10 +14,10 @@ from app.prompt import agents_prompt
 from app.services.config_service import ConfigService
 from app.services.cost_service import CostService
 from app.services.custom_service import CustomService
-from app.services.database.memcached_service import MemCachedService
 from app.services.database.mongoose_service import MongooseService
 from app.services.database.qdrant_service import QdrantService
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, LinkDep, MiniService, MiniServiceStore, Service, BaseMiniServiceManager, ServiceStatus
+from app.services.database.redis_service import RedisService
 from app.services.mini.outbound.http_outbound_service import HTTPOutboundMiniService
 from app.services.profile_service import  ProfileMiniService, ProfileService
 from app.services.database.graphiti_service import GraphitiService
@@ -60,24 +60,22 @@ class AgentMiniService(BaseMiniService):
                 mongooseService:MongooseService,
                 llmProviderMService:LLMProviderMiniService,
                 customService:CustomService,
-                memcachedService:MemCachedService,
-                costService:CostService,
+                redisService:RedisService,
                 agent_model:dict,
                 checkpointer:MongoDBSaver,
                 outboundServices:Dict[str,HTTPOutboundMiniService]={}):
             
             self.depService = llmProviderMService
-            super().__init__(llmProviderMService,str(agent_model.id))
+            super().__init__(llmProviderMService,str(agent_model['id']))
             self.mongooseService = mongooseService
             self.configService = configService
             self.graphitiService =  graphitiService
-            self.memcachedService = memcachedService
+            self.redisService = redisService
             self.qdrantService = qdrantService
             self.customService = customService
             self.outboundServices = outboundServices
             self.agent_model=agent_model
             self.checkpointer = checkpointer
-            self.costService = costService
 
             for outbound in self.outboundServices.values():
                 self.register(outbound)
@@ -118,7 +116,7 @@ class AgentMiniService(BaseMiniService):
             if isinstance(model,VectorToolModel):
                 tool = VectorRagTool(self.qdrantService,self.configService,self.customService,model)
             elif isinstance(model,CacheToolModel):
-                tool = CacheTool(self.configService,self.qdrantService)
+                tool = CacheTool(self.configService,self.qdrantService,self.redisService,)
             elif isinstance(model,KnowledgeGraphToolModel):
                 tool = KnowledgeGraphTool(self.graphitiService,self.configService,self.customService,self.qdrantService)
             elif isinstance(model,(APIToolModel,APIControlModel)):
@@ -147,20 +145,16 @@ class AgentMiniService(BaseMiniService):
     async def invoke(self,thread:str,prompt:str):
         config = {"configurable": {"thread_id": thread,"checkpoint_ns": self.agent_model.id}} 
         message = [{'role':'user','content':prompt}]
-        await self.costService.check_enough_credits(CostConstant.TOKEN_CREDIT,self.agent_model.max_tokens*2)
-
         response = await self.agent.ainvoke(message,config)
         
     async def stream(self,thread:str,prompt:str):
         config = {"configurable": {"thread_id": thread,"checkpoint_ns": self.agent_model.id}} 
         message = [{'role':'user','content':prompt}]
-        await self.costService.check_enough_credits(CostConstant.TOKEN_CREDIT,self.agent_model.max_tokens*2)
 
         async for chunk in self.agent.astream(message,config):
             yield
         
     async def completion(self,):
-        await self.costService.check_enough_credits(CostConstant.TOKEN_CREDIT,self.agent_model.max_tokens*2)
         await self.chat_model.ainvoke()
 
     @property
@@ -264,6 +258,10 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
                     yield reply
                     asyncio.sleep(0.1)
 
+    @Error_Handler
+    async def Completion(self,context):
+        ...
+
     def verify_auth(self,token:str)->bool:
         if self.auth_header != token:
             raise HTTPException(status_code=401,detail="Unauthorized")
@@ -277,7 +275,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
                     profileService:ProfileService,
                     graphitiService:GraphitiService,
                     costService:CostService,
-                    memcachedService:MemCachedService,
+                    redisService:RedisService,
                     customService:CustomService) -> None:
         
         super().__init__()
@@ -290,7 +288,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
         self.profileService = profileService
         self.reactiveService = reactiveService
         self.costService = costService
-        self.memcachedService = memcachedService
+        self.redisService = redisService
         self.customService = customService
 
         self.MiniServiceStore = MiniServiceStore[AgentMiniService](self.name)
@@ -357,8 +355,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
                     self.mongooseService,
                     provider,
                     self.customService,
-                    self.memcachedService,
-                    self.costService,
+                    self.redisService,
                     model,
                     self.checkpointer
                 )

@@ -136,7 +136,7 @@ class CostService(BaseService):
     @CreditSilentFail()
     @RedisCreditKeyBuilder
     async def refund_credits(self,credit_key:str,bill:Bill):
-        async with self.redisService.db['limiter'].pipeline(transaction=False) as pipe:
+        async with self.redisService.db[RedisConstant.LIMITER_DB].pipeline(transaction=False) as pipe:
             refund_cost = bill['total']
             balance = await self.get_credit_balance(credit_key,__builder__=False,redis=pipe)
             

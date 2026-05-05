@@ -2,6 +2,7 @@ from app.utils.globals import APP_MODE, ApplicationMode
 
 Callbacks_Stream = {}
 Callbacks_Sub = {}
+Callbacks_Direct = {}
 
 if APP_MODE == ApplicationMode.server:
     from .process_sub import Process_Sub

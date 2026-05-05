@@ -37,7 +37,7 @@ class VectorRagTool(ContextPipelineTool):
 		except QdrantCollectionDoesNotExistError as e:
 			return ''
 	
-	async def graph_search(self,contexts:list[ChunkContext],depth:int,seen:set[str]=None,results:list[GraphChunkContext]=None):
+	async def graph_search(self,contexts:list[ChunkContext],depth:int,seen:set[str],results:list[GraphChunkContext]):
 		if depth >= self.sparse_config.max_depth:
 			return
 		

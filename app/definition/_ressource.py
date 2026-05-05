@@ -945,8 +945,9 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
                 authPermission:AuthPermission =  get_auth_permission(request)
                 clientType = authPermission['client_type']
                 unit_cost = cost.get(clientType,1)
-                unit_cost =min(1,unit_cost)
-                return max(unit_cost,max_limit)      
+                unit_cost = max(1,unit_cost)
+                return min(unit_cost,max_limit)
+            
             return cost_func
         else:
             raise ValueError('Could not parse the cost as a function')

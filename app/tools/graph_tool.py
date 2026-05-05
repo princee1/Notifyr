@@ -8,12 +8,11 @@ from app.services.database.qdrant_service import QdrantService
 
 class KnowledgeGraphTool(ContextPipelineTool):
     
-    def __init__(self,graphitiService:GraphitiService,configService:ConfigService,customService:CustomService,memcachedService:MemCachedService,qdrantService:QdrantService,config:KnowledgeGraphToolModel):
+    def __init__(self,graphitiService:GraphitiService,configService:ConfigService,customService:CustomService,qdrantService:QdrantService,config:KnowledgeGraphToolModel):
         super().__init__(config)
         self.graphitiService = graphitiService
         self.configService = configService
         self.customService = customService
-        self.memcachedService = memcachedService
         self.qdrantService = qdrantService
         self.config = config
 
@@ -23,18 +22,15 @@ class KnowledgeGraphTool(ContextPipelineTool):
     async def search(self):
         ...
 
-    def _build_search_config(self):
-        ...
+
+class MemoryTool(KnowledgeGraphTool):
     
-    async def _search(self):
+    def __init__(self,graphitiService:GraphitiService,configService:ConfigService,customService:CustomService,qdrantService:QdrantService):
+        config = self._to_base_config()
+        super().__init__(graphitiService,configService,customService,qdrantService,config)
+
+    def _to_base_config(self)->KnowledgeGraphToolModel:
         ...
 
-class MemoryTool(ContextPipelineTool):
-    
-    def __init__(self,configService:ConfigService,graphitiService:GraphitiService):
-        super().__init__()
-        self.configService = configService
-        self.graphitiService = graphitiService
-    
     async def __call__(self,query:str ):
         ...
