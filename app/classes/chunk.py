@@ -51,12 +51,10 @@ class ChunkMultimediaPayload(TypedDict):
 class ChunkDataPointsPayload(TypedDict):
     ...
 
-
 class ChunkWrapper:
 
-    def __init__(self,chunk_id:str,vector:list[float],payload:ChunkPayload,category:str,lang:str):
+    def __init__(self,chunk_id:str,vector:list[float],payload:ChunkPayload,lang:str):
         self.chunk_id = chunk_id
         self.vector = vector
         self.payload = payload
-        self.category = category
         self.lang = lang

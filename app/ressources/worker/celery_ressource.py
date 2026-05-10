@@ -54,7 +54,23 @@ class CeleryRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/purge/{profile}/',methods=[HTTPMethod.DELETE])
     async def purge_queue(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)], request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
         return await channel.purge_queue()
-        
+
+    @UseLimiter('1/minutes')
+    @UsePermission(AdminPermission)
+    @LockService(CeleryService,lockType='reader',check_status=False,as_manager=True)
+    @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
+    @BaseHTTPRessource.HTTPRoute('/pause/{profile}/',methods=[HTTPMethod.DELETE])
+    async def pause_queue(self,channel:Annotated[ChannelMiniService,Depends(get_profile)], request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
+        await channel.pause_worker()
+
+    @UseLimiter('1/minutes')
+    @UsePermission(AdminPermission)
+    @LockService(CeleryService,lockType='reader',check_status=False,as_manager=True)
+    @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
+    @BaseHTTPRessource.HTTPRoute('/resume/{profile}/',methods=[HTTPMethod.PATCH])
+    async def resume_queue(self,channel:Annotated[ChannelMiniService,Depends(get_profile)], request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
+        await channel.resume_worker()
+
     ################################################################        ############################################################
     #                                                        Non-Mounted Route                                                         #
     ################################################################        ############################################################
@@ -71,20 +87,4 @@ class CeleryRessource(BaseHTTPRessource):
     @LockService(CeleryService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/revoke/',methods=[HTTPMethod.DELETE],deprecated=True,mount=False)
     async def revoke(self,task_ids:List[str],request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
-        ...
-
-    @UseLimiter('1/minutes')
-    @UsePermission(AdminPermission)
-    @LockService(CeleryService,lockType='reader',check_status=False,as_manager=True)
-    @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
-    @BaseHTTPRessource.HTTPRoute('/pause/{profile}/',methods=[HTTPMethod.DELETE],mount=False)
-    async def pause_queue(self,channel:Annotated[ChannelMiniService,Depends(get_profile)], request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
-        await channel.pause_worker()
-
-    @UseLimiter('1/minutes')
-    @UsePermission(AdminPermission)
-    @LockService(CeleryService,lockType='reader',check_status=False,as_manager=True)
-    @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
-    @BaseHTTPRessource.HTTPRoute('/resume/{profile}/',methods=[HTTPMethod.PATCH],mount=False)
-    async def resume_queue(self,channel:Annotated[ChannelMiniService,Depends(get_profile)], request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
         ...

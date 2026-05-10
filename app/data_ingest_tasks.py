@@ -3,6 +3,7 @@ import json
 from typing import Any, Callable, List
 from app.classes.cost_definition import MarkdownCostDefinition
 from app.classes.crawl import WebCrawlState, CrawlTokenUsageReport, DigestState, MarkdownDocumentSize, SchemaNotFoundError
+from app.classes.nodes import SourceDescription
 from app.classes.qdrant import QdrantCollectionDoesNotExistError
 from app.classes.step import SkipStep, Step, StepRunner
 from app.errors.ingest_error import IngestTaskNotSupportedError
@@ -267,29 +268,24 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
                 for item in result.extracted_content: 
                     if not item:
                         continue
-
+                    _id = item.get('id',uuid_v1_mc())
+                    title = item.get('title',None)
                     await graphitiService.add_content_episode(
-                        source=result.url,
                         entities=graph_config.entities,
                         edges=graph_config.edges,
-                        name = item.get('title',None),
-                        description = result.description,
+                        name = f"{_id}@{title}",
+                        description = SourceDescription(_id,result.source,title,result.url,lang,result.description),
                         body = json.loads(item.get('content',None)),
                         domain = graph_config.domain,
                         instruction = graph_config.instruction,
-                        uuid = f"{item.get('id',None)}@{uuid_v1_mc()}"
                     )
             elif isinstance(crawler.ingestTask.extraction,KnowledgeGraphExtractionConfig):
                 if not result.markdown_content:
                     continue
-
-                uuid = f"{uuid_v1_mc()}"
                 await graphitiService.add_content_episode(
                     name=result.title,
-                    source=result.url,
-                    description=result.description,
+                    description= SourceDescription(uuid_v1_mc(),result.source,result.title,result.url,lang,result.description),
                     body=result.markdown_content,
-                    uuid=uuid,
                     domain=graph_config.domain,
                     instruction=crawler.ingestTask.extraction.instruction,
                     entities=graph_config.entities,
@@ -405,8 +401,7 @@ async def process_research_task(ctx:dict[str,Any],vector_config:VectorConfig|Non
                 continue 
             graphitiService.add_content_episode(
                 name=result.title,
-                source=result.source,
-                description=result.description,
+                description = SourceDescription(uuid_v1_mc(),result.source,result.title,result.url,lang,result.description),
                 body=result.markdown,
                 instruction=graph_config.instruction,
                 domain=graph_config.domain,

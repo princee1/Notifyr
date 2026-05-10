@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any, Dict, Iterator, Type
 from typing_extensions import Literal
 from app.classes.chunk import ChunkWrapper
+from app.classes.nodes import SourceDescription
 from app.definition._service import DEFAULT_BUILD_STATE, BaseService, LinkDep, Service, ServiceStatus
 from app.errors.service_error import BuildError, BuildFailureError, BuildNotImplementedError
 from app.services.agent.llm_provider_service import LLMProviderMiniService, LLMProviderService
@@ -22,7 +23,7 @@ from graphiti_core.cross_encoder.gemini_reranker_client import GeminiRerankerCli
 from graphiti_core.embedder.gemini import GeminiEmbedder,GeminiEmbedderConfig
 from graphiti_core.embedder.openai import OpenAIEmbedder,OpenAIEmbedderConfig
 
-from graphiti_core.nodes import EntityNode
+from graphiti_core.nodes import EntityNode,EpisodicNode
 from graphiti_core.edges import EntityEdge
 
 from graphiti_core.llm_client.anthropic_client import AnthropicClient
@@ -36,8 +37,6 @@ from graphiti_core.search.search_config import DEFAULT_SEARCH_LIMIT,SearchConfig
 from graphiti_core.search.search_filters import SearchFilters
 from graphiti_core.nodes import Node
 from graphiti_core.driver.neo4j_driver import Neo4jDriver
-
-
 from app.utils.helper import uuid_v1_mc
 from app.utils.constant import GraphitiConstant, LLMProviderConstant, RedisConstant, VaultConstant, VaultTTLSyncConstant
 import app.prompt.graphiti_prompt as graphiti_prompt
@@ -54,6 +53,8 @@ CLIENT_MAP:Dict[LLMProviderConstant.LLMProvider,Type[LLMClient]] = {
 
 GRAPHITI_BUILD_STATE = 421
 GRAPHITI_INIT_KEY= 'graphiti'
+
+GroupType = Literal['domain','contact']
 
 @Service(
     links=[LinkDep(service=LLMProviderService,to_build=True,build_state=GRAPHITI_BUILD_STATE)]
@@ -118,7 +119,7 @@ class GraphitiService(TempCredentialsDatabaseService):
         await self.graphiti.close()
         await self.client.close()
 
-    async def search(self,query:str,group_type:Literal['domain','contact'],groups_ids:list[str]=[],center_node:str=None,edges:list[str]=[],entities:list[str]=[],config:SearchConfig=None):
+    async def search(self,query:str,group_type:GroupType,groups_ids:list[str]=[],center_node:str=None,edges:list[str]=[],entities:list[str]=[],config:SearchConfig=None):
         edges = self.customService.to_edge(edges).keys() or None
         entities = self.customService.to_entities(entities).keys() or None
 
@@ -141,6 +142,9 @@ class GraphitiService(TempCredentialsDatabaseService):
         )
         return result
     
+    async def search_node(self,query:str):
+        ...
+
     async def build_communities(self):
         await self.graphiti.build_communities()
     
@@ -156,44 +160,39 @@ class GraphitiService(TempCredentialsDatabaseService):
     ##########################################################################
 
     async def add_chunk_episode(self,chunk:ChunkWrapper,domain:str,instruction:str=None,entities:list[str]=None,edges:list[str]=None,description:str=None ):
-        name = f"{chunk.payload['document_name']} - {chunk.payload['chunk_id']} - {chunk.payload['title']}"
+        name = f"{chunk.chunk_id}@{chunk.payload['title']}"
         source = chunk.payload['source']
-
-        description = description or graphiti_prompt.CHUNK_DESCRIPTION_PROMPT(
-            chunk.payload['document_name'],
-            domain,
-            chunk.payload['section'] or '',
-            chunk.payload['title'] or '',
-            chunk.payload['topics'] or [],
-            chunk.payload['keywords'] or [],
-            chunk.payload['most_common'] or [],
-            chunk.lang,
-        )
+        
+        chunk_description = graphiti_prompt.CHUNK_DESCRIPTION_PROMPT(domain,chunk.payload.get('topics',[]),chunk.payload.get('keywords',[]),
+                                                                     chunk.payload.get('most_common',[]))
+        description = SourceDescription(id=chunk.chunk_id,document_name=chunk.payload['document_name'],
+                                        description=chunk_description,lang=chunk.lang,
+                                        document_id=chunk.payload.get('document_id',None),
+                                        source=source,
+                                        title=chunk.payload('title','')
+                                        )
 
         body = f"""
         text: {chunk.payload['text']}
         -----
         Metadata:
-        Page: {chunk.payload['page']}
+        Title: {chunk.payload.get('title','')}
+        Page: {chunk.payload.get('page',None)}
+        Section: {chunk.payload.get('section','')}
         Document Id: {chunk.payload['document_id']}
-        Density: {chunk.payload['density']}
-        Language: {chunk.lang}
         """
-        uuid = f"{chunk.payload['document_id']}@{uuid_v1_mc()}"
-
         return await self.add_content_episode(
             name,
             body,
-            source,
             description,
             instruction,
             domain,
             entities,
             edges,
-            uuid
+            chunk.chunk_id,
         )
 
-    async def add_content_episode(self,name:str,body:dict|str,source:str,description:str,instruction:str=None,domain:str=None,entities:list[str]=None,edges:list[str]=None,uuid:str|None=None):
+    async def add_content_episode(self,name:str,body:dict|str,description:SourceDescription,instruction:str=None,domain:str=None,entities:list[str]=None,edges:list[str]=None,uuid:str|None=None):
         
         if not isinstance(body,dict) or not isinstance(body,str):
             raise ValueError('Content is either a dict or a str')
@@ -211,7 +210,7 @@ class GraphitiService(TempCredentialsDatabaseService):
         result = await self.graphiti.add_episode(
             name=name,
             episode_body=body,
-            source_description=description,
+            source_description=description.Save(),
             reference_time=datetime.now(),
             source=episode_type,
             custom_extraction_instructions=instruction,
@@ -219,35 +218,30 @@ class GraphitiService(TempCredentialsDatabaseService):
             edge_type_map=edge_map,
             edge_types=edges,
             entity_types=entities,
-            saga=source,
-            #update_communities=True,
-            uuid=uuid,
+            saga=description.source,
+            uuid=None
         )
 
         return result
 
-    async def add_message_episode(self,subject:str,description:str,message:Any,contact_id:str,update_communities=False):
+    async def add_message_episode(self,subject:str,description:str,message:Any,contact_id:str,agent_id:str,thread_id:str,update_communities=False):
         contact_id=f'{GraphitiConstant.CONTACT_PREFIX}{contact_id}'
-
-        description = graphiti_prompt.CONVERSATION_DESCRIPTION_PROMPT(
-            description,
-            contact_id,
-            ...
-        )
-        episode_name = f"{subject} - {contact_id}"
         
+        description = graphiti_prompt.CONVERSATION_DESCRIPTION_PROMPT(subject,...,...)
+        episode_name = f"{contact_id}@{thread_id}"
+        
+        description:SourceDescription = SourceDescription(thread_id,agent_id,subject,contact_id,description=description)
+
         result = await self.graphiti.add_episode(
             name=episode_name,
             update_communities=update_communities,
             episode_body=message,
-            source_description=description,
+            source_description=description.Save(),
             source=EpisodeType.message,
-            custom_extraction_instructions=graphiti_prompt.CONVERSATION_EXTRACTION_PROMPT(
-                subject=subject
-            ),
+            custom_extraction_instructions=graphiti_prompt.CONVERSATION_EXTRACTION_PROMPT(subject=subject),
             reference_time=datetime.now(),
             group_id=contact_id,
-            saga=subject
+            saga=agent_id,
         )
 
         return result
@@ -329,10 +323,7 @@ class GraphitiService(TempCredentialsDatabaseService):
             batch_size=1,
             uuids=[uuid]
         )
-    
-    async def get_node_by(self,uuid:str):
-        ...
-    
+        
     ##########################################################################
     #######################                             ######################
     #######################                             ######################

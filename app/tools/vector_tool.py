@@ -24,21 +24,20 @@ class VectorRagTool(ContextPipelineTool):
 	async def __call__(self,query:str)->str:
 		try:
 			vector = await self.qdrantService.embed_query(query)
-			with_vector = (self.sparse_config != None)
+			with_vector = (self.reranker_config != None)
 			config = self.config.model_dump(exclude=('filter',))
 			contexts = await self.qdrantService.search(vector,filter=self.filter,with_vector=with_vector,**config)
-			if self.sparse_config != None:
+			if self.reranker_config != None:
 				results:list[GraphChunkContext] = []
 				await self.graph_search(contexts,0,set(),results)
-				contexts = sorted(results,key =lambda c:c.get('computed_similarity',0), reverse=True) #rerank
-
+				contexts = sorted(results,key =lambda c:c.get('computed_similarity',0), reverse=True)[self.reranker_config.top_k:] #reranker
 			prompt_context = tools_prompt.CHUNK_CONTEXT_TEMPLATE(contexts)
 			return prompt_context
 		except QdrantCollectionDoesNotExistError as e:
 			return ''
 	
 	async def graph_search(self,contexts:list[ChunkContext],depth:int,seen:set[str],results:list[GraphChunkContext]):
-		if depth >= self.sparse_config.max_depth:
+		if depth >= self.reranker_config.max_depth:
 			return
 		
 		for ctx in contexts:
@@ -56,18 +55,18 @@ class VectorRagTool(ContextPipelineTool):
 					continue
 				dist = EmbeddingWrapper.cosine(base_vector,EmbeddingWrapper(chunk_id,_ctx['vector'],None))
 				_ctx['similarity'] = dist
-				if dist < self.sparse_config.thresh_add:
+				if dist < self.reranker_config.thresh_add:
 					seen.add(chunk_id)
 					continue
-				if dist < self.sparse_config.thresh_search:
+				if dist < self.reranker_config.thresh_search:
 					seen.add(chunk_id)
 					self.compute_similarity(_ctx,ctx,depth)
-					if len(results) >= self.sparse_config.max_context:
+					if len(results) >= self.reranker_config.max_context:
 						return
 				else:
 					similar_context.append((chunk_id,dist))
 
-			sorted_contexts = sorted(similar_context,reverse=True,key=lambda c:c[1])[self.sparse_config.branching_factor:]
+			sorted_contexts = sorted(similar_context,reverse=True,key=lambda c:c[1])[self.reranker_config.branching_factor:]
 			await self.graph_search(sorted_contexts,depth+1,seen=seen,results=results)
 		
 		return
@@ -82,5 +81,5 @@ class VectorRagTool(ContextPipelineTool):
 		return	self.config.collection
 
 	@property
-	def sparse_config(self):
-		return self.config.disperse_search
+	def reranker_config(self):
+		return self.config.broad_search

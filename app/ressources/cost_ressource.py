@@ -60,7 +60,6 @@ class CostRessource(BaseHTTPRessource):
         """
         return await self.costService.get_all_credits_balance()
 
-
     @UseRoles([Role.ADMIN])
     @UseHandler(CostHandler,RedisHandler)
     @PingService([RedisService])
@@ -73,8 +72,6 @@ class CostRessource(BaseHTTPRessource):
         bill_key = self.costService.bill_key(credit)
         return await self.redisService.range(RedisConstant.LIMITER_DB,bill_key,start,stop) or []
     
-    
-
     @UseRoles([Role.ADMIN])
     @UseGuard(CreditPlanGuard)
     @UseHandler(CostHandler,RedisHandler)
@@ -82,7 +79,7 @@ class CostRessource(BaseHTTPRessource):
     @PingService([CostService,RedisService])
     @BaseHTTPRessource.HTTPRoute('/receipts/{credit}/', methods=[HTTPMethod.GET],)
     async def get_receipts(self,credit:CostConstant.Credit, request: Request,start:int = Query(0),stop:int=Query(-1),authPermission:AuthPermission=Depends(get_auth_permission)):
-        """Placeholder for summary endpoint. Implement retrieval from DB/audit store when available."""
+        
         credit = (await self.credit_pipe(credit))['credit']
         receipt_key =  self.costService.receipts_key(credit)
         return await self.redisService.range(RedisConstant.LIMITER_DB,receipt_key,start,stop) or []
