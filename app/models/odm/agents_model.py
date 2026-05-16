@@ -1,5 +1,7 @@
 from typing import Any, ClassVar, List, Literal, Optional
-from app.classes.mongo import BaseDocument
+
+from pydantic import BaseModel
+from app.classes.profiles import BaseProfileModel,BaseDocument
 from app.classes.prompt import System
 from app.utils.constant import MongooseDBConstant
 from enum import Enum
@@ -15,17 +17,7 @@ class GraphitiSearchConfig(str, Enum):
 
 Effort=Literal['high','medium','low']
 
-
-class AgentModel(BaseDocument):
-    
-    _collection:ClassVar[str] = MongooseDBConstant.AGENT_COLLECTION
-    
-    memory:List[str] = []
-    model: str
-    tools: List[ToolModels] = []
-    system:Optional[System] = None
-    
-    provider: str
+class GenerationConfig(BaseModel):
     temperature: float = 0.7
     timeout:float = 20
     max_retries:int = 5
@@ -38,7 +30,17 @@ class AgentModel(BaseDocument):
     max_tokens:Optional[int] = None
     effort:Optional[Effort] = None
     proxy_url:Optional[str] = None    
-    reasoning_format: Literal['parsed', 'raw', 'hidden'] | None = None,
+    reasoning_format: Literal['parsed', 'raw', 'hidden'] | None = None
+
+class AgentModel(BaseDocument):
+        
+    model: str
+    provider: str
+    tools: List[ToolModels] = []
+    system:Optional[System] = None
+    generation:GenerationConfig
+
+    _collection:ClassVar[str] = MongooseDBConstant.AGENT_COLLECTION
 
     class Settings:
         name = MongooseDBConstant.AGENT_COLLECTION

@@ -26,7 +26,7 @@ class ChatService(BaseService):
     async def fetch_chat(self,):
         ...
     
-    async def stream_answer(self,):
+    async def stream_answer(self):
         ...
 
     async def stream_answer_stream(self):

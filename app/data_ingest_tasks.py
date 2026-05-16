@@ -10,7 +10,7 @@ from app.errors.ingest_error import IngestTaskNotSupportedError
 from app.errors.llm_error import LLMConfigNotConfiguredError
 from app.models.crawal4ai_model import KnowledgeGraphExtractionConfig, SchemaExtractionConfig, TextsExtractionConfig
 from app.models.file_model import FileResponseUploadModel, UriMetadata
-from app.services.agent.llm_provider_service import LLMProviderMiniService
+from app.services.agent.llm_service import LLMMiniService
 from app.services.config_service import ConfigService
 from app.services.custom_service import CustomService
 from app.services.profile_service import ProfileService
@@ -213,7 +213,7 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
         if not schema:
             raise SchemaNotFoundError(ingestTask.extraction.custom_schema)
         
-    crawlLLMProvider:LLMProviderMiniService = ctx[CRAWL_PROVIDER_KEY]
+    crawlLLMProvider:LLMMiniService = ctx[CRAWL_PROVIDER_KEY]
     markdownCrawl: MarkdownCostDefinition = ctx[CRAWL_MARKDOWN_KEY]
 
     crawler = WebCrawlerIngestion(
@@ -333,8 +333,8 @@ async def process_research_task(ctx:dict[str,Any],vector_config:VectorConfig|Non
     fileService:FileService = Get(FileService)
     configService:ConfigService = Get(ConfigService)
     
-    researchLLMProvider:LLMProviderMiniService = ctx[RESEARCH_PROVIDER_KEY]
-    crawlLLMProvider:LLMProviderMiniService = ctx[CRAWL_PROVIDER_KEY]
+    researchLLMProvider:LLMMiniService = ctx[RESEARCH_PROVIDER_KEY]
+    crawlLLMProvider:LLMMiniService = ctx[CRAWL_PROVIDER_KEY]
     markdownResearch: MarkdownCostDefinition = ctx[RESEARCH_MARKDOWN_KEY]
 
     researcher =  ResearchIngestion(
@@ -452,7 +452,7 @@ if APP_MODE == ApplicationMode.arq:
 
     from app.services import QdrantService
     from app.services import GraphitiService
-    from app.services import LLMProviderService
+    from app.services import LLMService
     from app.services import FileService
     from app.services import MongooseService
     from app.services import RedisService
@@ -547,7 +547,7 @@ if APP_MODE == ApplicationMode.arq:
     
     @staticmethod
     async def startup(ctx:dict[str,Any]):
-        llMProviderService = Get(LLMProviderService)
+        llMProviderService = Get(LLMService)
         fileService = Get(FileService)
         costService = Get(CostService)
 

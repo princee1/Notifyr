@@ -1,14 +1,13 @@
-from app.definition._tool import Tool,ContextPipelineTool
+from app.definition._tool import ContextPipelineTool
 from app.models.tools_model import CacheToolModel
 from app.services import ConfigService
-from app.services import QdrantService
-from app.services.database.redis_service import RedisService
+from app.services import RedisService
 
 class CacheTool(ContextPipelineTool):
     
-    def __init__(self,configService:ConfigService,qdrantService:QdrantService,redisService:RedisService,config:CacheToolModel):
+    def __init__(self,configService:ConfigService,redisService:RedisService,config:CacheToolModel):
         self.configService = configService
-        self.qdrantService = qdrantService
+        self.redisService = redisService
         self.config = config
 
     async def __call__(self,query:str)->str:

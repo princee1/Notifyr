@@ -17,7 +17,7 @@ from app.manager.broker_manager import Broker
 from app.manager.merchant_manager import Merchant
 from app.models.crawal4ai_model import SchemaExtractionConfig, SeedingURLModel, URLGeneratorModel
 from app.models.vector_model import QdrantEmbedRequestModel
-from app.services.agent.llm_provider_service import LLMProviderService, VerifyLLMConfig
+from app.services.agent.llm_service import LLMService, VerifyLLMConfig
 from app.services.agent.remote_agent_service import RemoteAgentService
 from app.services.config_service import ConfigService
 from app.services.custom_service import CustomService
@@ -168,8 +168,8 @@ class DataIngestRessource(BaseHTTPRessource):
     @UsePipe(QueryToModelPipe('ingestTask'),MerchantPipe)
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
-    @PingService([RedisService,{'cls':LLMProviderService,'kwargs':VerifyLLMConfig()}])
-    @LockService(RedisService,ArqIngestTaskService,LLMProviderService,lockType='reader')
+    @PingService([RedisService,{'cls':LLMService,'kwargs':VerifyLLMConfig()}])
+    @LockService(RedisService,ArqIngestTaskService,LLMService,lockType='reader')
     @UseHandler(UploadFileHandler,ArqHandler,AsyncIOHandler,PydanticHandler,LLMHandler,RedisHandler)
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.FILE_DATA_TASK),UploadFilesGuard(),docling_guard)
     @BaseHTTPRessource.HTTPRoute('/file/',methods=[HTTPMethod.POST],response_model=FileUploadIngestEnqueueResponse)
@@ -227,8 +227,8 @@ class DataIngestRessource(BaseHTTPRessource):
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.CRAWL_DATA_TASK),crawl4ai_guard)
     @UseHandler(ArqHandler,AsyncIOHandler,LLMHandler,RedisHandler,MiniServiceHandler,VaultHandler,GatewayHandler)
-    @PingService([RemoteAgentService,RedisService,{'cls':LLMProviderService,'kwargs':VerifyLLMConfig(crawl=True)}])
-    @LockService(RemoteAgentService,RedisService,ArqIngestTaskService,CustomService,LLMProviderService,lockType='reader')
+    @PingService([RemoteAgentService,RedisService,{'cls':LLMService,'kwargs':VerifyLLMConfig(crawl=True)}])
+    @LockService(RemoteAgentService,RedisService,ArqIngestTaskService,CustomService,LLMService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/web/',methods=[HTTPMethod.POST],response_model=WebCrawlingUriMetadata,mount=False)
     async def ingest_web_crawling(self,request:Request,response:Response,ingestTask:WebCrawlingDataIngestModel, broker:Annotated[Broker,Depends(Broker)],cost:Annotated[CrawlMarkdownIngestCost,Depends(CrawlMarkdownIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],mode:DeleteMode = Depends(delete_mode_query),request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission)):
         """
@@ -290,9 +290,9 @@ class DataIngestRessource(BaseHTTPRessource):
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @UseHandler(ArqHandler,AsyncIOHandler,RedisHandler,LLMHandler,RedisHandler,GatewayHandler)
-    @LockService(RemoteAgentService,RedisService,ArqIngestTaskService,LLMProviderService,lockType='reader')
+    @LockService(RemoteAgentService,RedisService,ArqIngestTaskService,LLMService,lockType='reader')
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.RESEARCH_DATA_TASK),crawl4ai_guard,DataIngestDatabaseGuard(False))
-    @PingService([RemoteAgentService,ArqIngestTaskService,RedisService,{'cls':LLMProviderService,'kwargs':VerifyLLMConfig(research=True)}])
+    @PingService([RemoteAgentService,ArqIngestTaskService,RedisService,{'cls':LLMService,'kwargs':VerifyLLMConfig(research=True)}])
     @BaseHTTPRessource.HTTPRoute('/research/',methods=[HTTPMethod.POST],response_model=ResearchIngestDataResponse,mount=False)
     async def ingest_research(self,request:Request,response:Response,ingestTask:ResearchDataIngestModel, broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[ResearchMarkdownIngestCost,Depends(ResearchMarkdownIngestCost)],mode:DeleteMode = Depends(delete_mode_query), request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
         """
@@ -350,8 +350,8 @@ class DataIngestRessource(BaseHTTPRessource):
         @UsePipe(update_status_upon_no_metadata_pipe,before=False)
         @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
         @UseHandler(ArqHandler,AsyncIOHandler,MiniServiceHandler,VaultHandler,LLMHandler,RedisHandler)
-        @PingService([RedisService,{'cls':LLMProviderService,'kwargs':VerifyLLMConfig(vector=False)}])
-        @LockService(RedisService,ArqIngestTaskService,ProfileService,LLMProviderService,lockType='reader',as_manager=True)
+        @PingService([RedisService,{'cls':LLMService,'kwargs':VerifyLLMConfig(vector=False)}])
+        @LockService(RedisService,ArqIngestTaskService,ProfileService,LLMService,lockType='reader',as_manager=True)
         @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.API_DATA_TASK),DataIngestDatabaseGuard(False))
         @BaseHTTPRessource.HTTPRoute('/api/{profile}/',methods=[HTTPMethod.POST],response_model=APIIngestDataResponse,mount=False)
         async def ingest_api_data(self,profile:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[CrawlMarkdownIngestCost,Depends(CrawlMarkdownIngestCost)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):

@@ -20,7 +20,7 @@ if APP_MODE == ApplicationMode.worker or APP_MODE == ApplicationMode.server:
 
 
     if CAPABILITIES['agentic']:
-        from app.services.agent.llm_provider_service import LLMProviderService
+        from app.services.agent.llm_service import LLMService
         from app.services.agent.remote_agent_service import RemoteAgentService
 
     if CAPABILITIES['twilio']:
@@ -66,7 +66,7 @@ if APP_MODE == ApplicationMode.agentic and CAPABILITIES['agentic']:
     from app.services.database.memcached_service import MemCachedService
     from app.services.vault_service import VaultService
     from app.services.database.mongoose_service import MongooseService
-    from app.services.agent.llm_provider_service import LLMProviderService
+    from app.services.agent.llm_service import LLMService
     from app.services.agent.remote_agent_service import RemoteAgentService
     from app.services.agent.agent_service import AgentService
     from app.services.database.qdrant_service import QdrantService
@@ -83,7 +83,7 @@ if APP_MODE == ApplicationMode.agentic and CAPABILITIES['agentic']:
 if APP_MODE == ApplicationMode.arq and CAPABILITIES['agentic']:
     from app.services.vault_service import VaultService
     from app.services.database.mongoose_service import MongooseService
-    from app.services.agent.llm_provider_service import LLMProviderService
+    from app.services.agent.llm_service import LLMService
     from app.services.database.qdrant_service import QdrantService
     from app.services.database.graphiti_service import GraphitiService
     from app.services.database.redis_service import RedisService

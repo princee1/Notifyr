@@ -4,7 +4,7 @@ from app.classes.chunk import CONTEXT_KEYS, ChunkWrapper, ChunkContext
 from app.classes.embeddings import EmbeddingUsage, EmbeddingWrapper
 from app.definition._service import BaseService, LinkDep, Service
 from app.errors.service_error import BuildFailureError
-from app.services.agent.llm_provider_service import LLMProviderService
+from app.services.agent.llm_service import LLMService
 from app.services.file.file_service import FileService
 from app.services.config_service import ConfigService
 from qdrant_client import AsyncQdrantClient
@@ -23,11 +23,11 @@ ExportContext = Literal['list','dict']
 LLAMA_EMBEDDING_KEYS = ('model','timeout','max_retries','api_base','api_version')
 
 @Service(
-    links=[LinkDep(service=LLMProviderService,to_build=True,build_state=QDRANT_BUILD_STATE)]
+    links=[LinkDep(service=LLMService,to_build=True,build_state=QDRANT_BUILD_STATE)]
 )
 class QdrantService(BaseService):
     
-    def __init__(self,configService:ConfigService,fileService:FileService,vaultService:VaultService,llmProviderService:LLMProviderService):
+    def __init__(self,configService:ConfigService,fileService:FileService,vaultService:VaultService,llmProviderService:LLMService):
         super().__init__()
         self.configService = configService
         self.fileService = fileService

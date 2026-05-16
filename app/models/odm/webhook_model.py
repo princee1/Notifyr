@@ -5,6 +5,7 @@ from app.classes.profiles import BaseProfileModel,ProfilModelValues
 from app.utils.constant import MongooseDBConstant, VaultConstant
 from pydantic import AnyHttpUrl, BaseModel, Field, HttpUrl, SecretStr, field_validator,model_validator, root_validator
 from app.utils.helper import generateId
+from app.models.odm.outbound_model import AuthConfig, HTTPOutboundModel, Method
 
 ######################################################
 # Communication-related Profiles (Root)
@@ -14,10 +15,6 @@ class BatchConfig(TypedDict):
     max_batch:int
     flush_interval:float
     mode:Literal['single','group']
-
-class AuthConfig(TypedDict):
-    username:str
-    password:str
 
 class SignatureConfig(TypedDict):
     secret:Optional[str]= None
@@ -64,25 +61,24 @@ class WebhookProfileModel(BaseProfileModel):
             #######################    HTTPWebhook     #######################
 ################################################################################################
 
-class HTTPWebhookModel(WebhookProfileModel):
+class HTTPWebhookModel(WebhookProfileModel,HTTPOutboundModel):
     signature_config: Optional[SignatureConfig]=None
-    method: Literal["POST", "PUT", "PATCH", "DELETE", "GET"] = "POST"
+    method: Method = "POST"
     encoding:BodyEncoding = 'json'
-    headers: Optional[Dict[str, str]] = Field(default_factory=dict)
-    require_tls: bool = True
-    secret_headers : Optional[Dict[str, str]] = Field(default_factory=dict)
-    params: Optional[Dict[str, str]] = Field(default_factory=dict)
-    auth:Optional[AuthConfig] = None
 
-    _secret_key:ClassVar[list[str]] = ['auth','secret_headers','signature_config','url']
+    _secret_key:ClassVar[List[str]] = ['auth','secret_headers','signature_config','url','secret_params']
 
     @field_validator('url',mode='after')
     def url_validator(cls,url):
         HttpUrl(url)
         return url
+    
+    @field_validator('method',mode='after')
+    def method_validator(cls,m):
+        return m
 
     @model_validator(mode='after')
-    def validate_security(self,)->Self:
+    def validate_signature(self,)->Self:
         if self.signature_config:
             if not self.signature_config["secret"]:
                 self.signature_config["secret"] = generateId(25)
@@ -92,14 +88,7 @@ class HTTPWebhookModel(WebhookProfileModel):
             
             if not self.signature_config["header_name"]:
                 self.signature_config["header_name"] = 'X-Signature'
-
-        if self.auth:
-            if not self.auth['password']:
-                raise ValueError('Auth password is required')
-            
-            if not self.auth['username']:
-                raise ValueError('Auth username is required')
-
+        
         return self
 
 class DiscordWebhookModel(HTTPWebhookModel):

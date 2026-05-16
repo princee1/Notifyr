@@ -14,7 +14,7 @@ from app.errors.service_error import BuildFailureError, BuildOkError, BuildSkipE
 from app.errors.agentic_error import AgenticServerDisconnectedError, AgenticStreamDoneError, AgenticBadResponseError, AgenticGrpcIdleError, AgenticGrpcShutdownError
 from app.grpc.agent_interceptor import  AgentClientInterceptor,AgentClientAsyncInterceptor
 from app.models.odm.agents_model import AgentModel, AgentValidationModel
-from app.services.agent.llm_provider_service import LLMProviderMiniService, LLMProviderService
+from app.services.agent.llm_service import LLMMiniService, LLMService
 from app.services.config_service import ConfigService
 from app.services.vault_service import VaultService
 from app.services.database.mongoose_service import MongooseService
@@ -22,6 +22,7 @@ from app.utils.constant import MongooseDBConstant
 from app.utils.globals import APP_MODE, CAPABILITIES,ApplicationMode
 from app.grpc import agent_pb2_grpc,agent_message
 
+acceptable_service_status = {ServiceStatus.AVAILABLE,ServiceStatus.WORKS_ALMOST_ATT,ServiceStatus.PARTIALLY_AVAILABLE}
 
 CREATE_AGENT_BUILD_STATE = -124
 AVOID_RE_VALIDATE_BUILD_STATE = -100
@@ -61,10 +62,10 @@ class AgenticHTTPState(Enum):
     STREAM_DONE = 'Stream Done'
 
 
-@Service(is_manager=True,links=[LinkDep(LLMProviderService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)])
+@Service(is_manager=True,links=[LinkDep(LLMService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)])
 class RemoteAgentService(BaseMiniServiceManager):
     
-    def __init__(self,configService:ConfigService,mongooseService:MongooseService,vaultService:VaultService,llmProviderService:LLMProviderService):
+    def __init__(self,configService:ConfigService,mongooseService:MongooseService,vaultService:VaultService,llmProviderService:LLMService):
         super().__init__()
 
         self.configService = configService
@@ -331,10 +332,10 @@ class RemoteAgentService(BaseMiniServiceManager):
         return f"{self.configService.AGENTIC_HOST}:8000"
 
 
-@MiniService(links=[LinkDep(LLMProviderMiniService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)])
+@MiniService(links=[LinkDep(LLMMiniService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)])
 class RemoteAgentMiniService(BaseMiniService):
     
-    def __init__(self,configService:ConfigService,remoteAgentService:RemoteAgentService,llmProviderMiniService:LLMProviderMiniService,agentModel:dict):
+    def __init__(self,configService:ConfigService,remoteAgentService:RemoteAgentService,llmProviderMiniService:LLMMiniService,agentModel:dict):
         self.depService = llmProviderMiniService
         super().__init__(llmProviderMiniService, str(agentModel['id']))
         self.configService = configService
@@ -351,14 +352,14 @@ class RemoteAgentMiniService(BaseMiniService):
 
     def SilentFail(func:Callable):
         @functools.wraps(func)
-        def swrapper(self:Self,request:agent_message.PromptRequest|Callable[...,agent_message.PromptRequest]):
-            if self.service_status != ServiceStatus.AVAILABLE:
+        def swrapper(self:Self,request:agent_message.PromptRequest|Callable[...,agent_message.PromptRequest])->agent_message.PromptAnswer:
+            if self.service_status not in acceptable_service_status:
                 return
             return func(self,request) 
 
         @functools.wraps(func)
-        async def awrapper(self:Self,request:agent_message.PromptRequest):
-            if self.service_status != ServiceStatus.AVAILABLE:
+        async def awrapper(self:Self,request:agent_message.PromptRequest)->agent_message.PromptAnswer:
+            if self.service_status not in acceptable_service_status:
                 return
             return await func(self,request)
 

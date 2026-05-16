@@ -96,8 +96,8 @@ class KnowledgeGraphTool(ContextPipelineTool):
 class MemoryTool(KnowledgeGraphTool):
     
     group_type:GroupType = 'contact' 
-    def __init__(self,graphitiService:GraphitiService,configService:ConfigService,customService:CustomService,qdrantService:QdrantService,config:MemoryToolModel):
-        super().__init__(graphitiService,configService,customService,qdrantService,config)
+    def __init__(self,graphitiService:GraphitiService,configService:ConfigService,config:MemoryToolModel):
+        super().__init__(graphitiService,configService,config)
 
     async def __call__(self,query:str,contact_id:str):
         await self.search(query,contact_id)

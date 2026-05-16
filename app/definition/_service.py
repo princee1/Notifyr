@@ -256,7 +256,7 @@ class BaseService():
     def _builder(self,quiet:bool=False,build_state:int = -1,force_sync_verify:bool=False):
         
         is_mini_service =f' Mini service ID: ({self.miniService_id})- ' if isinstance(self,BaseMiniService) else ''
-        reason = 'Service Built'
+        self.reason = 'Service Built'
         try:
             now = dt.datetime.now()
             
@@ -279,12 +279,12 @@ class BaseService():
             if not quiet:
                 self.prettyPrinter.error(f'{is_mini_service}[{now}] {self.__class__.__name__}: {e} ', saveable=True)
             self.service_status = ServiceStatus.NOT_AVAILABLE
-            reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
+            self.reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
         except BuildAbortError as e:
             if not quiet:
                 self.prettyPrinter.error(f'{is_mini_service}[{now}] {self.__class__.__name__}. Aborting the process', saveable=True)
             print(e)
-            reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
+            self.reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
             self.service_status = ServiceStatus.MAJOR_SYSTEM_FAILURE
             if self.CONTAINER_LIFECYCLE_SCOPE:
                 exit(-1)
@@ -293,7 +293,7 @@ class BaseService():
             if not quiet:
                 self.prettyPrinter.message(f'{is_mini_service}[{now}] {self.__class__.__name__}: {e}',saveable=True)
             
-            reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
+            self.reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
             self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
 
         except BuildWarningError as e:
@@ -302,13 +302,13 @@ class BaseService():
                 self.prettyPrinter.warning(f'{is_mini_service}[{now}] {self.__class__.__name__}: {e}', saveable=True)
                 
             self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
-            reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
+            self.reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
         
         except BuildSkipError as e: # TODO change color
             if not quiet:
                 self.prettyPrinter.info(f'{is_mini_service}[{now}] {self.__class__.__name__}: {e}', saveable=True)
             self.service_status = ServiceStatus.WORKS_ALMOST_ATT
-            reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
+            self.reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
             pass
 
         except BuildNotImplementedError as e:
@@ -316,20 +316,18 @@ class BaseService():
                 self.prettyPrinter.warning(f'{is_mini_service}[{now}] {self.__class__.__name__}: Service Not Implemented Yet', saveable=True)
                 
             self.service_status = ServiceStatus.NOT_AVAILABLE
-            reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
+            self.reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
 
         except Exception as e:
             print(e)
             print(e.__class__)
             if not quiet:
                 self.prettyPrinter.error(f'{is_mini_service}[{now}] {self.__class__.__name__}. Aborting the process', saveable=True)
-            reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
+            self.reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
             self.service_status = ServiceStatus.MAJOR_SYSTEM_FAILURE
             traceback.print_exc()
             if self.CONTAINER_LIFECYCLE_SCOPE:
                 exit(-1)
-        finally:
-            self.report(reason=reason,state_value=build_state)
 
     def _destroyer(self,quiet:bool=False,destroy_state:int = DEFAULT_DESTROY_STATE):
         try:
@@ -568,7 +566,7 @@ class LinkDep:
         )
     
     @staticmethod
-    def dep_liaison(cls,links:Self):
+    def dep_liaison(cls,links:list['LinkDep']):
             liaison = {}
             LiaisonDependency[cls.__name__] = liaison
             for l in links:

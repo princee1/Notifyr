@@ -1,6 +1,8 @@
 from app.classes.qdrant import QdrantFilterModel, QdrantSearchParamsModel
 from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
-from typing import Any, List, Optional, Self, Union
+from typing import Any, List, Literal, Optional, Self, Union
+
+from app.classes.url import URLMappingModel
 
 
 ####################################################################################################################################
@@ -68,7 +70,17 @@ class KnowledgeGraphToolModel(MemoryToolModel):
 ####################################################################################################################################
 
 class APIToolModel(ToolModel):
-    ...
+    url: URLMappingModel
+    outbound:str
+    body:Optional[str] = None
+    res:Optional[str] = None
+    res_format:Literal['json','text']='json'
+
+    @model_validator(mode='after')
+    def validate_format(self)->Self:
+        if self.res and self.res_format == 'text':
+            raise ValueError("We cannot parse into a custom model if the format is 'text'")
+        return self
 
 class APIControlModel(APIToolModel):
     ...

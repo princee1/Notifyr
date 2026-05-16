@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Literal, get_args
 from itertools import product
 
+from app.utils.helper import parseToBool
+
 JSONLD_PATTERN = re.compile(
     r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
     re.DOTALL | re.IGNORECASE
@@ -222,6 +224,22 @@ class JSONLDFilterGroup(BaseModel):
 # ---------------------------
 # URL generator
 # ---------------------------
+class URLParamDesc(BaseModel):
+    """Describes a parameter - can be a path or query parameter"""
+    description:str = Field(max_length=200,min_length=10)
+    type:Literal['string','number','bool']
+
+    def validate_param(self,value:Any):
+        match self.type:
+            case 'string': 
+                if not isinstance(value,str): raise ValueError(f'Expected string value, got {type(value).__name__}')
+            case 'number':
+                if not isinstance(value,(int,float)): raise ValueError(f'Expected number value, got {type(value).__name__}')
+            case 'bool':
+                try:
+                    parseToBool(value) if isinstance(value,str) else bool(value)
+                except:
+                    raise ValueError(f'Cannot parse {value} as boolean')
 
 class URLParam(BaseModel):
     values: Union[List[str|int|bool], Tuple[int,int,int]]  # List or range tuple (start, step, end)
@@ -283,17 +301,50 @@ class URLParam(BaseModel):
 
 class URLConfigModel(BaseModel):
     base_url: str
-    path_params: Dict[str, URLParam] = {}
-    query_params: Dict[str, URLParam] = {}
+    path_params: Dict[str, URLParam] = Field(default_factory=dict)
+    query_params: Dict[str, URLParam] = Field(default_factory=dict)
 
-    @field_validator('path_params', mode='after')
-    def filter_invalid_path_params(cls, v, values):
+    @model_validator(mode='after')
+    def filter_invalid_params(self:Self)->Self:
         """
         Remove path params that are not in the base URL placeholders.
         """
-        base_url = values.get('base_url', '')
-        valid_keys = re.findall(r"\{\{(.*?)\}\}", base_url)
-        return {k: val for k, val in v.items() if k in valid_keys}
+        valid_keys = set(re.findall(r"\{\{(.*?)\}\}", self.base_url))
+        self.path_params = {k: val for k, val in self.path_params.items() if k in valid_keys}
+        self.query_params = {k: val for k, val in self.path_params.items() if k in valid_keys}
+        return self
+
+class URLMappingModel(URLConfigModel):
+    """Validates and builds URLs from regex patterns with parameter mappings"""
+    path_params: Dict[str, URLParamDesc] = Field(default_factory=dict)
+    query_params: Dict[str, URLParamDesc] = Field(default_factory=dict)
+
+    def build_url(self,path:dict[str,Any],query:dict[str,Any]) -> str:
+        """Build the actual URL by replacing pattern variables"""
+        if len(path) != len(self.path_params):
+            raise ValueError(f'Expected {len(self.path_params)} path parameters, got {len(path)}')
+        
+        if len(query) != len(self.query_params):
+            raise ValueError(f'Expected {len(self.query_params)} path parameters, got {len(query)}')
+
+        # Validate path parameters
+        for key, value in path.items():
+            if key not in self.path_params:
+                raise ValueError(f'Unexpected path parameter: {key}')
+            self.path_params[key].validate_param(value)
+        
+        # Validate query parameters
+        for key, value in query.items():
+            if key not in self.query_params:
+                raise ValueError(f'Unexpected query parameter: {key}')
+            self.query_params[key].validate_param(value)
+        
+        # Build URL by replacing path parameters
+        url = self.base_url
+        for key, value in path.items():
+            url = url.replace(f'{{{{{key}}}}}', str(value))
+        
+        return url
 
 def extract_jsonld(html: str):
     """Extract and flatten JSON-LD objects from HTML."""

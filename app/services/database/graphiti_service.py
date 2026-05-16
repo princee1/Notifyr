@@ -5,7 +5,7 @@ from app.classes.chunk import ChunkWrapper
 from app.classes.nodes import SourceDescription
 from app.definition._service import DEFAULT_BUILD_STATE, BaseService, LinkDep, Service, ServiceStatus
 from app.errors.service_error import BuildError, BuildFailureError, BuildNotImplementedError
-from app.services.agent.llm_provider_service import LLMProviderMiniService, LLMProviderService
+from app.services.agent.llm_service import LLMMiniService, LLMService
 from app.services.config_service import ConfigService, UvicornWorkerService
 from app.services.custom_service import CustomService
 from app.services.database.base_db_service import TempCredentialsDatabaseService
@@ -57,11 +57,11 @@ GRAPHITI_INIT_KEY= 'graphiti'
 GroupType = Literal['domain','contact']
 
 @Service(
-    links=[LinkDep(service=LLMProviderService,to_build=True,build_state=GRAPHITI_BUILD_STATE)]
+    links=[LinkDep(service=LLMService,to_build=True,build_state=GRAPHITI_BUILD_STATE)]
 )
 class GraphitiService(TempCredentialsDatabaseService):
       
-    def __init__(self,configService:ConfigService,redisService:RedisService,uvicornWorkerService:UvicornWorkerService,vaultService:VaultService,mongooseService:MongooseService,llmProviderService:LLMProviderService,customService:CustomService,fileService:FileService):
+    def __init__(self,configService:ConfigService,redisService:RedisService,uvicornWorkerService:UvicornWorkerService,vaultService:VaultService,mongooseService:MongooseService,llmProviderService:LLMService,customService:CustomService,fileService:FileService):
         super().__init__(configService,fileService,vaultService,VaultTTLSyncConstant.VAULT_TOKEN_TTL)
         self.uvicornWorkerService = uvicornWorkerService
         self.mongooseService = mongooseService
@@ -355,7 +355,7 @@ class GraphitiService(TempCredentialsDatabaseService):
 
         return llm_client_provider,embedding_provider,reranker_provider
 
-    def _initialize_graphiti_llm(self,llm_client_provider:LLMProviderMiniService,embedding_provider:LLMProviderMiniService,reranker_provider:LLMProviderMiniService):
+    def _initialize_graphiti_llm(self,llm_client_provider:LLMMiniService,embedding_provider:LLMMiniService,reranker_provider:LLMMiniService):
     
         llm_config =LLMConfig(
                         api_key=llm_client_provider.depService.credentials.to_plain()['api_key'],

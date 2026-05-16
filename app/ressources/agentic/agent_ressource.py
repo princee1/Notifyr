@@ -19,7 +19,7 @@ from app.depends.dependencies import get_auth_permission
 from app.manager.merchant_manager import Merchant
 from app.models.odm.agents_model import AgentModel
 from app.services  import MongooseService
-from app.services.agent.llm_provider_service import LLMProviderService
+from app.services.agent.llm_service import LLMService
 from app.services.agent.remote_agent_service import RemoteAgentMiniService
 from app.services.custom_service import CustomService
 from app.utils.constant import CostConstant, LLMProviderConstant
@@ -66,7 +66,7 @@ class AgentsRessource(BaseHTTPRessource):
     @UseGuard(LLMProviderGuard())
     @UseInterceptor(DataCostInterceptor(CostConstant.AGENT_CREDIT))
     @UseHandler(LLMHandler,RedisHandler,CostHandler)
-    @LockService(LLMProviderService,lockType='reader',as_manager=False)
+    @LockService(LLMService,lockType='reader',as_manager=False)
     @UsePipe(DocumentFriendlyPipe,before=False)
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
@@ -87,7 +87,7 @@ class AgentsRessource(BaseHTTPRessource):
     @UseRoles([Role.PUBLIC])        
     @UsePermission(AgentPermission)
     @UsePipe(DocumentFriendlyPipe,before=False)
-    @LockService(LLMProviderService,lockType='reader',as_manager=False)
+    @LockService(LLMService,lockType='reader',as_manager=False)
     @BaseHTTPRessource.HTTPRoute('/{agent}/',methods=[HTTPMethod.GET])
     async def read_agent(self,agent:str,request:Request,response:Response,profile:str=Depends(get_agent),authPermission:AuthPermission=Depends(get_auth_permission)):
         return  await self.mongooseService.get(AgentModel,agent,True)
@@ -97,7 +97,7 @@ class AgentsRessource(BaseHTTPRessource):
     @UsePermission(AdminPermission)
     @UseHandler(CostHandler,RedisHandler)
     @UsePipe(DocumentFriendlyPipe,before=False)
-    @LockService(LLMProviderService,lockType='reader',as_manager=False)
+    @LockService(LLMService,lockType='reader',as_manager=False)
     @UseInterceptor(DataCostInterceptor(CostConstant.AGENT_CREDIT,'refund'))
     @BaseHTTPRessource.HTTPRoute('/s/{agent}/',methods=[HTTPMethod.DELETE])
     async def delete_agent(self,agent:str,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],profile:str=Depends(get_agent),authPermission:AuthPermission=Depends(get_auth_permission)):
@@ -116,7 +116,7 @@ class AgentsRessource(BaseHTTPRessource):
     @UsePermission(AdminPermission)
     @UseHandler(PydanticHandler,LLMHandler)
     @UsePipe(DocumentFriendlyPipe,before=False)
-    @LockService(LLMProviderService,lockType='reader',as_manager=False)
+    @LockService(LLMService,lockType='reader',as_manager=False)
     @BaseHTTPRessource.HTTPRoute('/{agent}/',methods=[HTTPMethod.PUT])
     async def update_agent(self,agent:str,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],body: dict = Body(...),profile:str=Depends(get_agent),authPermission:AuthPermission=Depends(get_auth_permission)):
         
@@ -135,7 +135,7 @@ class AgentsRessource(BaseHTTPRessource):
 
     @UseRoles([Role.PUBLIC])        
     @UsePipe(DocumentFriendlyPipe,before=False)
-    @LockService(LLMProviderService,lockType='reader',as_manager=False)
+    @LockService(LLMService,lockType='reader',as_manager=False)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.GET])
     async def get_all_agent(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
         ...
@@ -148,7 +148,7 @@ class AgentsRessource(BaseHTTPRessource):
     @UsePipe(MiniServiceInjectorPipe(RemoteAgentService,'agent'))
     @PingService([{'cls':RemoteAgentService,'kwargs':{'grpc':True}}],is_manager=True,infinite_wait=True)
     @LockService(RemoteAgentService,lockType='reader',as_manager=True,miniLockType='reader')
-    @LockService(LLMProviderService,lockType='reader',as_manager=False)
+    @LockService(LLMService,lockType='reader',as_manager=False)
     @BaseHTTPRessource.HTTPRoute('/prompt/{agent}/',methods=[HTTPMethod.POST],mount=False)
     async def prompt_playground(self,request:Request,agent:Annotated[RemoteAgentMiniService,Depends(get_agent)], response:Response,profile:str=Depends(get_agent), authPermission:AuthPermission= Depends(get_auth_permission)):
         stream = False

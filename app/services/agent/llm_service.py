@@ -69,7 +69,7 @@ PROVIDERS = {
 LLM_VALIDATION_TIMEOUT=5
 
 @MiniService(links=[LinkDep(ProfileMiniService,to_build=True)])
-class LLMProviderMiniService(BaseMiniService):
+class LLMMiniService(BaseMiniService):
     
     def __init__(self,configService:ConfigService,profileMiniService:ProfileMiniService[LLMProfileModel]):
         self.depService = profileMiniService
@@ -197,7 +197,7 @@ class LLMProviderMiniService(BaseMiniService):
                                       )
 
 @Service(is_manager=True,links=[LinkDep(ProfileService,to_build=True)])
-class LLMProviderService(BaseMiniServiceManager):
+class LLMService(BaseMiniServiceManager):
     
     def __init__(self,profileService:ProfileService,loggerService:LoggerService,configService:ConfigService):
         super().__init__()
@@ -205,7 +205,7 @@ class LLMProviderService(BaseMiniServiceManager):
         self.configService = configService
         self.loggerService = loggerService
 
-        self.MiniServiceStore = MiniServiceStore[LLMProviderMiniService](self.name)
+        self.MiniServiceStore = MiniServiceStore[LLMMiniService](self.name)
 
     def build(self, build_state=...):
 
@@ -229,7 +229,7 @@ class LLMProviderService(BaseMiniServiceManager):
         for i,p in self.profileService.MiniServiceStore:
             if p.model.__class__ != LLMProfileModel:
                 continue
-            llm_provider = LLMProviderMiniService(
+            llm_provider = LLMMiniService(
                 self.configService,
                 p
             )

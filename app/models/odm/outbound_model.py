@@ -1,40 +1,47 @@
-from .webhook_model import *
+from typing import Self, TypedDict,Optional,Dict,List,Literal,ClassVar
+from pydantic import Field, HttpUrl,field_validator,model_validator
+from app.classes.profiles import BaseProfileModel, ProfilModelValues
+
+Method = Literal["POST", "PUT", "PATCH", "DELETE", "GET"] 
+
+class AuthConfig(TypedDict):
+    username:str
+    password:str
+
+class OutboundCredentials(TypedDict):
+    auth:AuthConfig
+    secret_headers:dict
+    secret_params:dict
+    url:Optional[str]
 
 class HTTPOutboundModel(BaseProfileModel):
-    signature_config: Optional[SignatureConfig]=None
-    method: Literal["POST", "PUT", "PATCH", "DELETE", "GET"] = "POST"
-    encoding:BodyEncoding = 'json'
-    headers: Optional[Dict[str, str]] = Field(default_factory=dict)
+    method: List[Method] = Field(default_factory=list)
+    url: str = Field(max_length=500)
     require_tls: bool = True
+    headers: Optional[Dict[str, str]] = Field(default_factory=dict)
     secret_headers : Optional[Dict[str, str]] = Field(default_factory=dict)
     params: Optional[Dict[str, str]] = Field(default_factory=dict)
-    url: str = Field(max_length=500)
+    secret_params: Optional[Dict[str, str]] = Field(default_factory=dict)
     auth:Optional[AuthConfig] = None
 
-    _secret_key:ClassVar[list[str]] = ['auth','secret_headers','signature_config','url']
+    _secret_key:ClassVar[list[str]] = ['auth','secret_headers','url','secret_params']
 
     @field_validator('url',mode='after')
     def url_validator(cls,url):
         HttpUrl(url)
         return url
 
+    @field_validator('method',mode='after')
+    def method_validator(cls,m):
+        return list(set(m))
+
     @model_validator(mode='after')
-    def validate_security(self,)->Self:
-        if self.signature_config:
-            if not self.signature_config["secret"]:
-                self.signature_config["secret"] = generateId(25)
-
-            if not self.signature_config["algo"]:
-                self.signature_config['algo'] = 'sha256'
-            
-            if not self.signature_config["header_name"]:
-                self.signature_config["header_name"] = 'X-Signature'
-
+    def validate_auth(self,)->Self:
         if self.auth:
-            if not self.auth['password']:
+            if not self.auth.get('password',None):
                 raise ValueError('Auth password is required')
             
-            if not self.auth['username']:
+            if not self.auth.get('password'):
                 raise ValueError('Auth username is required')
 
         return self

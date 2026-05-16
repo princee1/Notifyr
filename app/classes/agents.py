@@ -14,7 +14,7 @@ def ChatAgentFactory(agentModel:AgentModel,llmModel:LLMProfileModel,credentials:
         api_key =lambda: credentials.to_plain()
 
         max_output_token = llmModel.max_output_tokens
-        max_tokens = agentModel.max_tokens
+        max_tokens = agentModel.generation.max_tokens
         if max_output_token:
             max_tokens = max_output_token
 
@@ -24,23 +24,23 @@ def ChatAgentFactory(agentModel:AgentModel,llmModel:LLMProfileModel,credentials:
                 return ChatAnthropic(
                     streaming=True,
                     model_name=agentModel.model,
-                    max_retries=agentModel.max_retries,
-                    temperature=agentModel.temperature,
-                    top_p=agentModel.top_p,
-                    top_k=agentModel.top_k,
-                    timeout=agentModel.timeout,
-                    effort=agentModel.effort,
-                    anthropic_proxy=agentModel.proxy_url,
+                    max_retries=agentModel.generation.max_retries,
+                    temperature=agentModel.generation.temperature,
+                    top_p=agentModel.generation.top_p,
+                    top_k=agentModel.generation.top_k,
+                    timeout=agentModel.generation.timeout,
+                    effort=agentModel.generation.effort,
+                    anthropic_proxy=agentModel.generation.proxy_url,
                     base_url=llmModel.base_url
                 )
             
             case 'cohere': 
                 return ChatCohere(
                     streaming=True,
-                    temperature=agentModel.temperature,
+                    temperature=agentModel.generation.temperature,
                     model=agentModel.model,
                     cohere_api_key=SecretStr(api_key()),
-                    timeout_seconds=agentModel.timeout, 
+                    timeout_seconds=agentModel.generation.timeout, 
                     base_url=llmModel.base_url
 
                 )
@@ -60,31 +60,31 @@ def ChatAgentFactory(agentModel:AgentModel,llmModel:LLMProfileModel,credentials:
                     max_completion_tokens=max_tokens,
                     api_key=api_key,
                     base_url= base_url,
-                    temperature=agentModel.temperature,
-                    max_retries=agentModel.max_retries,
-                    timeout=agentModel.timeout,
-                    top_p=agentModel.top_p,
+                    temperature=agentModel.generation.temperature,
+                    max_retries=agentModel.generation.max_retries,
+                    timeout=agentModel.generation.timeout,
+                    top_p=agentModel.generation.top_p,
                     model=agentModel.model,
-                    frequency_penalty=agentModel.frequency_penalty,
-                    presence_penalty=agentModel.presence_penalty,
-                    n=agentModel.n,
-                    reasoning_effort=agentModel.effort,
-                    openai_proxy=agentModel.proxy_url
+                    frequency_penalty=agentModel.generation.frequency_penalty,
+                    presence_penalty=agentModel.generation.presence_penalty,
+                    n=agentModel.generation.n,
+                    reasoning_effort=agentModel.generation.effort,
+                    openai_proxy=agentModel.generation.proxy_url
             )
             
             case 'groq': 
                 return ChatGroq(
                     streaming=True,
                     max_tokens=max_tokens,
-                    max_retries=agentModel.max_retries,
-                    timeout=agentModel.timeout,
-                    n=agentModel.n,
+                    max_retries=agentModel.generation.max_retries,
+                    timeout=agentModel.generation.timeout,
+                    n=agentModel.generation.n,
                     api_key=api_key,
                     model=agentModel.model,
-                    temperature=agentModel.temperature,
-                    groq_proxy=agentModel.proxy_url,
-                    reasoning_effort=agentModel.effort,
-                    reasoning_format=agentModel.reasoning_format,
+                    temperature=agentModel.generation.temperature,
+                    groq_proxy=agentModel.generation.proxy_url,
+                    reasoning_effort=agentModel.generation.effort,
+                    reasoning_format=agentModel.generation.reasoning_format,
                     base_url=llmModel.base_url
                 )
             

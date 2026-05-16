@@ -1,34 +1,119 @@
+import asyncio
+import hashlib
+import hmac
 import json
 from typing import Any, Dict, Optional, TypedDict
+import aiohttp
 from aiohttp_retry import Tuple
-from app.definition._service import BaseMiniService, MiniService
+import requests
+from app.definition._service import BaseMiniService, LinkDep, MiniService
 from app.interface.webhook_adapter import WebhookAdapterInterface
+from app.models.odm.outbound_model import AuthConfig
 from app.services.config_service import ConfigService
 from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileMiniService
-from app.services.mini.outbound.http_outbound_service import HTTPOutboundMiniService
-from app.models.odm.webhook_model import DiscordWebhookModel, MakeHTTPWebhookModel, SlackHTTPWebhookModel, ZapierHTTPWebhookModel
+from app.models.odm.webhook_model import DiscordWebhookModel, HTTPWebhookModel, MakeHTTPWebhookModel, SignatureConfig, SlackHTTPWebhookModel, ZapierHTTPWebhookModel
 from discord_webhook import DiscordEmbed,DiscordWebhook,AsyncDiscordWebhook
 
 
-@MiniService()
-class HTTPWebhookMiniService(HTTPOutboundMiniService,WebhookAdapterInterface):
-    def __init__(self, profileMiniService, configService:ConfigService, redisService:RedisService):
-        super().__init__(profileMiniService, configService, redisService)
+@MiniService(links=[LinkDep(ProfileMiniService,build_follow_dep=True)])
+class HTTPWebhookMiniService(BaseMiniService,WebhookAdapterInterface):
+    def __init__(self, profileMiniService:ProfileMiniService[HTTPWebhookModel], configService:ConfigService, redisService:RedisService):
+        self.depService = profileMiniService
+        super().__init__(profileMiniService,None)
+        self.configService = configService
+        self.redisService = redisService        
         WebhookAdapterInterface.__init__(self)
 
     @WebhookAdapterInterface.batch
     @WebhookAdapterInterface.retry
     async def deliver_async(self, payload:Any, event_type:str = 'event'):
-        return await super().deliver_async(payload, event_type)
+        method, headers, request_kwargs, auth, url = self.prepare_request(payload, event_type)
+        webhook_handler = self.client_async.request(method, url,auth=auth,headers=headers,params=self.model.params,timeout=self.model.timeout, **request_kwargs)
+        if self.model.send_and_wait:
+            resp = await webhook_handler
+            return resp.status, resp.content
+        
+        asyncio.create_task(webhook_handler)
+        return 201,{}
     
     @WebhookAdapterInterface.retry
     async def deliver(self, payload:str, event_type:str = 'event'):
-        return super().deliver(payload, event_type)
+        method, headers, request_kwargs, auth, url = self.prepare_request(payload, event_type)
+
+        resp = self.client.request(method, url, auth=auth, headers=headers, params=self.model.params, timeout=self.model.timeout, **request_kwargs)
+        return resp.status_code, resp.content
     
     @staticmethod
     def generate_delivery_id():
         return WebhookAdapterInterface.generate_delivery_id()
+    
+    @property
+    def model(self):
+        return self.depService.model
+
+    async def close(self):
+        await self.client_async.close()
+
+    def build(self, build_state = ...):
+        self.client_async = aiohttp.ClientSession(timeout=self.model.timeout,)
+        self.client = requests.Session()
+        
+    @staticmethod
+    def json_bytes(payload: Any) -> bytes:
+        return json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    
+    @staticmethod
+    def hmac_signature(secret: str, body: bytes,algo:str) -> str:
+        mac = hmac.new(secret.encode(), body, hashlib.sha256)
+        return "sha256=" + mac.hexdigest() 
+
+    def set_encoding_data(self,payload,body_bytes,headers:dict):
+        """Return kwargs for httpx/requests request depending on encoding. May mutate headers for content-type."""
+        if self.model.encoding == "json":
+            return {"content": body_bytes}
+        elif self.model.encoding == "form":
+            # for form encoding prefer sending data when payload is a dict
+            headers.setdefault("Content-Type", "application/x-www-form-urlencoded")
+            if isinstance(payload, dict):
+                return {"data": payload}
+            return {"content": body_bytes}
+        elif self.model.encoding == "raw":
+            return {"content": body_bytes}
+        else:
+            return {"content": body_bytes}
+     
+    def sign(self,headers:dict,body_bytes,cred:dict):
+        config:SignatureConfig = cred.get('signature_config',None)
+        if not config:
+            return 
+        sig_header = config.get('header_name') or 'X-Webhook-Signature'
+        secrets = config.get('secret')
+        algo = config.get("algo")
+        headers[sig_header] = self.hmac_signature(secrets, body_bytes,algo)
+    
+    def prepare_request(self, payload, event_type):
+        delivery_id: str = self.generate_delivery_id()
+        body_bytes = self.json_bytes(payload)
+        method = self.model.method
+
+        headers = {"Content-Type": "application/json","X-Event-Type": event_type,}
+        
+        if delivery_id:
+            headers.update({"X-Delivery-Id": delivery_id})
+
+        cred= self.depService.credentials.to_plain()
+
+        headers.update(self.model.headers)
+        headers.update(cred.get('secret_headers',{}))
+
+        self.sign(headers,body_bytes,cred)
+        request_kwargs = self.set_encoding_data(payload,body_bytes,headers)
+
+        auth:AuthConfig = cred.get('auth',None)
+        auth = tuple(auth.values()) if auth else None
+        url = cred['url']
+        return method,headers,request_kwargs,auth,url
 
 
 @MiniService()

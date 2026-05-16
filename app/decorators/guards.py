@@ -40,7 +40,7 @@ from app.errors.upload_error import (
     InvalidExtensionError,
 )
 from app.utils.globals import CAPABILITIES
-from app.services.agent.llm_provider_service import LLMProviderService
+from app.services.agent.llm_service import LLMService
 
 class CeleryTaskGuard(Guard):
     def __init__(self,task_names:list[str],task_types:list[TaskType]=[]):
@@ -414,7 +414,7 @@ class LLMProviderGuard(Guard):
         super().__init__()
         self.mongooseService = Get(MongooseService)
         self.configService = Get(ConfigService)
-        self.llmProviderService = Get(LLMProviderService)
+        self.llmProviderService = Get(LLMService)
 
     async def guard(self, agentModel:AgentModel=None):
 

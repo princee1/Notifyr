@@ -413,7 +413,7 @@ def unflattened_dict(flattened_dict: dict[str, Any], separator: str = DICT_SEP) 
 
 SliceMode = Literal['include','exclude']
 
-def slice_dict(data:dict,keys:Iterable[str],mode:SliceMode):
+def slice_dict(data:dict,keys:Iterable[str],mode:SliceMode,copy=False):
     if not isinstance(keys,set):
         keys = set(keys)
     
@@ -425,6 +425,9 @@ def slice_dict(data:dict,keys:Iterable[str],mode:SliceMode):
 
         if (k in keys) == (mode == 'include'):
             temp[k] = data[k]
+    
+    if copy:
+        return temp
         
     data.clear()
     data.update(temp)
