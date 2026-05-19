@@ -19,7 +19,7 @@ from app.services.config_service import ConfigService
 from app.services.cost_service import CostService
 from app.services.vault_service import VaultService
 from app.services.database.mongoose_service import MongooseService
-from app.utils.constant import MongooseDBConstant
+from app.utils.constant import CostConstant, MongooseDBConstant
 from app.utils.globals import APP_MODE, CAPABILITIES,ApplicationMode
 from app.grpc import agent_pb2_grpc,agent_message
 from app.classes import conversation
@@ -352,6 +352,7 @@ class RemoteAgentMiniService(BaseMiniService):
             async def awrapper(self:Self,request:agent_message.PromptRequest)->agent_message.PromptAnswer:
                 if self.service_status not in acceptable_service_status:
                     return
+                await self.costService.check_enough_credits(CostConstant.TOKEN_CREDIT,max(self.agent_model.generation.max_tokens or 15600*3,self.depService.model.max_output_tokens or 15600*3))
                 return await func(self,request)
 
             return awrapper if asyncio.iscoroutinefunction(func) else swrapper
@@ -400,8 +401,10 @@ class RemoteAgentMiniService(BaseMiniService):
 
         @SilentFail('direct')
         async def Completion(self,request:agent_message.PromptRequest):
-            ...
-        
+            request = request.to_proto()
+            reply = await self.remoteAgentService.stub.Completion(request)
+            return agent_message.PromptAnswer.from_proto(reply)
+
         @SilentFail('generator')
         async def S2SBatch(self,request_generator:AsyncGenerator):
             ...

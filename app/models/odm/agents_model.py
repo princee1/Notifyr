@@ -47,7 +47,7 @@ class RateLimiterConfig(BaseModel):
 
 class AvatarConfig(BaseModel):
     type:Literal['raw','icon','url'] = 'icon'
-    value: str
+    value: str = ''
 
 class AgentModel(BaseDocument):
     

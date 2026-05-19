@@ -191,20 +191,22 @@ class AgentMiniService(BaseMiniService):
         config = {"configurable": {"thread_id": thread,"checkpoint_ns": user}} 
 
         async for chunk in self.agent.astream_events(message,config):
-            answer = conversation.Answer()
             response = chunk['data']
+            answer = conversation.Answer()
+            answer['reply_id'] = response.id
+
             match chunk['event']:
                 case 'on_chat_model_stream':
-                    answer['reply_id'] = response.id
                     answer['reasoning'] = [b for b in response.content_blocks if b["type"] == "reasoning"]
                     answer['text'] = response.text
                     answer['tool_calling'] = [slice_dict(tc,conversation.TOOL_CALLING_KEYS,'include') for tc in response.tool_calls]
                     answer['invalid_tool_calling'] = [slice_dict(tc,conversation.invalid_tool_calling_keys,'include') for tc in response.invalid_tool_calls]
-
                 case 'on_chat_model_end':
-                    ...
+                    if (usage:= response.usage_metadata):
+                        answer['token'] = conversation.Token(input_token=usage.get('input_tokens',0),output_token=usage.get('output_tokens',0))
                 case _:
                     ...
+
             yield answer
         
     async def completion(self,input:str,content:list=[]):
@@ -278,12 +280,11 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
             contents = [conversation.ContentBlock.exports(c.mode,c.type,c.value,c.mime) for c in request.blocks]
             answer = await agent.invoke(request.thread,request.user,request.prompt,contents,request.mess_id)
             self.purchase_token(request_id=answer['id'],issuer=request.user,agent=request.agent,**answer['token'])
-            answer = agent_message.PromptAnswer(
+            return agent_message.PromptAnswer(
                 agent=request.agent,
                 reason =reason,
                 **slice_dict(answer,answer_exclude,'exclude')
             ).to_proto()
-            return answer
 
     @ErrorHandler
     async def PromptStream(self, request, context):
@@ -292,14 +293,13 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
             reason:str|None = agent._verify_status()
             contents = [conversation.ContentBlock.exports(c.mode,c.type,c.value,c.mime) for c in request.blocks]
             async for answer in agent.stream(request.thread,request.user,request.prompt,contents,request.mess_id):
-                answer = agent_message.PromptAnswer(
+                yield agent_message.PromptAnswer(
                     agent=request.agent,
                     reason =reason,
                     **slice_dict(answer,answer_exclude,'exclude')
                 ).to_proto()
-                yield answer
                 asyncio.sleep(0.2)
-            self.purchase_token(request_id=answer['id'],issuer=request.user,agent=request.agent,**answer['token'])
+            self.purchase_token(request_id=answer['reply_id'],issuer=request.user,agent=request.agent,**answer['token'])
 
     @ErrorHandler
     async def StreamPrompt(self, request_iterator, context):
@@ -311,13 +311,12 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
         async with self.MiniServiceStore.lock(request.agent) as agent:
             reason:str|None = agent._verify_status()
             answer = await agent.invoke(request.thread,request.user,prompt,mess_id=request.mess_id)
-            self.purchase_token(request_id=answer['id'],issuer=request.user,agent=request.agent,**answer['token'])
-            answer = agent_message.PromptAnswer(
+            self.purchase_token(request_id=answer['reply_id'],issuer=request.user,agent=request.agent,**answer['token'])
+            return agent_message.PromptAnswer(
                 agent=request.agent,
                 reason =reason,
                 **slice_dict(answer,answer_exclude,'exclude')
             ).to_proto()
-            return answer
 
     @ErrorHandler
     async def S2SPrompt(self, request_iterator, context):
@@ -326,14 +325,14 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
             async with self.MiniServiceStore.lock(request.agent) as agent:
                     reason:str|None = agent._verify_status()
                     async for answer in agent.stream(request.thread,request.user,request.prompt,mess_id=request.mess_id):
-                        answer = agent_message.PromptAnswer(
+                        yield agent_message.PromptAnswer(
                             agent=request.agent,
                             reason = reason,
                             **slice_dict(answer,answer_exclude,'exclude')
                         ).to_proto()
-                        yield answer
+                        
                         asyncio.sleep(0.1)
-                    self.purchase_token(request_id=answer['id'],issuer=request.user,agent=request.agent,**answer['token'])
+                    self.purchase_token(request_id=answer['reply_id'],issuer=request.user,agent=request.agent,**answer['token'])
 
     @ErrorHandler
     async def Completion(self,request,context):
@@ -342,8 +341,12 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
             reason:str|None = service._verify_status()
             contents = conversation.ContentBlock.exports()
             answer = await service.completion(request.prompt,contents,mess_id=request.mess_id)
-            reply = agent_message.PromptAnswer().to_proto()      
-            self.purchase_token()
+            reply = agent_message.PromptAnswer(
+                agent=request.agent,
+                reason = reason,
+                **slice_dict(answer,answer_exclude,'exclude')
+            ).to_proto()      
+            self.purchase_token(request_id=answer['reply_id'],issuer=request.user,agent=request.agent,**answer['token'])
             return reply
 
     @Mock()

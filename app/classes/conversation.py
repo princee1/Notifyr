@@ -107,8 +107,6 @@ class Token(TypedDict):
 class Answer(TypedDict):
     text:str
     reply_id:str
-    agent:str
-
     reasoning:List[Reasoning]
     tool_calling:List[ToolCalling]
     invalid_tool_calling:List[InvalidToolCalling]
