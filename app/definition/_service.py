@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from enum import Enum
 import functools
@@ -410,6 +411,8 @@ class BaseMiniService(BaseService,):
 # Define a generic type variable for the model
 TMS = TypeVar("TMS",bound=BaseMiniService)
 
+ServiceLockType = Literal['reader', 'writer'] 
+
 class MiniServiceStore(Generic[TMS]):
     
     def __init__(self,className:str):
@@ -445,6 +448,21 @@ class MiniServiceStore(Generic[TMS]):
             else:
                 raise False
         return True
+    
+    @asynccontextmanager
+    async def lock(self,miniService_id: str | Any, mode:ServiceLockType='reader'):
+        service = self.get(miniService_id)
+        match mode:
+            case 'reader':
+                lock = service.statusLock.reader
+            case 'writer':
+                lock = service.statusLock.writer
+            case _:
+                raise 
+
+        async with lock as l:
+            yield service
+        
     
     @property
     def ids(self):
@@ -526,14 +544,17 @@ class BaseMiniServiceManager(BaseService):
 S = TypeVar('S', bound=BaseService)
 
 class LinkParams(TypedDict):
-    build_follow_dep:bool
     to_build:bool
     to_destroy:bool
-    to_async_verify:bool
-    destroy_follow_dep:bool
-    rebuild:bool
+
     build_state:int = DEFAULT_BUILD_STATE
     destroy_state:int = DEFAULT_DESTROY_STATE
+
+    build_follow_dep:bool
+    destroy_follow_dep:bool
+
+    to_async_verify:bool
+    rebuild:bool
 
 
 @dataclass

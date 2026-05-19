@@ -12,6 +12,7 @@ from app.classes.url import URLMappingModel
 class ToolModel(BaseModel):
     description:str
     name:str
+    
 
 MAX_DISTANCE_SEARCH = 0.7
 
@@ -93,11 +94,16 @@ class MCPToolModel(ToolModel):
 ##################################################                                                 #################################
 ####################################################################################################################################
 
-class CacheToolModel(ToolModel):
+class CacheEvictionConfig(BaseModel):
     ...
 
+class CacheToolModel(ToolModel):
+    eviction:Optional[CacheEvictionConfig] = CacheEvictionConfig()
+    top_k:int = Field(ge=1,le=3,default=3)
+    similarity: float = Field(ge=0.25,le=1)
+
 class SearchToolModel(ToolModel):
-    ...
+    source:List[Literal['']] = ...
 
 class ConversationToolModel(ToolModel):
     ...

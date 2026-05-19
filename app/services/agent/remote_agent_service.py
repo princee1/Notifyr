@@ -1,7 +1,7 @@
 import asyncio
 from enum import Enum
 import functools
-from typing import Callable, Generator, Literal, Self
+from typing import AsyncGenerator, Callable, Generator, Literal, Self
 import grpc
 import aiohttp
 from aiohttp import ClientError, ClientConnectorError, ClientResponseError, ClientTimeout
@@ -16,11 +16,14 @@ from app.grpc.agent_interceptor import  AgentClientInterceptor,AgentClientAsyncI
 from app.models.odm.agents_model import AgentModel, AgentValidationModel
 from app.services.agent.llm_service import LLMMiniService, LLMService
 from app.services.config_service import ConfigService
+from app.services.cost_service import CostService
 from app.services.vault_service import VaultService
 from app.services.database.mongoose_service import MongooseService
 from app.utils.constant import MongooseDBConstant
 from app.utils.globals import APP_MODE, CAPABILITIES,ApplicationMode
 from app.grpc import agent_pb2_grpc,agent_message
+from app.classes import conversation
+
 
 acceptable_service_status = {ServiceStatus.AVAILABLE,ServiceStatus.WORKS_ALMOST_ATT,ServiceStatus.PARTIALLY_AVAILABLE}
 
@@ -39,21 +42,6 @@ _HTTP_HEALTH_CHECK_TIMEOUT = 15  # seconds - timeout per read operation
 _HTTP_HEALTH_CHECK_RECONNECT_INTERVAL = 5  # seconds - base interval before reconnect attempt
 _HTTP_HEALTH_CHECK_MAX_BACKOFF = 300  # seconds - max backoff (5 minutes)
 _HTTP_HEALTH_CHECK_BACKOFF_MULTIPLIER = 2  # exponential backoff factor
-
-
-
-def iterator_factory(callback:Callable,wait=0.5):
-    async def request_generator():
-        while True:
-            request: agent_message.PromptRequest = await callback()
-            if request == None:
-                break
-            request = request.to_proto()
-            yield request
-            asyncio.sleep(wait)
-
-    return request_generator
-
 
 class AgenticHTTPState(Enum):
     BAD_RESPONSE = 'Bad Response'
@@ -335,11 +323,12 @@ class RemoteAgentService(BaseMiniServiceManager):
 @MiniService(links=[LinkDep(LLMMiniService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)])
 class RemoteAgentMiniService(BaseMiniService):
     
-    def __init__(self,configService:ConfigService,remoteAgentService:RemoteAgentService,llmProviderMiniService:LLMMiniService,agentModel:dict):
+    def __init__(self,configService:ConfigService,costService:CostService,remoteAgentService:RemoteAgentService,llmProviderMiniService:LLMMiniService,agentModel:dict):
         self.depService = llmProviderMiniService
         super().__init__(llmProviderMiniService, str(agentModel['id']))
         self.configService = configService
         self.remoteAgentService = remoteAgentService
+        self.costService = costService
         self.agentModel = agentModel
 
     def build(self, build_state = ...):
@@ -350,38 +339,46 @@ class RemoteAgentMiniService(BaseMiniService):
         except ValidationError as e:
             raise BuildFailureError()
 
-    def SilentFail(func:Callable):
-        @functools.wraps(func)
-        def swrapper(self:Self,request:agent_message.PromptRequest|Callable[...,agent_message.PromptRequest])->agent_message.PromptAnswer:
-            if self.service_status not in acceptable_service_status:
-                return
-            return func(self,request) 
+    def SilentFail(mode:Literal['direct','generator']):
 
-        @functools.wraps(func)
-        async def awrapper(self:Self,request:agent_message.PromptRequest)->agent_message.PromptAnswer:
-            if self.service_status not in acceptable_service_status:
-                return
-            return await func(self,request)
+        def decorator(func:Callable):
+            @functools.wraps(func)
+            def swrapper(self:Self,request:agent_message.PromptRequest|Callable[...,agent_message.PromptRequest])->agent_message.PromptAnswer:
+                if self.service_status not in acceptable_service_status:
+                    return
+                return func(self,request) 
 
-        return awrapper if asyncio.iscoroutinefunction(func) else swrapper
+            @functools.wraps(func)
+            async def awrapper(self:Self,request:agent_message.PromptRequest)->agent_message.PromptAnswer:
+                if self.service_status not in acceptable_service_status:
+                    return
+                return await func(self,request)
+
+            return awrapper if asyncio.iscoroutinefunction(func) else swrapper
+        
+        return decorator
     
     if APP_MODE == ApplicationMode.worker:
 
-        @SilentFail
+        @SilentFail('direct')
         def Prompt(self, request:agent_message.PromptRequest):
             request = request.to_proto()
             reply = self.remoteAgentService.stub.Prompt(request)
             return agent_message.PromptAnswer.from_proto(reply)
 
+        @SilentFail('direct')
+        def Completion(self,):
+            ...
+
     elif APP_MODE == ApplicationMode.server:
 
-        @SilentFail
+        @SilentFail('direct')
         async def Prompt(self, request:agent_message.PromptRequest):
             request = request.to_proto()
             reply = await self.remoteAgentService.stub.Prompt(request)
             return agent_message.PromptAnswer.from_proto(reply)
 
-        @SilentFail
+        @SilentFail('generator')
         async def PromptStream(self, request:agent_message.PromptRequest):
             request = request.to_proto()
             replies = self.remoteAgentService.stub.PromptStream(request)
@@ -389,16 +386,22 @@ class RemoteAgentMiniService(BaseMiniService):
                 reply = agent_message.PromptAnswer.from_proto(reply)
                 yield reply
 
-        @SilentFail
-        async def StreamPrompt(self, callback:Callable[[],agent_message.PromptRequest]):
-            request_generator=iterator_factory(callback=callback)
+        @SilentFail('direct')
+        async def StreamPrompt(self, request_generator:AsyncGenerator):
             reply = await self.remoteAgentService.stub.StreamPrompt(request_generator)
             return agent_message.PromptAnswer.from_proto(reply)
         
-        @SilentFail
-        async def S2SPrompt(self, callback:Callable[[],agent_message.PromptRequest]):
-            request_generator=iterator_factory(callback=callback)
+        @SilentFail('generator')
+        async def S2SPrompt(self, request_generator:AsyncGenerator):
             replies = self.remoteAgentService.stub.S2SPrompt(request_generator)
             async for reply in replies:
                 reply = agent_message.PromptAnswer.from_proto(reply)
                 yield reply
+
+        @SilentFail('direct')
+        async def Completion(self,request:agent_message.PromptRequest):
+            ...
+        
+        @SilentFail('generator')
+        async def S2SBatch(self,request_generator:AsyncGenerator):
+            ...

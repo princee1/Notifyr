@@ -1,13 +1,12 @@
 import asyncio
 import functools
-from typing import Any, Callable, Dict, List, Self,Any
+from typing import Any, Callable, Dict, List, NamedTuple, Self,Any
 from fastapi import HTTPException
 from pydantic import ValidationError
-from app.classes.agents import ChatAgentFactory
+from app.definition._agent import AgentInputFormatNotSupportedError, AgentNotAvailableError, ChatModelFactory, Thread
 from app.classes.cost_definition import InsufficientCreditsError, InvalidPurchaseRequestError
 from app.classes.prompt import PromptToken
 from app.definition import _service
-from app.definition._error import BaseError
 from app.errors.service_error import BuildFailureError, BuildOkError, MiniServiceDoesNotExistsError
 from app.grpc.agent_interceptor import AgentServerInterceptor, HandlerType
 from app.models.odm.agents_model import *
@@ -34,6 +33,7 @@ from app.tools.search_tool import SearchTool
 from app.tools.vector_tool import VectorRagTool
 from app.utils.constant import CostConstant, MongooseDBConstant
 from app.utils.helper import slice_dict
+from app.utils.tools import Mock
 from .llm_service import LLMMiniService, LLMService
 from .remote_agent_service import  RemoteAgentMiniService, RemoteAgentService
 from concurrent import futures
@@ -42,7 +42,11 @@ from app.grpc import agent_pb2_grpc,agent_pb2,agent_message
 from langchain.agents.factory import create_agent
 from langchain.tools import tool as tool_factory, ToolRuntime
 from langgraph.checkpoint.mongodb import MongoDBSaver
-from langchain.messages import SystemMessage, HumanMessage
+from langchain.messages import HumanMessage, SystemMessage,AIMessage,AIMessageChunk
+from langchain_classic import hub
+from langchain_core.rate_limiters import InMemoryRateLimiter
+from app.classes import conversation
+
 
 
 AVOID_RE_VALIDATE_BUILD_STATE = -100
@@ -56,14 +60,8 @@ API_SECRET_KEY = 'API_KEY'
 
 factory_include = ('temperature','model','timeout')
 acceptable_service = {ServiceStatus.AVAILABLE,ServiceStatus.WORKS_ALMOST_ATT,ServiceStatus.PARTIALLY_AVAILABLE}
+answer_exclude = {'token'}
 
-
-class AgentNotAvailableError(BaseError):
-    def __init__(self,status:ServiceStatus,reason:str,who:str=None):
-        self.status = status
-        self.reason = reason
-        self.who = who
-        
 
 @MiniService(mirror=RemoteAgentMiniService,links=[LinkDep(LLMMiniService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)])
 class AgentMiniService(BaseMiniService):
@@ -109,19 +107,20 @@ class AgentMiniService(BaseMiniService):
         except ValidationError as e:
             raise BuildFailureError('Could not validate the agent model')
 
-        self.chat_model = ChatAgentFactory(self.agent_model,self.depService.model,self.depService.credentials)
+        self.chat_model = ChatModelFactory(self.agent_model,self.depService.model,self.depService.credentials)
         tools = self._init_tools()
         middleware = self._init_middleware()
+        
         prompt = agents_prompt.SYSTEM_PROMPT(self.agent_model.system)
-        prompt = SystemMessage([{'type':'text','text':prompt,"cache_control": {"type": "ephemeral"}}])
+        self.prompt = SystemMessage([{'type':'text','text':prompt,"cache_control": {"type": "ephemeral"}}])
         self.agent = create_agent(
                 model=self.chat_model,
                 middleware=middleware,
                 tools=tools,
                 system_prompt=prompt,
                 name=self.agent_name,
-                checkpointer=self.checkpointer
-            )
+                checkpointer=self.checkpointer)
+        
         for id,service in self.outboundServices.items():
             if service.service_status not in acceptable_service:
                 raise BuildOkError(f'OutboundService [{id}] does not have a valid state: {service.service_status}')
@@ -157,27 +156,76 @@ class AgentMiniService(BaseMiniService):
         
         return tools
 
-    def _init_middleware(self):
+    def _init_middleware(self)->list[Callable|type]:
         ...
             
-    async def invoke(self,thread:str,prompt:str):
-        config = {"configurable": {"thread_id": thread,"checkpoint_ns": self.agent_model.id}} 
-        message = [{'role':'user','content':prompt}]
-        response = await self.agent.ainvoke(message,config)
-        
-    async def stream(self,thread:str,prompt:str):
-        config = {"configurable": {"thread_id": thread,"checkpoint_ns": self.agent_model.id}} 
-        message = [{'role':'user','content':prompt}]
+    async def invoke(self,thread:str,user:str,prompt:str,contents:list=[],mess_id:str=None,):
+        content_blocks = []
+        content_blocks.append({'type':'text','text':prompt})
+        content_blocks.extend(contents or [])
+        message = HumanMessage(content_blocks=content_blocks,id=mess_id)
 
-        async for chunk in self.agent.astream(message,config):
-            yield
+        thread = conversation.to_thread(thread)
+        config = {"configurable": {"thread_id": thread,"checkpoint_ns": user}} 
         
-    async def completion(self,):
-        await self.chat_model.ainvoke()
+        answer = conversation.Answer()
+
+        response:AIMessage = await self.agent.ainvoke(message,config)
+        if (usage:= response.usage_metadata):
+            answer['token'] = conversation.Token(input_token=usage.get('input_tokens',0),output_token=usage.get('output_tokens',0))
+            
+        answer['reply_id'] = response.id
+        answer['reasoning'] = [b for b in response.content_blocks if b["type"] == "reasoning"]
+        answer['text'] = response.text
+        answer['tool_calling'] = [slice_dict(tc,conversation.TOOL_CALLING_KEYS,'include') for tc in response.tool_calls]
+        answer['invalid_tool_calling'] = [slice_dict(tc,conversation.invalid_tool_calling_keys,'include') for tc in response.invalid_tool_calls]
+        return answer
+        
+    async def stream(self,thread:str,user:str,prompt:str,contents:list=[],mess_id:str=None):
+        content_blocks = []
+        content_blocks.append({'type':'text','text':prompt})
+        content_blocks.extend(contents or [])
+        message = HumanMessage(content_blocks=content_blocks,id=mess_id) 
+
+        thread = conversation.to_thread(thread)
+        config = {"configurable": {"thread_id": thread,"checkpoint_ns": user}} 
+
+        async for chunk in self.agent.astream_events(message,config):
+            answer = conversation.Answer()
+            response = chunk['data']
+            match chunk['event']:
+                case 'on_chat_model_stream':
+                    answer['reply_id'] = response.id
+                    answer['reasoning'] = [b for b in response.content_blocks if b["type"] == "reasoning"]
+                    answer['text'] = response.text
+                    answer['tool_calling'] = [slice_dict(tc,conversation.TOOL_CALLING_KEYS,'include') for tc in response.tool_calls]
+                    answer['invalid_tool_calling'] = [slice_dict(tc,conversation.invalid_tool_calling_keys,'include') for tc in response.invalid_tool_calls]
+
+                case 'on_chat_model_end':
+                    ...
+                case _:
+                    ...
+            yield answer
+        
+    async def completion(self,input:str,content:list=[]):
+        message = [self.prompt,HumanMessage(input)]
+        message.extend(content)
+        response:AIMessage = await self.chat_model.ainvoke(message,)
+
+    async def batch(self,inputs:list[str]):
+       async for respone in self.chat_model.abatch_as_completed():
+           yield 
+
+    def _verify_status(self):
+        if self.service_status not in acceptable_service:
+            raise AgentNotAvailableError(self.service_status,self.reason,self.miniService_id)
+        if self.service_status != ServiceStatus.AVAILABLE:
+            return self.reason
+        return None
 
     @property
     def agent_name(self)->str:
-        return f"agent:{self.agent_model.id}#{self.agent_model.id}"
+        return f"agent:{self.agent_model.alias}#{self.agent_model.id}"
 
 @Service(is_manager=True,mirror=RemoteAgentService,links=[
     LinkDep(ProfileService,to_build=True,build_state=RECREATE_AGENT_WITH_OUTBOUND_BUILD_STATE),
@@ -187,7 +235,7 @@ class AgentMiniService(BaseMiniService):
 class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
 
     @staticmethod
-    def Error_Handler(function:Callable):
+    def ErrorHandler(function:Callable):
         """
         This is a decorator that acts as exception handler, method for the grpc communication will have to be decorated
         by this to handle error found in their implementation
@@ -207,6 +255,9 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
             except AgentNotAvailableError as e:
                 context.abort(grpc.StatusCode.UNAVAILABLE,)
             
+            except AgentInputFormatNotSupportedError as e:
+                context.abort(grpc.StatusCode.INVALID_ARGUMENT,...)
+
             except MiniServiceDoesNotExistsError as e:
                 context.abort(grpc.StatusCode.NOT_FOUND,f'Agent @ {e.miniService_id} does not exist')
             
@@ -218,99 +269,96 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
 
         return handler
 
-    @Error_Handler
+
+    @ErrorHandler
     async def Prompt(self, request, context):
         request = agent_message.PromptRequest.from_proto(request)
-        service = self.MiniServiceStore.get(request.agent)
-        async with service.statusLock.reader as l:
-            if service.service_status != ServiceStatus.AVAILABLE:
-                reason = self.reason
-            if service.service_status not in acceptable_service:
-                raise AgentNotAvailableError(service.service_status,service.reason,service.miniService_id)
-                
-            await service.invoke()
-            reply = agent_message.PromptAnswer()
-            reply = reply.to_proto()
-            
-            self.purchase_token()
-            return reply
+        async with self.MiniServiceStore.lock(request.agent) as agent:
+            reason:str|None = agent._verify_status()
+            contents = [conversation.ContentBlock.exports(c.mode,c.type,c.value,c.mime) for c in request.blocks]
+            answer = await agent.invoke(request.thread,request.user,request.prompt,contents,request.mess_id)
+            self.purchase_token(request_id=answer['id'],issuer=request.user,agent=request.agent,**answer['token'])
+            answer = agent_message.PromptAnswer(
+                agent=request.agent,
+                reason =reason,
+                **slice_dict(answer,answer_exclude,'exclude')
+            ).to_proto()
+            return answer
 
-    @Error_Handler
+    @ErrorHandler
     async def PromptStream(self, request, context):
         request = agent_message.PromptRequest.from_proto(request)
-        service = self.MiniServiceStore.get(request.agent)
-        async for response in service.stream():
-            async with service.statusLock.reader as l:   
-                if service.service_status != ServiceStatus.AVAILABLE:
-                    reason = self.reason
-                if service.service_status not in acceptable_service:
-                    raise AgentNotAvailableError(service.service_status,service.reason,service.miniService_id)
-                reply = agent_message.PromptAnswer()
-                reply = reply.to_proto()
-                self.purchase_token()
-
-                yield reply
+        async with self.MiniServiceStore.lock(request.agent) as agent:
+            reason:str|None = agent._verify_status()
+            contents = [conversation.ContentBlock.exports(c.mode,c.type,c.value,c.mime) for c in request.blocks]
+            async for answer in agent.stream(request.thread,request.user,request.prompt,contents,request.mess_id):
+                answer = agent_message.PromptAnswer(
+                    agent=request.agent,
+                    reason =reason,
+                    **slice_dict(answer,answer_exclude,'exclude')
+                ).to_proto()
+                yield answer
                 asyncio.sleep(0.2)
+            self.purchase_token(request_id=answer['id'],issuer=request.user,agent=request.agent,**answer['token'])
 
-    @Error_Handler
+    @ErrorHandler
     async def StreamPrompt(self, request_iterator, context):
-        
-        streams = []
+        prompt = ''
         async for request in request_iterator:
             request = agent_message.PromptRequest.from_proto(request)
-            streams.append(streams)
+            prompt += request.prompt
+        
+        async with self.MiniServiceStore.lock(request.agent) as agent:
+            reason:str|None = agent._verify_status()
+            answer = await agent.invoke(request.thread,request.user,prompt,mess_id=request.mess_id)
+            self.purchase_token(request_id=answer['id'],issuer=request.user,agent=request.agent,**answer['token'])
+            answer = agent_message.PromptAnswer(
+                agent=request.agent,
+                reason =reason,
+                **slice_dict(answer,answer_exclude,'exclude')
+            ).to_proto()
+            return answer
 
-        service = self.MiniServiceStore.get(request.agent)
-        async with service.statusLock.reader as l:
-            if service.service_status != ServiceStatus.AVAILABLE:
-                reason = self.reason
-            if service.service_status not in acceptable_service:
-                raise AgentNotAvailableError(service.service_status,service.reason,service.miniService_id)
-
-            await service.invoke()
-
-            reply = agent_message.PromptAnswer()         
-            reply = reply.to_proto()
-
-            self.purchase_token()
-            return reply
-
-    @Error_Handler
+    @ErrorHandler
     async def S2SPrompt(self, request_iterator, context):
         async for request in request_iterator:
             request = agent_message.PromptRequest.from_proto(request)
-            service = self.MiniServiceStore.get(request.agent)
-            async with service.statusLock.reader as l:
-                if service.service_status != ServiceStatus.AVAILABLE:
-                    reason = self.reason
-                if service.service_status not in acceptable_service:
-                    raise AgentNotAvailableError(service.service_status,service.reason,service.miniService_id)
-                reply = agent_message.PromptAnswer()
-                reply = reply.to_proto()
+            async with self.MiniServiceStore.lock(request.agent) as agent:
+                    reason:str|None = agent._verify_status()
+                    async for answer in agent.stream(request.thread,request.user,request.prompt,mess_id=request.mess_id):
+                        answer = agent_message.PromptAnswer(
+                            agent=request.agent,
+                            reason = reason,
+                            **slice_dict(answer,answer_exclude,'exclude')
+                        ).to_proto()
+                        yield answer
+                        asyncio.sleep(0.1)
+                    self.purchase_token(request_id=answer['id'],issuer=request.user,agent=request.agent,**answer['token'])
 
-                self.purchase_token()
-                yield reply
-                asyncio.sleep(0.1)
-
-    @Error_Handler
+    @ErrorHandler
     async def Completion(self,request,context):
         request = agent_message.PromptRequest.from_proto(request)
-        service = self.MiniServiceStore.get(request.agent)
-        async with service.statusLock.reader as l:
-            if service.service_status != ServiceStatus.AVAILABLE:
-                reason = self.reason
-            if service.service_status not in acceptable_service:
-                raise AgentNotAvailableError(service.service_status,service.reason,service.miniService_id)
-
-            answer = await service.completion()
-            reply = agent_message.PromptAnswer()         
-            reply = reply.to_proto()
+        async with self.MiniServiceStore.lock(request.agent) as service:
+            reason:str|None = service._verify_status()
+            contents = conversation.ContentBlock.exports()
+            answer = await service.completion(request.prompt,contents,mess_id=request.mess_id)
+            reply = agent_message.PromptAnswer().to_proto()      
             self.purchase_token()
             return reply
 
-    def verify_auth(self,token:str)->bool:
-        if self.auth_header != token:
-            raise HTTPException(status_code=401,detail="Unauthorized")
+    @Mock()
+    @ErrorHandler
+    async def S2SBatch(self,request_iterator,context):
+        messages = []
+        async for request in request_iterator:
+            request = agent_message.PromptRequest.from_proto(request)
+            messages.append(request)
+
+        async with self.MiniServiceStore.lock(request.agent) as service:
+            async for answer in service.batch():
+                yield
+        # append it as a list of message
+
 
     def __init__(self, configService: ConfigService,
                     vaultService:VaultService,
@@ -338,16 +386,6 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
         self.customService = customService
 
         self.MiniServiceStore = MiniServiceStore[AgentMiniService](self.name)
-
-    def subscribe_token(self,on_next:Callable[[Any],None],on_complete:Callable[[],None],on_error:Callable[[Exception],None]=None):
-        return self.reactiveService.subscribe(REACTIVE_TOKEN_COST,on_next=on_next,on_completed=on_complete,on_error=on_error)
-
-    def purchase_token(self,input_token:int,output_token:int,request_id:str,issuer:str,agent:str):
-        promptToken = PromptToken(input=input_token,output=output_token,request_id=request_id,issuer=issuer,agent=agent)
-        self.reactive_subject.on_next(promptToken)
-
-    def complete_purchase(self):
-        self.reactive_subject.on_completed()
 
     def verify_dependency(self):
         ...
@@ -407,6 +445,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
                         
         return super().build(counter, build_state)
     
+
     async def serve(self):
         if self.service_status != ServiceStatus.AVAILABLE:
             return
@@ -416,8 +455,10 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
             '/agent.Agent/PromptStream': HandlerType.ONE_MANY,
             '/agent.Agent/StreamPrompt': HandlerType.MANY_ONE,
             '/agent.Agent/S2SPrompt': HandlerType.MANY_MANY,
+            '/agent.Agent/Completion':HandlerType.ONE_ONE,
+            '/agent.Agent/S2SBatch':HandlerType.MANY_MANY,
         })
-        self.server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=10),interceptors=(interceptor,))
+        self.server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=25),interceptors=(interceptor,))
         agent_pb2_grpc.add_AgentServicer_to_server(self,self.server)
         self.server.add_insecure_port('0.0.0.0:50051')
         await self.server.start()
@@ -425,3 +466,16 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
     
     async def stop_grpc(self):
         await self.server.stop()
+    
+    
+    def subscribe_token(self,on_next:Callable[[Any],None],on_complete:Callable[[],None],on_error:Callable[[Exception],None]=None):
+        return self.reactiveService.subscribe(REACTIVE_TOKEN_COST,on_next=on_next,on_completed=on_complete,on_error=on_error)
+
+    def purchase_token(self,input_token:int,output_token:int,request_id:str,issuer:str,agent:str):
+        promptToken = PromptToken(input=input_token,output=output_token,request_id=request_id,issuer=issuer,agent=agent)
+        self.reactive_subject.on_next(promptToken)
+
+    def complete_purchase(self):
+        self.reactive_subject.on_completed()
+
+    

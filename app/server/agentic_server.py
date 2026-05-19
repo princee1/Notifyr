@@ -14,7 +14,7 @@ from app.services import QdrantService
 from app.services import CostService
 from app.services import ReactiveService
 from app.depends.dependencies import get_bearer_token
-from fastapi import FastAPI,Depends, Request
+from fastapi import FastAPI,Depends, HTTPException, Request
 from app.routers import Routers
 from app.cost.token_cost import TokenCost
 
@@ -58,7 +58,8 @@ def bootstrap_agent_app()->FastAPI:
     grpcTask = GrpcTask()    
 
     def auth_depends(token: str = Depends(get_bearer_token)):
-        agentService.verify_auth(token)
+        if agentService.auth_header != token:
+            raise HTTPException(status_code=401,detail="Unauthorized")
 
     async def on_startup():
         mongooseService.start()
