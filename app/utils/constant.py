@@ -561,6 +561,7 @@ class AgenticConstant:
 
     VECTOR_ROUTER = lambda p:f'/vector{p}'
     K_GRAPH_ROUTER = lambda p:f'/k-graph{p}'
+    CONVERSATION_ROUTER = lambda p:f'/conversation{p}'
 
 class Crawl4AIConstant:
     INGEST_PARENT_DIR ='crawl4ai'

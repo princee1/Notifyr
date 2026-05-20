@@ -13,6 +13,8 @@ class ContextSearchParam:
     query:str
     group:str
     
+#NOTE  "Is this semantic knowledge?"
+
 class KnowledgeGraphTool(ContextPipelineTool):
     group_type:GroupType = 'domain' 
     

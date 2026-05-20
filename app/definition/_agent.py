@@ -12,7 +12,6 @@ from app.utils.helper import subset_model
 from pydantic import SecretStr
 from langchain.agents.middleware import wrap_model_call, ModelRequest, ModelResponse
 
-
 BASE_MODEL_PROFILE = {
     'image_outputs':False,
     'audio_outputs':False,
@@ -23,6 +22,10 @@ BASE_MODEL_PROFILE = {
 
 }
 
+#########################################################################################################
+############################                                          ###################################
+#########################################################################################################
+
 
 class AgentNotAvailableError(BaseError):
     def __init__(self,status:ServiceStatus,reason:str,who:str=None):
@@ -32,6 +35,13 @@ class AgentNotAvailableError(BaseError):
 
 class AgentInputFormatNotSupportedError(BaseError):
     ...
+
+class AgentContextDoesNotExistError(BaseError):
+    ...
+
+#########################################################################################################
+############################                                          ###################################
+#########################################################################################################
 
 
 def ChatModelFactory(agentModel:AgentModel,llmModel:LLMProfileModel,credentials: ChaCha20Poly1305SecretsWrapper)->BaseChatModel:

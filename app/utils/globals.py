@@ -36,6 +36,7 @@ class ServerCapabilities(TypedDict):
     object:bool
     workflow:bool
     chat:bool
+    live:bool
 
 class AgenticServerCapabilities(TypedDict):
     knowledge_graph:bool

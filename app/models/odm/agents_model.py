@@ -1,6 +1,6 @@
 from typing import Any, ClassVar, List, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from app.classes.profiles import BaseProfileModel,BaseDocument
 from app.classes.prompt import System
 from app.utils.constant import MongooseDBConstant
@@ -49,12 +49,21 @@ class AvatarConfig(BaseModel):
     type:Literal['raw','icon','url'] = 'icon'
     value: str = ''
 
+class MemoryPolicy(BaseModel):
+    allowed_types: list[str]
+    namespace: str
+    ttl: Optional[int]
+    visibility: Literal["agent", "user", "global"]
+
 class AgentModel(BaseDocument):
     
     provider: str
     model: str | List[str]
-    tools: List[ToolModels] = []
-    system:Optional[System] = None
+    system:System
+    store_model:Optional[str] = None
+    preference_model:Optional[str] = None
+    tools: List[ToolModels] = Field(default_factory=list)
+    memory_policy: Optional[MemoryPolicy] = None
     generation:GenerationConfig = GenerationConfig()
     avatar = Optional[AvatarConfig] = AvatarConfig()
     profile: Optional[ModelProfileConfig] = ModelProfileConfig()

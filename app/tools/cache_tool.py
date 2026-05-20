@@ -1,11 +1,20 @@
+from pydantic import BaseModel, Field
+
 from app.definition._tool import ContextPipelineTool
 from app.models.tools_model import CacheToolModel
 from app.services import ConfigService
 from app.services import RedisService
 from langchain_community.vectorstores import Redis
-from typing import Literal
+from typing import Literal, Optional
 
 CacheMode = Literal['lookup','cache','invalidate']
+
+
+class CacheArgsSchema(BaseModel):
+    """ Input for interacting with the cache"""
+    mode: CacheMode = Field()
+    query:str
+    response:Optional[str] = Field(default=None)
 
 class CacheTool(ContextPipelineTool):
     

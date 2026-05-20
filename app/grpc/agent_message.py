@@ -31,9 +31,73 @@ class ContentBlock:
             block.mime = self.mime
         return block
 
-    @property
-    def val(self)->tuple:
-        return 
+
+class Context:
+    """Wrapper for gRPC Context message."""
+    
+    def __init__(
+        self,
+        user: Optional[str] = None,
+        request_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        channel: Optional[str] = None,
+        auth: Optional[str] = None,
+        save: bool = False,
+        user_encoded: Optional[str] = None,
+        permissions: Optional[List[str]] = None,
+    ):
+        self.user = user
+        self.request_id = request_id
+        self.session_id = session_id
+        self.channel = channel
+        self.auth = auth
+        self.save = save
+        self.user_encoded = user_encoded
+        self.permissions = permissions or []
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'Context':
+        return cls(
+            user=data.get("user"),
+            request_id=data.get("request_id"),
+            session_id=data.get("session_id"),
+            channel=data.get("channel"),
+            auth=data.get("auth"),
+            save=data.get("save", False),
+            user_encoded=data.get("user_encoded"),
+            permissions=data.get("permissions", []),
+        )
+
+    @classmethod
+    def from_proto(cls, proto: agent_pb2.Context) -> 'Context':
+        return cls(
+            user=proto.user or None,
+            request_id=proto.request_id or None,
+            session_id=proto.session_id or None,
+            channel=proto.channel or None,
+            auth=proto.auth or None,
+            save=proto.save,
+            user_encoded=proto.user_encoded or None,
+            permissions=list(proto.permissions),
+        )
+
+    def to_proto(self) -> agent_pb2.Context:
+        ctx = agent_pb2.Context()
+        if self.user:
+            ctx.user = self.user
+        if self.request_id:
+            ctx.request_id = self.request_id
+        if self.session_id:
+            ctx.session_id = self.session_id
+        if self.channel:
+            ctx.channel = self.channel
+        if self.auth:
+            ctx.auth = self.auth
+        ctx.save = self.save
+        if self.user_encoded:
+            ctx.user_encoded = self.user_encoded
+        ctx.permissions.extend(self.permissions)
+        return ctx
 
     
 
@@ -46,9 +110,10 @@ class PromptRequest:
         prompt: str,
         user: str,
         thread: str,
-        blocks: Optional[List[Union[Dict, ContentBlock]]] = None,
         mess_id: Optional[str] = None,
         send_at: Optional[float] = None,
+        blocks: Optional[List[Union[Dict, ContentBlock]]] = None,
+        context: Optional[Union[Dict, Context]] = None,
     ):
         self.agent = agent
         self.prompt = prompt
@@ -60,6 +125,10 @@ class PromptRequest:
             block if isinstance(block, ContentBlock) else ContentBlock.from_dict(block)
             for block in (blocks or [])
         ]
+        self.context = (
+            context if isinstance(context, Context) else Context.from_dict(context)
+            if context else None
+        )
 
     @classmethod
     def from_proto(cls, proto: agent_pb2.PromptRequest) -> PromptRequest:
@@ -67,14 +136,16 @@ class PromptRequest:
             ContentBlock(mode=b.mode, type=b.type, value=b.value, mime=b.mime or None)
             for b in proto.blocks
         ]
+        context = Context.from_proto(proto.context) if proto.HasField("context") else None
         return cls(
             proto.agent,
             proto.prompt,
             proto.user,
             proto.thread,
-            blocks,
             proto.mess_id or None,
             proto.send_at or None,
+            blocks,
+            context,
         )
 
     def to_proto(self) -> agent_pb2.PromptRequest:
@@ -88,6 +159,8 @@ class PromptRequest:
             req.mess_id = self.mess_id
         if self.send_at:
             req.send_at = self.send_at
+        if self.context:
+            req.context.CopyFrom(self.context.to_proto())
         return req
 
 
@@ -190,4 +263,4 @@ class PromptAnswer:
         }
 
 
-__all__ = ["ContentBlock", "PromptRequest", "PromptAnswer"]
+__all__ = ["ContentBlock", "Context", "PromptRequest", "PromptAnswer"]

@@ -3,10 +3,11 @@ import functools
 from typing import Any, Callable, Dict, List, NamedTuple, Self,Any
 from fastapi import HTTPException
 from pydantic import ValidationError
-from app.definition._agent import AgentInputFormatNotSupportedError, AgentNotAvailableError, ChatModelFactory, Thread
+from app.definition._agent import AgentContextDoesNotExistError, AgentInputFormatNotSupportedError, AgentNotAvailableError, ChatModelFactory, Thread
 from app.classes.cost_definition import InsufficientCreditsError, InvalidPurchaseRequestError
 from app.classes.prompt import PromptToken
 from app.definition import _service
+from app.definition._tool import NotifyrContext, NotifyrAgentState
 from app.errors.service_error import BuildFailureError, BuildOkError, MiniServiceDoesNotExistsError
 from app.grpc.agent_interceptor import AgentServerInterceptor, HandlerType
 from app.models.odm.agents_model import *
@@ -42,6 +43,7 @@ from app.grpc import agent_pb2_grpc,agent_pb2,agent_message
 from langchain.agents.factory import create_agent
 from langchain.tools import tool as tool_factory, ToolRuntime
 from langgraph.checkpoint.mongodb import MongoDBSaver
+from langgraph.store.mongodb import MongoDBStore
 from langchain.messages import HumanMessage, SystemMessage,AIMessage,AIMessageChunk
 from langchain_classic import hub
 from langchain_core.rate_limiters import InMemoryRateLimiter
@@ -51,7 +53,7 @@ from app.classes import conversation
 
 AVOID_RE_VALIDATE_BUILD_STATE = -100
 AVOID_RECREATE_AGENT_BUILD_STATE = -435
-RECREATE_CHECKPOINT_BUILD_STATE = 895
+RECREATE_MEMORY_BUILD_STATE = 895
 RECREATE_AGENT_BUILD_STATE = 543
 RECREATE_AGENT_WITH_OUTBOUND_BUILD_STATE=120
 
@@ -76,6 +78,7 @@ class AgentMiniService(BaseMiniService):
                 redisService:RedisService,
                 agent_model:dict,
                 checkpointer:MongoDBSaver,
+                store:MongoDBStore,
                 outboundServices:Dict[str,ProfileMiniService[HTTPOutboundModel]]={}):
             
             self.depService = llmMiniService
@@ -89,6 +92,7 @@ class AgentMiniService(BaseMiniService):
             self.outboundServices = outboundServices
             self.agent_model=agent_model
             self.checkpointer = checkpointer
+            self.store = store
 
             for outbound in self.outboundServices.values():
                 self.register(outbound)
@@ -110,6 +114,8 @@ class AgentMiniService(BaseMiniService):
         self.chat_model = ChatModelFactory(self.agent_model,self.depService.model,self.depService.credentials)
         tools = self._init_tools()
         middleware = self._init_middleware()
+
+        middleware.append()
         
         prompt = agents_prompt.SYSTEM_PROMPT(self.agent_model.system)
         self.prompt = SystemMessage([{'type':'text','text':prompt,"cache_control": {"type": "ephemeral"}}])
@@ -118,8 +124,12 @@ class AgentMiniService(BaseMiniService):
                 middleware=middleware,
                 tools=tools,
                 system_prompt=prompt,
+                state_schema=NotifyrAgentState,
+                context_schema=NotifyrContext,
                 name=self.agent_name,
-                checkpointer=self.checkpointer)
+                checkpointer=self.checkpointer,
+                store=self.store,
+                )
         
         for id,service in self.outboundServices.items():
             if service.service_status not in acceptable_service:
@@ -157,20 +167,20 @@ class AgentMiniService(BaseMiniService):
         return tools
 
     def _init_middleware(self)->list[Callable|type]:
-        ...
+        middleware = []
+        return middleware
             
-    async def invoke(self,thread:str,user:str,prompt:str,contents:list=[],mess_id:str=None,):
+    async def invoke(self,thread:str,prompt:str,context:NotifyrContext,contents:list=[],mess_id:str=None):
         content_blocks = []
         content_blocks.append({'type':'text','text':prompt})
         content_blocks.extend(contents or [])
         message = HumanMessage(content_blocks=content_blocks,id=mess_id)
 
-        thread = conversation.to_thread(thread)
-        config = {"configurable": {"thread_id": thread,"checkpoint_ns": user}} 
+        config = {"configurable": {"thread_id": thread,"checkpoint_ns": self.agent_model.id}} 
         
         answer = conversation.Answer()
 
-        response:AIMessage = await self.agent.ainvoke(message,config)
+        response:AIMessage = await self.agent.ainvoke(message,config,context=context)
         if (usage:= response.usage_metadata):
             answer['token'] = conversation.Token(input_token=usage.get('input_tokens',0),output_token=usage.get('output_tokens',0))
             
@@ -181,16 +191,15 @@ class AgentMiniService(BaseMiniService):
         answer['invalid_tool_calling'] = [slice_dict(tc,conversation.invalid_tool_calling_keys,'include') for tc in response.invalid_tool_calls]
         return answer
         
-    async def stream(self,thread:str,user:str,prompt:str,contents:list=[],mess_id:str=None):
+    async def stream(self,thread:str,prompt:str,context:NotifyrContext,contents:list=[],mess_id:str=None):
         content_blocks = []
         content_blocks.append({'type':'text','text':prompt})
         content_blocks.extend(contents or [])
         message = HumanMessage(content_blocks=content_blocks,id=mess_id) 
 
-        thread = conversation.to_thread(thread)
-        config = {"configurable": {"thread_id": thread,"checkpoint_ns": user}} 
+        config = {"configurable": {"thread_id": thread,"checkpoint_ns": self.agent_model.id}} 
 
-        async for chunk in self.agent.astream_events(message,config):
+        async for chunk in self.agent.astream_events(message,config,context=context):
             response = chunk['data']
             answer = conversation.Answer()
             answer['reply_id'] = response.id
@@ -232,7 +241,7 @@ class AgentMiniService(BaseMiniService):
 @Service(is_manager=True,mirror=RemoteAgentService,links=[
     LinkDep(ProfileService,to_build=True,build_state=RECREATE_AGENT_WITH_OUTBOUND_BUILD_STATE),
     LinkDep(LLMService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE),
-    LinkDep(MongooseService,to_build=True,build_state=RECREATE_CHECKPOINT_BUILD_STATE),
+    LinkDep(MongooseService,to_build=True,build_state=RECREATE_MEMORY_BUILD_STATE),
     ])
 class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
 
@@ -278,7 +287,11 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
         async with self.MiniServiceStore.lock(request.agent) as agent:
             reason:str|None = agent._verify_status()
             contents = [conversation.ContentBlock.exports(c.mode,c.type,c.value,c.mime) for c in request.blocks]
-            answer = await agent.invoke(request.thread,request.user,request.prompt,contents,request.mess_id)
+            _context = request.context
+            if not _context:
+                raise AgentContextDoesNotExistError
+            _context = NotifyrContext(_context.request_id,_context.session_id,_context.channel,_context.user_id,_context.permission,_context.auth,_context.save)
+            answer = await agent.invoke(request.thread,request.prompt,context,contents,request.mess_id)
             self.purchase_token(request_id=answer['id'],issuer=request.user,agent=request.agent,**answer['token'])
             return agent_message.PromptAnswer(
                 agent=request.agent,
@@ -292,6 +305,10 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
         async with self.MiniServiceStore.lock(request.agent) as agent:
             reason:str|None = agent._verify_status()
             contents = [conversation.ContentBlock.exports(c.mode,c.type,c.value,c.mime) for c in request.blocks]
+            _context = request.context
+            if not _context:
+                raise AgentContextDoesNotExistError
+            _context = NotifyrContext(_context.request_id,_context.session_id,_context.channel,_context.user_id,_context.permission,_context.auth,_context.save)
             async for answer in agent.stream(request.thread,request.user,request.prompt,contents,request.mess_id):
                 yield agent_message.PromptAnswer(
                     agent=request.agent,
@@ -310,6 +327,10 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
         
         async with self.MiniServiceStore.lock(request.agent) as agent:
             reason:str|None = agent._verify_status()
+            _context = request.context
+            if not _context:
+                raise AgentContextDoesNotExistError
+            _context = NotifyrContext(_context.request_id,_context.session_id,_context.channel,_context.user_id,_context.permission,_context.auth,_context.save)
             answer = await agent.invoke(request.thread,request.user,prompt,mess_id=request.mess_id)
             self.purchase_token(request_id=answer['reply_id'],issuer=request.user,agent=request.agent,**answer['token'])
             return agent_message.PromptAnswer(
@@ -324,6 +345,10 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
             request = agent_message.PromptRequest.from_proto(request)
             async with self.MiniServiceStore.lock(request.agent) as agent:
                     reason:str|None = agent._verify_status()
+                    _context = request.context
+                    if not _context:
+                        raise AgentContextDoesNotExistError
+                    _context = NotifyrContext(_context.request_id,_context.session_id,_context.channel,_context.user_id,_context.permission,_context.auth,_context.save)
                     async for answer in agent.stream(request.thread,request.user,request.prompt,mess_id=request.mess_id):
                         yield agent_message.PromptAnswer(
                             agent=request.agent,
@@ -403,12 +428,14 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
             self.auth_header = secrets[API_SECRET_KEY]
             self.reactive_subject = self.reactiveService.create_subject(REACTIVE_TOKEN_COST,'Normal',REACTIVE_TOKEN_COST,'message')
 
-        if build_state == DEFAULT_BUILD_STATE or build_state == RECREATE_CHECKPOINT_BUILD_STATE:
+        if build_state == DEFAULT_BUILD_STATE or build_state == RECREATE_MEMORY_BUILD_STATE:
             self.checkpointer = MongoDBSaver(self.mongooseService.sync_client,
                                         MongooseDBConstant.DATABASE_NAME,
                                         MongooseDBConstant.CHAT_COLLECTION,
                                         MongooseDBConstant.CHAT_WRITE_COLLECTION,
                                         )
+
+            self.store = MongoDBStore(...) #TODO Create the store
             
         models:list[dict] = self.mongooseService.sync_find(MongooseDBConstant.AGENT_COLLECTION,AgentModel)
         counter = self.StatusCounter(len(models))
@@ -437,6 +464,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
                     self.redisService,
                     model,
                     self.checkpointer,
+                    self.store,
                     outboundServices
                 )
 

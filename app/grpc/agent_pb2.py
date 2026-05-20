@@ -14,7 +14,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0b\x61gent.proto\x12\x05\x61gent\"G\n\x0c\x43ontentBlock\x12\x0c\n\x04mode\x18\x01 \x01(\t\x12\x0c\n\x04type\x18\x02 \x01(\t\x12\r\n\x05value\x18\x03 \x01(\t\x12\x0c\n\x04mime\x18\x04 \x01(\t\"\x93\x01\n\rPromptRequest\x12\r\n\x05\x61gent\x18\x01 \x01(\t\x12\x0e\n\x06prompt\x18\x02 \x01(\t\x12\x0c\n\x04user\x18\x03 \x01(\t\x12\x0e\n\x06thread\x18\x04 \x01(\t\x12#\n\x06\x62locks\x18\x05 \x03(\x0b\x32\x13.agent.ContentBlock\x12\x0f\n\x07mess_id\x18\x06 \x01(\t\x12\x0f\n\x07send_at\x18\x07 \x01(\x02\"7\n\tReasoning\x12\r\n\x05index\x18\x01 \x01(\x05\x12\x0f\n\x07thought\x18\x02 \x01(\t\x12\n\n\x02id\x18\x03 \x01(\t\"5\n\x0bToolCalling\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04\x61rgs\x18\x02 \x01(\t\x12\x0c\n\x04name\x18\x03 \x01(\t\"Z\n\x12InvalidToolCalling\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04\x61rgs\x18\x02 \x01(\t\x12\x0c\n\x04name\x18\x03 \x01(\t\x12\r\n\x05\x65rror\x18\x04 \x01(\t\x12\r\n\x05index\x18\x05 \x01(\t\"\x9c\x01\n\x0cPromptAnswer\x12\x0c\n\x04text\x18\x01 \x01(\t\x12\x10\n\x08reply_id\x18\x03 \x01(\t\x12\x0e\n\x06reason\x18\x04 \x01(\t\x12\r\n\x05\x61gent\x18\x05 \x01(\t\x12#\n\treasoning\x18\x06 \x03(\x0b\x32\x10.agent.Reasoning\x12(\n\x0ctool_calling\x18\x07 \x03(\x0b\x32\x12.agent.ToolCalling2\xe6\x02\n\x05\x41gent\x12\x33\n\x06Prompt\x12\x14.agent.PromptRequest\x1a\x13.agent.PromptAnswer\x12;\n\x0cPromptStream\x12\x14.agent.PromptRequest\x1a\x13.agent.PromptAnswer0\x01\x12;\n\x0cStreamPrompt\x12\x14.agent.PromptRequest\x1a\x13.agent.PromptAnswer(\x01\x12:\n\tS2SPrompt\x12\x14.agent.PromptRequest\x1a\x13.agent.PromptAnswer(\x01\x30\x01\x12\x37\n\nCompletion\x12\x14.agent.PromptRequest\x1a\x13.agent.PromptAnswer\x12\x39\n\x08S2SBatch\x12\x14.agent.PromptRequest\x1a\x13.agent.PromptAnswer(\x01\x30\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0b\x61gent.proto\x12\x05\x61gent\"G\n\x0c\x43ontentBlock\x12\x0c\n\x04mode\x18\x01 \x01(\t\x12\x0c\n\x04type\x18\x02 \x01(\t\x12\r\n\x05value\x18\x03 \x01(\t\x12\x0c\n\x04mime\x18\x04 \x01(\t\"\xad\x01\n\x07\x43ontext\x12\x0c\n\x04user\x18\x01 \x01(\t\x12\x12\n\nrequest_id\x18\x02 \x01(\t\x12\x12\n\nsession_id\x18\x03 \x01(\t\x12\x0f\n\x07\x63hannel\x18\x04 \x01(\t\x12\x0c\n\x04\x61uth\x18\x05 \x01(\t\x12\x0c\n\x04save\x18\x06 \x01(\x08\x12\x19\n\x0cuser_encoded\x18\x07 \x01(\tH\x00\x88\x01\x01\x12\x13\n\x0bpermissions\x18\x08 \x03(\tB\x0f\n\r_user_encoded\"\xc5\x01\n\rPromptRequest\x12\r\n\x05\x61gent\x18\x01 \x01(\t\x12\x0c\n\x04user\x18\x02 \x01(\t\x12\x0e\n\x06prompt\x18\x03 \x01(\t\x12\x0e\n\x06thread\x18\x04 \x01(\t\x12$\n\x07\x63ontext\x18\x05 \x01(\x0b\x32\x0e.agent.ContextH\x00\x88\x01\x01\x12#\n\x06\x62locks\x18\x06 \x03(\x0b\x32\x13.agent.ContentBlock\x12\x0f\n\x07mess_id\x18\x07 \x01(\t\x12\x0f\n\x07send_at\x18\x08 \x01(\x02\x42\n\n\x08_context\"7\n\tReasoning\x12\r\n\x05index\x18\x01 \x01(\x05\x12\x0f\n\x07thought\x18\x02 \x01(\t\x12\n\n\x02id\x18\x03 \x01(\t\"5\n\x0bToolCalling\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04\x61rgs\x18\x02 \x01(\t\x12\x0c\n\x04name\x18\x03 \x01(\t\"Z\n\x12InvalidToolCalling\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04\x61rgs\x18\x02 \x01(\t\x12\x0c\n\x04name\x18\x03 \x01(\t\x12\r\n\x05\x65rror\x18\x04 \x01(\t\x12\r\n\x05index\x18\x05 \x01(\t\"\xd5\x01\n\x0cPromptAnswer\x12\x0c\n\x04text\x18\x01 \x01(\t\x12\x10\n\x08reply_id\x18\x03 \x01(\t\x12\x0e\n\x06reason\x18\x04 \x01(\t\x12\r\n\x05\x61gent\x18\x05 \x01(\t\x12#\n\treasoning\x18\x06 \x03(\x0b\x32\x10.agent.Reasoning\x12(\n\x0ctool_calling\x18\x07 \x03(\x0b\x32\x12.agent.ToolCalling\x12\x37\n\x14invalid_tool_calling\x18\x08 \x03(\x0b\x32\x19.agent.InvalidToolCalling2\xe6\x02\n\x05\x41gent\x12\x33\n\x06Prompt\x12\x14.agent.PromptRequest\x1a\x13.agent.PromptAnswer\x12;\n\x0cPromptStream\x12\x14.agent.PromptRequest\x1a\x13.agent.PromptAnswer0\x01\x12;\n\x0cStreamPrompt\x12\x14.agent.PromptRequest\x1a\x13.agent.PromptAnswer(\x01\x12:\n\tS2SPrompt\x12\x14.agent.PromptRequest\x1a\x13.agent.PromptAnswer(\x01\x30\x01\x12\x37\n\nCompletion\x12\x14.agent.PromptRequest\x1a\x13.agent.PromptAnswer\x12\x39\n\x08S2SBatch\x12\x14.agent.PromptRequest\x1a\x13.agent.PromptAnswer(\x01\x30\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -23,16 +23,18 @@ if _descriptor._USE_C_DESCRIPTORS == False:
   DESCRIPTOR._options = None
   _globals['_CONTENTBLOCK']._serialized_start=22
   _globals['_CONTENTBLOCK']._serialized_end=93
-  _globals['_PROMPTREQUEST']._serialized_start=96
-  _globals['_PROMPTREQUEST']._serialized_end=243
-  _globals['_REASONING']._serialized_start=245
-  _globals['_REASONING']._serialized_end=300
-  _globals['_TOOLCALLING']._serialized_start=302
-  _globals['_TOOLCALLING']._serialized_end=355
-  _globals['_INVALIDTOOLCALLING']._serialized_start=357
-  _globals['_INVALIDTOOLCALLING']._serialized_end=447
-  _globals['_PROMPTANSWER']._serialized_start=450
-  _globals['_PROMPTANSWER']._serialized_end=606
-  _globals['_AGENT']._serialized_start=609
-  _globals['_AGENT']._serialized_end=967
+  _globals['_CONTEXT']._serialized_start=96
+  _globals['_CONTEXT']._serialized_end=269
+  _globals['_PROMPTREQUEST']._serialized_start=272
+  _globals['_PROMPTREQUEST']._serialized_end=469
+  _globals['_REASONING']._serialized_start=471
+  _globals['_REASONING']._serialized_end=526
+  _globals['_TOOLCALLING']._serialized_start=528
+  _globals['_TOOLCALLING']._serialized_end=581
+  _globals['_INVALIDTOOLCALLING']._serialized_start=583
+  _globals['_INVALIDTOOLCALLING']._serialized_end=673
+  _globals['_PROMPTANSWER']._serialized_start=676
+  _globals['_PROMPTANSWER']._serialized_end=889
+  _globals['_AGENT']._serialized_start=892
+  _globals['_AGENT']._serialized_end=1250
 # @@protoc_insertion_point(module_scope)

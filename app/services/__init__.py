@@ -42,7 +42,10 @@ if APP_MODE == ApplicationMode.server:
         from app.services.database.object_service import ObjectS3Service
     
     if CAPABILITIES['chat']:
-        from app.services.ntfr.chat_service import ChatService
+        from app.services.chat_service import ChatService
+    
+    if CAPABILITIES['live'] and CAPABILITIES['chat']:
+        from app.services.ntfr.live_chat_service import LiveChatService
 
     from app.services.database.memcached_service import  MemCachedService
     from app.services.database.tortoise_service import TortoiseConnectionService

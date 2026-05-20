@@ -1,7 +1,6 @@
 from app.classes.qdrant import QdrantFilterModel, QdrantSearchParamsModel
 from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
-from typing import Any, List, Literal, Optional, Self, Union
-
+from typing import List, Literal, Optional, Self, Union
 from app.classes.url import URLMappingModel
 
 
@@ -10,8 +9,9 @@ from app.classes.url import URLMappingModel
 ####################################################################################################################################
 
 class ToolModel(BaseModel):
-    description:str
-    name:str
+    permission: List[str] = Field(default_factory=list)
+    description:str = Field(min_length=10,max_length=150)
+    name:str = Field(min_length=10,max_length=30)
     
 
 MAX_DISTANCE_SEARCH = 0.7

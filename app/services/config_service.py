@@ -224,10 +224,8 @@ class ConfigService(_service.BaseService):
 
         # CELERY CONFIG #
         self.BROKER_PROVIDER:Literal['redis','rabbitmq'] = self.getenv('BROKER_PROVIDER','rabbitmq')
-
         self.CELERY_RESULT_EXPIRES = ConfigService.parseToInt(self.getenv("CELERY_RESULT_EXPIRES"), 60*60*24)
         self.CELERY_VISIBILITY_TIMEOUT = ConfigService.parseToInt(self.getenv('CELERY_VISIBILITY_TIMEOUT'),60*60*2)
-        
         self.CELERY_WORKERS_EXPECTED = SCALING.get('worker',0)
 
         # APS CONFIG #
@@ -235,7 +233,6 @@ class ConfigService(_service.BaseService):
         self.APS_JOBSTORE:Literal['redis','mongodb','memory'] = self.getenv('APS_JOBSTORE','redis')
 
         # LANGCHAIN MULTIMODAL COUNT#
-        self.LANGCHAIN_MULTIMODAL_COUNT:int = ConfigService.parseToInt(self.getenv('LANGCHAIN_MULTIMODAL_COUNT'),3)
 
     def verify(self):
         if self.S3_CRED_TYPE not in ['MINIO','AWS']:

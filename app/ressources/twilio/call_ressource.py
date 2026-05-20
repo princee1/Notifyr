@@ -243,7 +243,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
 CALL_INCOMING_PREFIX = "incoming"
 
 if CAPABILITIES['chat']:
-    from app.services.ntfr.chat_service import ChatService
+    from app.services.chat_service import ChatService
 
 @UseRoles([Role.TWILIO])
 @UseHandler(ServiceAvailabilityHandler, TwilioHandler)

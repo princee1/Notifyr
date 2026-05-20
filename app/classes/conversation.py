@@ -1,3 +1,4 @@
+from dataclasses import dataclass, field
 from typing import List, Literal, NamedTuple, Optional, TypedDict, Union, get_args
 from time import time
 from pydantic import BaseModel, Field
@@ -77,7 +78,6 @@ class Reasoning(TypedDict):
     thought:str
     id:str
 
-
 class Message(BaseModel):
     agent:str
     thread:str
@@ -86,6 +86,29 @@ class Message(BaseModel):
     content_block:List[ContentBlock] = Field(default_factory=list)
     mess_id:str = Field(default_factory=lambda :generateId(0))
     send_at:float = Field(default_factory=time)
+
+@dataclass
+class Session:
+    request_id:str
+    session_id:str
+    channel:str
+    permission:list[str]
+
+@dataclass
+class User:
+    user_id: str
+    auth: str
+    user: Optional[dict] = None
+    
+    encoded_user: Optional[str] = field(default=None,init=False)
+
+    def __post_init__(self):
+        if self.user is not None:
+            # user_json = json.dumps(self.user)
+            # self._encoded_user = base64.b64encode(user_json.encode("utf-8")).decode("utf-8")
+            ...
+        else:
+            self.encoded_user = ""
     
 TOOL_CALLING_KEYS = {'id','args','name'}
 invalid_tool_calling_keys = TOOL_CALLING_KEYS.union(['error','index'])

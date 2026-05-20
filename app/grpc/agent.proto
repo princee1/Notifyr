@@ -34,14 +34,26 @@ message ContentBlock {
     string mime = 4;
 }
 
+message Context {
+    string user = 1;
+    string request_id = 2;
+    string session_id = 3;
+    string channel = 4;
+    string auth = 5;
+    bool save = 6;
+    optional string user_encoded = 7;
+    repeated string permissions = 8;
+}
+
 message PromptRequest {
     string agent = 1;
-    string prompt = 2;
-    string user = 3;
+    string user = 2;
+    string prompt = 3;
     string thread = 4;
-    repeated ContentBlock blocks = 5;
-    string mess_id = 6;
-    float send_at = 7;
+    optional Context context = 5;
+    repeated ContentBlock blocks = 6;
+    string mess_id = 7;
+    float send_at = 8;
 }
 
 //-------------------------------------------------------------------------------------
