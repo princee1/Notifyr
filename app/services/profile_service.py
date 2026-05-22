@@ -1,8 +1,8 @@
 from datetime import datetime
 from random import randint
-from typing import Literal, Type
+from typing import Annotated, Literal, Type
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from app.classes.secrets import ChaCha20Poly1305SecretsWrapper, ChaCha20SecretsWrapper
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BaseService, MiniService, MiniServiceStore, Service, ServiceStatus
 from app.errors.db_error import MongoCollectionDoesNotExists
@@ -20,6 +20,8 @@ from typing import Generic, TypeVar
 from app.utils.tools import RunInThreadPool
 
 TModel = TypeVar("TModel",bound=BaseProfileModel)
+
+MiniServiceRef = Annotated[str,TModel]
 
 @MiniService(
     override_init=True
@@ -86,9 +88,11 @@ class ProfileService(BaseMiniServiceManager):
         self.redisService = redisService
         self.loggerService = loggerService
         self.vaultService = vaultService
+        self.Singleton:dict[Type[TModel],MiniServiceRef] = {} 
     
     def build(self, build_state = DEFAULT_BUILD_STATE):
         self.MiniServiceStore.clear()
+        self.Singleton.clear()
         
         for v in ProfilModelValues.values():
             for m in self.mongooseService.sync_find(v._collection,v):
@@ -99,7 +103,10 @@ class ProfileService(BaseMiniServiceManager):
                     model=m,model_type=v)
                 p._builder(BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
                 self.MiniServiceStore.add(p)
-        
+
+            if v._singleton:
+                self.Singleton[v] = p.miniService_id
+     
         if len(self.MiniServiceStore) == 0:
             raise BuildOkError('No Profile Found...')
              

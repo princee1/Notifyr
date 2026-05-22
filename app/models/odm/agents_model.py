@@ -1,6 +1,6 @@
 from typing import Any, ClassVar, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from app.classes.profiles import BaseProfileModel,BaseDocument
 from app.classes.prompt import System
 from app.utils.constant import MongooseDBConstant
@@ -57,9 +57,9 @@ class MemoryPolicy(BaseModel):
 
 class AgentModel(BaseDocument):
     
-    provider: str
-    model: str | List[str]
+    provider: str = Field(description='The service id of the LLM Provider')
     system:System
+    model: str | List[str]
     store_model:Optional[str] = None
     preference_model:Optional[str] = None
     tools: List[ToolModels] = Field(default_factory=list)
@@ -67,11 +67,17 @@ class AgentModel(BaseDocument):
     generation:GenerationConfig = GenerationConfig()
     avatar = Optional[AvatarConfig] = AvatarConfig()
     profile: Optional[ModelProfileConfig] = ModelProfileConfig()
-    limit : Optional[RateLimiterConfig] = RateLimiterConfig()
+    limiter : Optional[RateLimiterConfig] = RateLimiterConfig()
 
     _collection:ClassVar[str] = MongooseDBConstant.AGENT_COLLECTION
 
     class Settings:
         name = MongooseDBConstant.AGENT_COLLECTION
+    
+    @field_validator('model',mode='after')
+    def _validate_models(cls,m):
+        if isinstance(m,list) and len(m) <1:
+            raise ValueError('Dynamic model selection agents should have at least 2 model')
+        return m
 
 AgentValidationModel = subset_model(AgentModel,f'Validation{AgentModel.__class__.__name__}')

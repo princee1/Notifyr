@@ -4,6 +4,7 @@ from fastapi import HTTPException, Request, Response,status
 from app.container import Get
 from app.definition._service import BaseService
 from app.errors.service_error import ServiceMajorSystemFailureError, ServiceNotAvailableError, ServiceTemporaryNotAvailableError
+from app.utils.constant import HTTPHeaderConstant
 
 
 def lock_service_wrapper(service:Type[BaseService]):
@@ -72,3 +73,9 @@ def exception_handler(error:Dict[Type[Exception],HandlerDetails]):
         return wrapper
     
     return decorator
+
+
+def get_instance_id(request:Request)->str:
+    if not (instance_id:=request.headers.get(HTTPHeaderConstant,None)):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED,'Missing instance_id')
+    return instance_id

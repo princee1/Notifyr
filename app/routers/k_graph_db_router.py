@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response,status
 from app.container import Get
-from app.definition._router import lock_service_wrapper
+from app.definition._router import get_instance_id, lock_service_wrapper
 from app.models.graphiti_model import GraphitiSearchModel
 from app.services.database.memcached_service import MemCachedService
 from app.services.database.graphiti_service import GraphitiService
@@ -32,14 +32,14 @@ def KnowledgeGraphDBRouter(depends:list=None):
 
     @router.get('/document/{document_id}/',status_code=status.HTTP_200_OK)
     @lock_service_wrapper(GraphitiService)
-    async def get_document_graph(response:Response,request:Request,document_id:str):
+    async def get_document_graph(response:Response,request:Request,document_id:str,instance_id:str=Depends(get_instance_id)):
         return await graphitiService.get_document_nodes(
             document_id=document_id
         )
 
     @router.delete('/document/{document_id}/',status_code=status.HTTP_200_OK)
     @lock_service_wrapper(GraphitiService)
-    async def delete_document(response:Response,request:Request,document_id:str):
+    async def delete_document(response:Response,request:Request,document_id:str,instance_id:str=Depends(get_instance_id)):
         count=await graphitiService.delete_document(
             document_id
         )
@@ -51,7 +51,7 @@ def KnowledgeGraphDBRouter(depends:list=None):
 
     @router.get('/domain/{domain}/',status_code=status.HTTP_200_OK)
     @lock_service_wrapper(GraphitiService)
-    async def get_domain_graph(response:Response,request:Request,domain:str):
+    async def get_domain_graph(response:Response,request:Request,domain:str,instance_id:str=Depends(get_instance_id)):
         return await graphitiService.get_domain_nodes(
             domain=domain,
             domain_type='domain'
@@ -59,7 +59,7 @@ def KnowledgeGraphDBRouter(depends:list=None):
     
     @router.delete('/domain/{domain}/',status_code=status.HTTP_200_OK)
     @lock_service_wrapper(GraphitiService)
-    async def delete_domain(response:Response,request:Request,domain:str,):
+    async def delete_domain(response:Response,request:Request,domain:str,instance_id:str=Depends(get_instance_id)):
         
         nodes = await graphitiService.get_domain_nodes(
             domain=domain,

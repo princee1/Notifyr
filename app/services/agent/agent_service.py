@@ -3,11 +3,12 @@ import functools
 from typing import Any, Callable, Dict, List, NamedTuple, Self,Any
 from fastapi import HTTPException
 from pydantic import ValidationError
-from app.definition._agent import AgentContextDoesNotExistError, AgentInputFormatNotSupportedError, AgentNotAvailableError, ChatModelFactory, Thread
+from app.classes.secrets import ChaCha20SecretsWrapper
+from app.definition._agent import AgentContextDoesNotExistError, AgentInputFormatNotSupportedError, AgentNotAvailableError, ChatModelFactory, DynamicChatModelFactory, Thread
 from app.classes.cost_definition import InsufficientCreditsError, InvalidPurchaseRequestError
 from app.classes.prompt import PromptToken
 from app.definition import _service
-from app.definition._tool import NotifyrContext, NotifyrAgentState
+from app.definition._tool import NotifyrContext, NotifyrAgentState, dynamic_tool_selection, handle_tool_errors
 from app.errors.service_error import BuildFailureError, BuildOkError, MiniServiceDoesNotExistsError
 from app.grpc.agent_interceptor import AgentServerInterceptor, HandlerType
 from app.models.odm.agents_model import *
@@ -79,7 +80,8 @@ class AgentMiniService(BaseMiniService):
                 agent_model:dict,
                 checkpointer:MongoDBSaver,
                 store:MongoDBStore,
-                outboundServices:Dict[str,ProfileMiniService[HTTPOutboundModel]]={}):
+                outboundServices:Dict[str,ProfileMiniService[HTTPOutboundModel]]={},
+                clientServices:Dict[str,ProfileMiniService[BaseProfileModel]]={}):
             
             self.depService = llmMiniService
             super().__init__(llmMiniService,str(agent_model['id']))
@@ -90,6 +92,7 @@ class AgentMiniService(BaseMiniService):
             self.qdrantService = qdrantService
             self.customService = customService
             self.outboundServices = outboundServices
+            self.clientServices = clientServices
             self.agent_model=agent_model
             self.checkpointer = checkpointer
             self.store = store
@@ -97,8 +100,9 @@ class AgentMiniService(BaseMiniService):
             for outbound in self.outboundServices.values():
                 self.register(outbound)
 
-            self.executors = {}
-    
+            for client in self.clientServices.values():
+                self.register(client)
+
     def verify_dependency(self):
         if self.depService.service_status != ServiceStatus.AVAILABLE:
             raise BuildFailureError('LLM Provider is not available')
@@ -111,11 +115,17 @@ class AgentMiniService(BaseMiniService):
         except ValidationError as e:
             raise BuildFailureError('Could not validate the agent model')
 
-        self.chat_model = ChatModelFactory(self.agent_model,self.depService.model,self.depService.credentials)
-        tools = self._init_tools()
         middleware = self._init_middleware()
+        if isinstance(self.agent_model.model,str):
+            self.chat_model = ChatModelFactory(self.agent_model,self.depService.model,self.depService.credentials)
+        else:
+            dynamic_model_selection,chat_model = DynamicChatModelFactory(self.agent_model,self.depService.model,self.depService.credentials)
+            self.chat_model = chat_model
+            middleware.append(dynamic_model_selection)
 
-        middleware.append()
+        tools = self._init_tools()
+        middleware.append(handle_tool_errors)
+        middleware.append(dynamic_tool_selection)
         
         prompt = agents_prompt.SYSTEM_PROMPT(self.agent_model.system)
         self.prompt = SystemMessage([{'type':'text','text':prompt,"cache_control": {"type": "ephemeral"}}])
@@ -130,8 +140,11 @@ class AgentMiniService(BaseMiniService):
                 checkpointer=self.checkpointer,
                 store=self.store,
                 )
-        
         for id,service in self.outboundServices.items():
+            if service.service_status not in acceptable_service:
+                raise BuildOkError(f'OutboundService [{id}] does not have a valid state: {service.service_status}')
+        
+        for id,service in self.clientServices.items():
             if service.service_status not in acceptable_service:
                 raise BuildOkError(f'OutboundService [{id}] does not have a valid state: {service.service_status}')
         return
@@ -268,6 +281,9 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
             
             except AgentInputFormatNotSupportedError as e:
                 context.abort(grpc.StatusCode.INVALID_ARGUMENT,...)
+            
+            except AgentContextDoesNotExistError as e:
+                context.abort(grpc.StatusCode.INVALID_ARGUMENT,)
 
             except MiniServiceDoesNotExistsError as e:
                 context.abort(grpc.StatusCode.NOT_FOUND,f'Agent @ {e.miniService_id} does not exist')
@@ -287,17 +303,10 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
         async with self.MiniServiceStore.lock(request.agent) as agent:
             reason:str|None = agent._verify_status()
             contents = [conversation.ContentBlock.exports(c.mode,c.type,c.value,c.mime) for c in request.blocks]
-            _context = request.context
-            if not _context:
-                raise AgentContextDoesNotExistError
-            _context = NotifyrContext(_context.request_id,_context.session_id,_context.channel,_context.user_id,_context.permission,_context.auth,_context.save)
-            answer = await agent.invoke(request.thread,request.prompt,context,contents,request.mess_id)
+            _context = create_context(request)
+            answer = await agent.invoke(request.thread,request.prompt,_context,contents,request.mess_id)
             self.purchase_token(request_id=answer['id'],issuer=request.user,agent=request.agent,**answer['token'])
-            return agent_message.PromptAnswer(
-                agent=request.agent,
-                reason =reason,
-                **slice_dict(answer,answer_exclude,'exclude')
-            ).to_proto()
+            return agent_message.PromptAnswer(agent=request.agent,reason =reason,**slice_dict(answer,answer_exclude,'exclude')).to_proto()
 
     @ErrorHandler
     async def PromptStream(self, request, context):
@@ -305,16 +314,9 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
         async with self.MiniServiceStore.lock(request.agent) as agent:
             reason:str|None = agent._verify_status()
             contents = [conversation.ContentBlock.exports(c.mode,c.type,c.value,c.mime) for c in request.blocks]
-            _context = request.context
-            if not _context:
-                raise AgentContextDoesNotExistError
-            _context = NotifyrContext(_context.request_id,_context.session_id,_context.channel,_context.user_id,_context.permission,_context.auth,_context.save)
-            async for answer in agent.stream(request.thread,request.user,request.prompt,contents,request.mess_id):
-                yield agent_message.PromptAnswer(
-                    agent=request.agent,
-                    reason =reason,
-                    **slice_dict(answer,answer_exclude,'exclude')
-                ).to_proto()
+            _context = create_context(request)
+            async for answer in agent.stream(request.thread,request.prompt,_context,contents,request.mess_id):
+                yield agent_message.PromptAnswer(agent=request.agent,reason =reason,**slice_dict(answer,answer_exclude,'exclude')).to_proto()
                 asyncio.sleep(0.2)
             self.purchase_token(request_id=answer['reply_id'],issuer=request.user,agent=request.agent,**answer['token'])
 
@@ -327,17 +329,10 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
         
         async with self.MiniServiceStore.lock(request.agent) as agent:
             reason:str|None = agent._verify_status()
-            _context = request.context
-            if not _context:
-                raise AgentContextDoesNotExistError
-            _context = NotifyrContext(_context.request_id,_context.session_id,_context.channel,_context.user_id,_context.permission,_context.auth,_context.save)
-            answer = await agent.invoke(request.thread,request.user,prompt,mess_id=request.mess_id)
+            _context = create_context(request)
+            answer = await agent.invoke(request.thread,prompt,_context,mess_id=request.mess_id)
             self.purchase_token(request_id=answer['reply_id'],issuer=request.user,agent=request.agent,**answer['token'])
-            return agent_message.PromptAnswer(
-                agent=request.agent,
-                reason =reason,
-                **slice_dict(answer,answer_exclude,'exclude')
-            ).to_proto()
+            return agent_message.PromptAnswer(agent=request.agent,reason =reason,**slice_dict(answer,answer_exclude,'exclude')).to_proto()
 
     @ErrorHandler
     async def S2SPrompt(self, request_iterator, context):
@@ -345,17 +340,9 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
             request = agent_message.PromptRequest.from_proto(request)
             async with self.MiniServiceStore.lock(request.agent) as agent:
                     reason:str|None = agent._verify_status()
-                    _context = request.context
-                    if not _context:
-                        raise AgentContextDoesNotExistError
-                    _context = NotifyrContext(_context.request_id,_context.session_id,_context.channel,_context.user_id,_context.permission,_context.auth,_context.save)
-                    async for answer in agent.stream(request.thread,request.user,request.prompt,mess_id=request.mess_id):
-                        yield agent_message.PromptAnswer(
-                            agent=request.agent,
-                            reason = reason,
-                            **slice_dict(answer,answer_exclude,'exclude')
-                        ).to_proto()
-                        
+                    _context = create_context(request)
+                    async for answer in agent.stream(request.thread,request.prompt,_context,mess_id=request.mess_id):
+                        yield agent_message.PromptAnswer(agent=request.agent,reason = reason,**slice_dict(answer,answer_exclude,'exclude')).to_proto()
                         asyncio.sleep(0.1)
                     self.purchase_token(request_id=answer['reply_id'],issuer=request.user,agent=request.agent,**answer['token'])
 
@@ -366,11 +353,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
             reason:str|None = service._verify_status()
             contents = conversation.ContentBlock.exports()
             answer = await service.completion(request.prompt,contents,mess_id=request.mess_id)
-            reply = agent_message.PromptAnswer(
-                agent=request.agent,
-                reason = reason,
-                **slice_dict(answer,answer_exclude,'exclude')
-            ).to_proto()      
+            reply = agent_message.PromptAnswer(agent=request.agent,reason = reason,**slice_dict(answer,answer_exclude,'exclude')).to_proto()      
             self.purchase_token(request_id=answer['reply_id'],issuer=request.user,agent=request.agent,**answer['token'])
             return reply
 
@@ -425,7 +408,8 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
             if API_SECRET_KEY not in secrets:
                 raise BuildFailureError(f'No Internal {API_SECRET_KEY} between the agentic server and the worker process found, cannot connect')
             
-            self.auth_header = secrets[API_SECRET_KEY]
+            self._agentic_key = ChaCha20SecretsWrapper(secrets[API_SECRET_KEY])
+            
             self.reactive_subject = self.reactiveService.create_subject(REACTIVE_TOKEN_COST,'Normal',REACTIVE_TOKEN_COST,'message')
 
         if build_state == DEFAULT_BUILD_STATE or build_state == RECREATE_MEMORY_BUILD_STATE:
@@ -481,7 +465,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
         if self.service_status != ServiceStatus.AVAILABLE:
             return
 
-        interceptor = AgentServerInterceptor(self.auth_header, {
+        interceptor = AgentServerInterceptor(self.AgenticAPIKey, {
             '/agent.Agent/Prompt': HandlerType.ONE_ONE,
             '/agent.Agent/PromptStream': HandlerType.ONE_MANY,
             '/agent.Agent/StreamPrompt': HandlerType.MANY_ONE,
@@ -509,4 +493,18 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
     def complete_purchase(self):
         self.reactive_subject.on_completed()
 
+    @property
+    def AgenticAPIKey(self)->str:
+        return self._agentic_key.to_plain()
     
+def create_context(request:agent_message.PromptRequest):
+    _context = request.context
+    if not _context:
+        raise AgentContextDoesNotExistError
+    return NotifyrContext(_context.request_id,
+                          _context.session_id,
+                          _context.channel,
+                          _context.user,
+                          _context.permissions,
+                          _context.auth,
+                          _context.save)

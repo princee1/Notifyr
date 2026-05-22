@@ -14,6 +14,7 @@ from app.definition._service import MiniStateProtocol, StateProtocol
 from app.depends.dependencies import get_auth_permission
 from app.depends.funcs_dep import get_profile
 from app.classes.profiles import ProfilModelValues, BaseProfileModel, ErrorProfileModel
+from app.errors.db_error import DocumentSingletonLimitReachedError
 from app.manager.broker_manager import Broker
 from app.manager.merchant_manager import Merchant
 from app.services.worker.celery_service import CeleryService, ChannelMiniService
@@ -38,7 +39,7 @@ PROFILE_PREFIX = 'profile'
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource('will be overwritten')
 class BaseProfilModelRessource(BaseHTTPRessource):
-    model: Type[BaseProfileModel]
+    Model: Type[BaseProfileModel]
     model_update:Type[BaseProfileModel]
     model_creds:Type[BaseProfileModel]
     profileType:str
@@ -69,9 +70,14 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     async def create_profile(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],authPermission:AuthPermission=Depends(get_auth_permission)):
         profileModel = await self.pipe_profil_model(request,'model')
         
-        await self.mongooseService.primary_key_constraint(profileModel,True)
-        await self.mongooseService.exists_unique(profileModel,True)
-        await self.mongooseService.condition_satisfaction(profileModel)
+        if self.Model._singleton:
+            existing_profiles = await self.mongooseService.find(self.Model)
+            if len(existing_profiles)>=1:
+                raise DocumentSingletonLimitReachedError(existing_profiles[0].id,existing_profiles[0].alias)
+        else:
+            await self.mongooseService.primary_key_constraint(profileModel,True)
+            await self.mongooseService.exists_unique(profileModel,True)
+            await self.mongooseService.condition_satisfaction(profileModel)
         
         async def rollback():
             return await self.profileService._delete_encrypted_creds(profileModel.profile_id,profileModel._vault)
@@ -104,7 +110,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),MerchantPipe(-1))
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.DELETE])
     async def delete_profile(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],authPermission:AuthPermission=Depends(get_auth_permission)):
-        profileModel = await self.mongooseService.get(self.model,profile,True)
+        profileModel = await self.mongooseService.get(self.Model,profile,True)
         creds = await self.profileService._read_encrypted_creds(profileModel.profile_id)
 
         async def rollback():
@@ -136,7 +142,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PUT])
     async def update_profile(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
         
-        profileModel = await self.mongooseService.get(self.model,profile,True)
+        profileModel = await self.mongooseService.get(self.Model,profile,True)
         modelUpdate = await self.pipe_profil_model(request,'model_update')
 
         await profileModel.update_content(modelUpdate)
@@ -159,13 +165,13 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PATCH])
     async def set_credentials(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)], authPermission:AuthPermission=Depends(get_auth_permission)):
         
-        profileModel:BaseProfileModel = await self.mongooseService.get(self.model,profile,True)
+        profileModel:BaseProfileModel = await self.mongooseService.get(self.Model,profile,True)
         modelCreds = await self.pipe_profil_model(request,'model_creds')
 
         modelCreds = modelCreds.model_dump()
         await self.mongooseService.condition_satisfaction(modelCreds)
 
-        await self.profileService.update_credentials(profile,modelCreds,self.model._vault)
+        await self.profileService.update_credentials(profile,modelCreds,self.Model._vault)
         await profileModel.update_meta()
 
         await channel.refresh_worker_state()
@@ -178,7 +184,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @LockService(ProfileService,lockType='reader',as_manager=False,motor_fallback=True)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.GET])
     async def read_profiles(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
-        profiles =  await self.mongooseService.find_all(self.model)
+        profiles =  await self.mongooseService.find_all(self.Model)
         profiles = filter(lambda p: p.profile_id in authPermission['allowed_profiles'],profiles)
         profiles = list(profiles)
         return profiles
@@ -190,7 +196,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UsePipe(DocumentFriendlyPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/s/{profile}/',methods=[HTTPMethod.GET])
     async def read_profile(self,profile:str,request:Request, response:Response, authPermission:AuthPermission=Depends(get_auth_permission)):
-        return await self.mongooseService.get(self.model,profile,True)
+        return await self.mongooseService.get(self.Model,profile,True)
         
     @UseRoles([Role.PUBLIC])
     @UseHandler(MiniServiceHandler,CeleryControlHandler)

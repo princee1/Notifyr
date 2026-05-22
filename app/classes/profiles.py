@@ -105,6 +105,7 @@ class BaseProfileModel(BaseDocument):
     _vault:ClassVar[Optional[str]]  = None
     _queue:ClassVar[str] = ...
     _capability:ClassVar[str] = ...
+    _singleton:ClassVar[bool] = False
 
     @field_validator("*", mode="before")
     def limit_all_strings(cls, v):

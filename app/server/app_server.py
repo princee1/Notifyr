@@ -193,8 +193,8 @@ class AppServer(EventInterface):
         if CAPABILITIES['agentic']:
             remoteAgentService = Get(RemoteAgentService)
             await remoteAgentService.init_http_session()
+            await remoteAgentService.start_agentic_healthcheck()
             await remoteAgentService.connect_channel()
-
         
     @register_hook('shutdown',active=True)
     async def on_shutdown(self):
@@ -205,6 +205,7 @@ class AppServer(EventInterface):
         if CAPABILITIES['agentic']:
             remoteAgentService = Get(RemoteAgentService)
             await remoteAgentService.close_http_session()
+            await remoteAgentService.cancel_agentic_health_task()
             await remoteAgentService.disconnect_channel()
 
     @register_hook('startup',)

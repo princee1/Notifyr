@@ -1,8 +1,8 @@
 import asyncio
-
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, WebSocketException,status
 from app.classes.prompt import PromptToken
-from app.utils.constant import CostConstant
+from app.definition._router import get_instance_id
+from app.utils.constant import CostConstant, HTTPHeaderConstant
 from app.utils.tools import RunInThreadPool
 from app.container import Get,Register
 from app.callback import Callbacks_Stream,Callbacks_Sub
@@ -58,7 +58,7 @@ def bootstrap_agent_app()->FastAPI:
     grpcTask = GrpcTask()    
 
     def auth_depends(token: str = Depends(get_bearer_token)):
-        if agentService.auth_header != token:
+        if agentService.AgenticAPIKey != token:
             raise HTTPException(status_code=401,detail="Unauthorized")
 
     async def on_startup():
@@ -89,24 +89,33 @@ def bootstrap_agent_app()->FastAPI:
                   dependencies=[Depends(auth_depends)]
                   )
     
-    @app.get('/health/',dependencies=[Depends(auth_depends)],)
-    async def health(response:StreamingResponse,request:Request):
+    @app.websocket("/health/")
+    async def health(ws: WebSocket):
+        if not (instance_id:=ws.headers.get(HTTPHeaderConstant.X_NOTIFYR_APP_INSTANCE_ID,None)):
+            raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION,reason="Missing instance id")
         
-        async def health_stream():
+        if not (auth:=ws.headers.get('Authorization',None)):
+            raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION,reason="Missing authorization header")
+
+        if auth != f"Bearer {agentService.AgenticAPIKey}":
+            raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION,reason="Unauthorized")
+
+        await ws.accept()
+
+        try:
             while True:
-                if await request.is_disconnected():
-                    break
-                yield 'pong'
-                asyncio.sleep(2)
- 
-        return StreamingResponse(
-            content=health_stream(),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive"
-                }
-        )
+                await ws.send_text("pong")
+                await asyncio.sleep(5)
+
+        except WebSocketDisconnect as e:
+            print(f"client:{instance_id} disconnected")
+
+        except Exception as e:
+            print("websocket error:", e)
+    
+    @app.post('/ping/',status_code=status.HTTP_200_OK)
+    async def ping(request:Request,instance_id:str=Depends(get_instance_id)):
+        ...
 
     for r in Routers:
         app.include_router(r)

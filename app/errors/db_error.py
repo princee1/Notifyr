@@ -45,6 +45,12 @@ class DocumentAddConditionError(BaseError):
         self.detail = detail
         super().__init__()
 
+class DocumentSingletonLimitReachedError(BaseError):
+    def __init__(self, document_id:str,alias:str):
+        super().__init__(document_id,alias)
+        self.document_id = document_id
+        self.alias = alias
+
 class DocumentConditionWrongMethodError(BaseError):
     ...
 

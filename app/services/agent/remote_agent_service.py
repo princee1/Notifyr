@@ -6,6 +6,7 @@ import grpc
 import aiohttp
 from aiohttp import ClientError, ClientConnectorError, ClientResponseError, ClientTimeout
 from json import JSONDecodeError
+from app.classes.secrets import ChaCha20SecretsWrapper
 from app.errors.agentic_error import *
 from pydantic import ValidationError
 from app.definition import _service
@@ -15,20 +16,23 @@ from app.errors.agentic_error import AgenticServerDisconnectedError, AgenticStre
 from app.grpc.agent_interceptor import  AgentClientInterceptor,AgentClientAsyncInterceptor
 from app.models.odm.agents_model import AgentModel, AgentValidationModel
 from app.services.agent.llm_service import LLMMiniService, LLMService
-from app.services.config_service import ConfigService
+from app.services.config_service import ConfigService, UvicornWorkerService
 from app.services.cost_service import CostService
 from app.services.vault_service import VaultService
 from app.services.database.mongoose_service import MongooseService
-from app.utils.constant import CostConstant, MongooseDBConstant
+from app.utils.constant import CostConstant, HTTPHeaderConstant, MongooseDBConstant
 from app.utils.globals import APP_MODE, CAPABILITIES,ApplicationMode
 from app.grpc import agent_pb2_grpc,agent_message
-from app.classes import conversation
-
+from websockets.asyncio.client import connect
+from websockets.exceptions import WebSocketException, ConnectionClosed, InvalidHandshake, ConnectionClosedOK
+from websockets.frames import CloseCode
+from requests import post, ConnectTimeout,ConnectionError
 
 acceptable_service_status = {ServiceStatus.AVAILABLE,ServiceStatus.WORKS_ALMOST_ATT,ServiceStatus.PARTIALLY_AVAILABLE}
 
 CREATE_AGENT_BUILD_STATE = -124
 AVOID_RE_VALIDATE_BUILD_STATE = -100
+PING_AGENTIC_SERVER_BUILD_STATE = 423
 
 PingMode = Literal['http-only','grpc']
 
@@ -48,22 +52,27 @@ class AgenticHTTPState(Enum):
     CONNECTED = 'Connected'
     DISCONNECTED = 'Disconnected'
     STREAM_DONE = 'Stream Done'
+    CONNECTION_REFUSED = 'Connection Refused'
+    GRACEFUL_DISCONNECTION = 'Graceful Disconnection'
 
 
 @Service(is_manager=True,links=[LinkDep(LLMService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)])
 class RemoteAgentService(BaseMiniServiceManager):
     
-    def __init__(self,configService:ConfigService,mongooseService:MongooseService,vaultService:VaultService,llmProviderService:LLMService):
+    def __init__(self,configService:ConfigService,mongooseService:MongooseService,vaultService:VaultService,llmProviderService:LLMService,uvicornService:UvicornWorkerService):
         super().__init__()
 
         self.configService = configService
         self.vaultService = vaultService
         self.llmProviderService = llmProviderService
         self.mongooseService = mongooseService
+        self.uvicornService = uvicornService
+
         self.MiniServiceStore = MiniServiceStore[RemoteAgentMiniService](self.name)
         
         # HTTP health check state
         self.http_state: AgenticHTTPState = AgenticHTTPState.DISCONNECTED
+        self.http_message:str = None
         self.grpc_state: grpc.ChannelConnectivity = grpc.ChannelConnectivity.IDLE
 
         self.http_health_task: asyncio.Task | None = None
@@ -79,6 +88,10 @@ class RemoteAgentService(BaseMiniServiceManager):
                 await asyncio.sleep(0.15)
             case AgenticHTTPState.CONNECTED:
                 ...
+            case AgenticHTTPState.GRACEFUL_DISCONNECTION:
+                raise AgenticServerDisconnectedError('Agentic is closing gracefully')
+            case AgenticHTTPState.CONNECTION_REFUSED:
+                raise  AgenticServerConnectionRefusedError('Cannot connect to the server missing info...')
             case _:
                 raise AgenticServerDisconnectedError('Agentic HTTP server state unknown')
     
@@ -104,7 +117,20 @@ class RemoteAgentService(BaseMiniServiceManager):
             raise BuildSkipError("Running in Agentic mode; RemoteAgentService not required.")
                 
         if build_state == DEFAULT_BUILD_STATE:
-            self.auth_header = self.vaultService.secrets_engine.read('internal-api','AGENTIC')['API_KEY']
+            auth_key = self.vaultService.secrets_engine.read('internal-api','AGENTIC')['API_KEY']
+            self._agentic_api_key = ChaCha20SecretsWrapper(auth_key)
+            
+        if build_state == DEFAULT_BUILD_STATE or build_state == PING_AGENTIC_SERVER_BUILD_STATE:
+            try:
+                response = post(f'http://{self.agentic_http_host}/ping/',headers=self.Headers,timeout=12)
+                if response.status_code != 200:
+                    raise BuildFailureError('Cannot ping the server')
+
+            except (TimeoutError,ConnectTimeout)  as e:
+                raise BuildWarningError('Ping Request Timeout')
+
+            except ConnectionError as e:
+                raise BuildFailureError('Cannot connect to the server')
         
         models = self.mongooseService.sync_find(MongooseDBConstant.AGENT_COLLECTION,AgentModel)
         counter = self.StatusCounter(len(models))
@@ -113,7 +139,6 @@ class RemoteAgentService(BaseMiniServiceManager):
         for model in models:
             try:
                 provider = self.llmProviderService.MiniServiceStore.get(model['provider'])
-
                 agent = RemoteAgentMiniService(
                     self.configService,
                     self,
@@ -136,7 +161,7 @@ class RemoteAgentService(BaseMiniServiceManager):
     
         def connect_channel(self):
             self.channel = grpc.insecure_channel(self.agentic_grpc_host,options=_GRPC_RECONNECT_OPTIONS)
-            clientInterceptor = AgentClientInterceptor(self.auth_header)
+            clientInterceptor = AgentClientInterceptor(self.AgenticAPIKey)
             self.channel = grpc.intercept_channel(self.channel,clientInterceptor)
             self.stub = agent_pb2_grpc.AgentStub(self.channel)
             try:
@@ -147,7 +172,6 @@ class RemoteAgentService(BaseMiniServiceManager):
                 self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
     
     else:
-
         async def grpc_state_callback(self,state:grpc.ChannelConnectivity):
             print('State:',state)
             async with self.statusLock.writer:
@@ -155,7 +179,7 @@ class RemoteAgentService(BaseMiniServiceManager):
 
         async def connect_channel(self):
 
-            clientInterceptor = AgentClientAsyncInterceptor(self.auth_header)
+            clientInterceptor = AgentClientAsyncInterceptor(self.AgenticAPIKey)
             self.channel = grpc.aio.insecure_channel(self.agentic_grpc_host,interceptors=[clientInterceptor],options=_GRPC_RECONNECT_OPTIONS)
             self.stub = agent_pb2_grpc.AgentStub(self.channel)
             # try:
@@ -176,66 +200,13 @@ class RemoteAgentService(BaseMiniServiceManager):
         async with self.statusLock.writer:
            self.grpc_state = state
                 
-    def start_agentic_healthcheck(self):
-        """Create and start the HTTP health check task."""
-        if self.http_health_task and not self.http_health_task.done():
-            return 
-        
-        health_url = f"http://{self.agentic_http_host}/health/"
-        headers = {"Authorization": f"Bearer {self.auth_header}"}
-
-        async def _http_health_check():
-            http_reconnect_backoff = _HTTP_HEALTH_CHECK_RECONNECT_INTERVAL
-
-            while True:
-                try:
-                    timeout = aiohttp.ClientTimeout(sock_read=_HTTP_HEALTH_CHECK_TIMEOUT)
-                    http_session = aiohttp.ClientSession(timeout=timeout)
-
-                    async with http_session.get(health_url, headers=headers) as response:
-
-                        if response.status != 200:
-                            async with self.statusLock.writer:
-                                self.http_state = AgenticHTTPState.BAD_RESPONSE
-                            
-                            await asyncio.sleep(http_reconnect_backoff)
-                            continue
-                        
-                        async with self.statusLock.writer:
-                            self.http_state = AgenticHTTPState.CONNECTED
-
-                        http_reconnect_backoff = _HTTP_HEALTH_CHECK_RECONNECT_INTERVAL
-                        
-                        async for line in response.content:
-                            ...
-
-                        async with self.statusLock.writer:
-                            self.http_state = AgenticHTTPState.STREAM_DONE
-
-                        await asyncio.sleep(http_reconnect_backoff)
-                        continue
-                        
-                except Exception as e:
-                    async with self.statusLock.writer:
-                        self.http_state = AgenticHTTPState.DISCONNECTED
-
-                    await http_session.close()
-                    await asyncio.sleep(http_reconnect_backoff)
-                    http_reconnect_backoff = min(
-                        int(http_reconnect_backoff * _HTTP_HEALTH_CHECK_BACKOFF_MULTIPLIER),
-                        _HTTP_HEALTH_CHECK_MAX_BACKOFF
-                        )
-        
-        self.http_health_task = asyncio.create_task(_http_health_check())
-
     async def init_http_session(self, timeout: int = 30):
         """Initialize a shared aiohttp.ClientSession for HTTP requests to agentic."""
         if self._http_session and not self._http_session.closed:
             return
 
-        headers = {"Authorization": f"Bearer {self.auth_header}"}
         timeout_obj = aiohttp.ClientTimeout(total=timeout)
-        self._http_session = aiohttp.ClientSession(headers=headers, timeout=timeout_obj)
+        self._http_session = aiohttp.ClientSession(headers=self.Headers, timeout=timeout_obj)
 
     async def close_http_session(self):
         if self._http_session:
@@ -309,8 +280,61 @@ class RemoteAgentService(BaseMiniServiceManager):
             self.http_health_task = None
 
         async with self.statusLock.writer:
-            self.http_state = False
-                 
+            self.http_state = AgenticHTTPState.DISCONNECTED
+
+    def start_agentic_healthcheck(self):
+        """Create and start the HTTP health check task."""
+        if self.http_health_task and not self.http_health_task.done():
+            return 
+
+        if self.service_status != ServiceStatus.AVAILABLE:
+            return
+        
+        health_url = f"wss://{self.agentic_http_host}/health/"
+        async def _http_health_check():
+            async for websocket in connect(health_url,additional_headers=self.Headers,max_size=100,):
+                try:
+                    async with self.statusLock.writer:
+                        self.http_state = AgenticHTTPState.CONNECTED
+                        self.http_message = 'Connected'
+                    async for message in websocket:
+                        print("received:", message)
+                    state = AgenticHTTPState.STREAM_DONE
+                    self.http_message = 'Reconnecting'
+                    continue
+                except ConnectionClosed as e:
+                    match e.code:
+                        case CloseCode.ABNORMAL_CLOSURE:
+                            state = AgenticHTTPState.DISCONNECTED
+                            continue
+                        case CloseCode.POLICY_VIOLATION:
+                            state = AgenticHTTPState.CONNECTION_REFUSED
+                            break
+                except InvalidHandshake as e:
+                    state = AgenticHTTPState.CONNECTION_REFUSED    
+                    continue
+                except ConnectionClosedOK as e:
+                    state = AgenticHTTPState.GRACEFUL_DISCONNECTION
+                    break
+                finally:
+                    async with self.statusLock.writer:
+                        self.http_state = state
+                        self.http_message = e.reason
+
+                
+        self.http_health_task = asyncio.create_task(_http_health_check())
+    
+    @property
+    def Headers(self)->dict:
+        return {
+            'Authorization': f'Bearer {self.AgenticAPIKey}',
+            HTTPHeaderConstant.X_NOTIFYR_APP_INSTANCE_ID:self.uvicornService.INSTANCE_ID
+        }
+    
+    @property
+    def AgenticAPIKey(self)->str:
+        return self._agentic_api_key.to_plain()
+
     @property
     def agentic_grpc_host(self):
         return f"{self.configService.AGENTIC_HOST}:50051"

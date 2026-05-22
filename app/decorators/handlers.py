@@ -11,6 +11,7 @@ from minio import S3Error, ServerError
 import requests
 from app.errors.ingest_error import AgenticDatabaseNotAllowedError, IngestConfigNotPresentError, TaskIngestNameNotValidError
 from app.errors.agentic_error import (
+    AgenticServerConnectionRefusedError,
     AgenticServerDisconnectedError,
     AgenticStreamDoneError,
     AgenticBadResponseError,
@@ -56,7 +57,7 @@ from redis import WatchError
 
 from app.services.logger_service import LoggerService
 from pydantic import BaseModel, ValidationError as PydanticValidationError
-from app.errors.db_error import DocumentAddConditionError, DocumentConditionWrongMethodError, DocumentDoesNotExistsError, DocumentExistsUniqueConstraintError, DocumentPrimaryKeyConflictError,MemCacheNoValidKeysDefinedError, MemCachedTypeValueError
+from app.errors.db_error import DocumentAddConditionError, DocumentConditionWrongMethodError, DocumentDoesNotExistsError, DocumentExistsUniqueConstraintError, DocumentPrimaryKeyConflictError, DocumentSingletonLimitReachedError,MemCacheNoValidKeysDefinedError, MemCachedTypeValueError
 from app.utils.fileIO import ExtensionNotAllowedError, MultipleExtensionError
 from aiomcache.exceptions import ClientException, ValidationException 
 from pymemcache import MemcacheClientError,MemcacheServerError,MemcacheUnexpectedCloseError
@@ -486,6 +487,12 @@ class MotorErrorHandler(Handler):
                     "message":f"The document with the values entered {'already exists' if e.exists  else 'does not exists'}"
                 }
             )
+
+        except DocumentSingletonLimitReachedError as e:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                                detail={'message':'The document already have a singleton entry',
+                                        'document_id':e.document_id,
+                                        'alias':e.alias})
         
         except DocumentAddConditionError as e:
             raise HTTPException(
@@ -1192,6 +1199,12 @@ class AgenticHandler(Handler):
                 }
             )
         
+        except AgenticServerConnectionRefusedError as e:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={'We cant connect to agentic node...'}
+            )
+
         except AgenticStreamDoneError as e:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
