@@ -28,7 +28,6 @@ class ContentBlock(BaseModel):
         if self.type == 'base64':
             if not self.mime:
                 raise ValueError(f"{self.mode} base64 type requires mime to be specified")
-
             match self.mode:
                 case 'file':
                     if self.mime not in file_mime_list:
@@ -39,7 +38,6 @@ class ContentBlock(BaseModel):
                 case 'text-plain':
                     if self.mime not in text_mime_list:
                         raise ValueError(f"Text-plain base64 mime must be one of {{plain, markdown,}}, got '{self.mime}'")
-
         if self.type == 'url':
             if not self.value.startswith(('http://', 'https://')):
                 raise ValueError("URL type requires value to start with http:// or https://")
@@ -99,7 +97,7 @@ class User:
     user_id: str
     auth: str
     user: Optional[dict] = None
-    
+
     encoded_user: Optional[str] = field(default=None,init=False)
 
     def __post_init__(self):

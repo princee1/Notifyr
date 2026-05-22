@@ -4,11 +4,11 @@ from typing import Any, Callable, Dict, List, NamedTuple, Self,Any
 from fastapi import HTTPException
 from pydantic import ValidationError
 from app.classes.secrets import ChaCha20SecretsWrapper
-from app.definition._agent import AgentContextDoesNotExistError, AgentInputFormatNotSupportedError, AgentNotAvailableError, ChatModelFactory, DynamicChatModelFactory, Thread
+from app.definition._agent import AgentContextDoesNotExistError, AgentInputFormatNotSupportedError, AgentNotAvailableError, ChatModelFactory, ContextWindowMessageManager, DynamicChatModelFactory, NotifyrAgentState, NotifyrContext, SummaryMessageInjectionFactory, Thread, dynamic_system_prompt
 from app.classes.cost_definition import InsufficientCreditsError, InvalidPurchaseRequestError
 from app.classes.prompt import PromptToken
 from app.definition import _service
-from app.definition._tool import NotifyrContext, NotifyrAgentState, dynamic_tool_selection, handle_tool_errors
+from app.definition._tool import dynamic_tool_selection, handle_tool_errors
 from app.errors.service_error import BuildFailureError, BuildOkError, MiniServiceDoesNotExistsError
 from app.grpc.agent_interceptor import AgentServerInterceptor, HandlerType
 from app.models.odm.agents_model import *
@@ -116,6 +116,10 @@ class AgentMiniService(BaseMiniService):
             raise BuildFailureError('Could not validate the agent model')
 
         middleware = self._init_middleware()
+        middleware.append(dynamic_system_prompt)
+        middleware.append(handle_tool_errors)
+        middleware.append(dynamic_tool_selection)
+
         if isinstance(self.agent_model.model,str):
             self.chat_model = ChatModelFactory(self.agent_model,self.depService.model,self.depService.credentials)
         else:
@@ -123,10 +127,13 @@ class AgentMiniService(BaseMiniService):
             self.chat_model = chat_model
             middleware.append(dynamic_model_selection)
 
+        summaryInjector = SummaryMessageInjectionFactory(self.agent_model,self.depService.model)
+        middleware.append(summaryInjector)
+
+        if (ctxtManager:=ContextWindowMessageManager(self.agent_model,self.depService.model)):
+            middleware.append(ctxtManager)
+    
         tools = self._init_tools()
-        middleware.append(handle_tool_errors)
-        middleware.append(dynamic_tool_selection)
-        
         prompt = agents_prompt.SYSTEM_PROMPT(self.agent_model.system)
         self.prompt = SystemMessage([{'type':'text','text':prompt,"cache_control": {"type": "ephemeral"}}])
         self.agent = create_agent(
@@ -204,30 +211,39 @@ class AgentMiniService(BaseMiniService):
         answer['invalid_tool_calling'] = [slice_dict(tc,conversation.invalid_tool_calling_keys,'include') for tc in response.invalid_tool_calls]
         return answer
         
-    async def stream(self,thread:str,prompt:str,context:NotifyrContext,contents:list=[],mess_id:str=None):
-        content_blocks = []
-        content_blocks.append({'type':'text','text':prompt})
+    async def stream(self,thread: str,prompt: str,context: NotifyrContext,contents: list = [],mess_id: str = None,):
+        content_blocks = [{'type': 'text', 'text': prompt}]
         content_blocks.extend(contents or [])
-        message = HumanMessage(content_blocks=content_blocks,id=mess_id) 
+        message = HumanMessage(content_blocks=content_blocks,id=mess_id)
 
-        config = {"configurable": {"thread_id": thread,"checkpoint_ns": self.agent_model.id}} 
+        config = {"configurable": {"thread_id": thread,"checkpoint_ns": self.agent_model.id}}
+        async for chunk in self.agent.astream_events(message,config=config,context=context,version="v2",):
 
-        async for chunk in self.agent.astream_events(message,config,context=context):
-            response = chunk['data']
             answer = conversation.Answer()
-            answer['reply_id'] = response.id
-
             match chunk['event']:
-                case 'on_chat_model_stream':
-                    answer['reasoning'] = [b for b in response.content_blocks if b["type"] == "reasoning"]
-                    answer['text'] = response.text
-                    answer['tool_calling'] = [slice_dict(tc,conversation.TOOL_CALLING_KEYS,'include') for tc in response.tool_calls]
-                    answer['invalid_tool_calling'] = [slice_dict(tc,conversation.invalid_tool_calling_keys,'include') for tc in response.invalid_tool_calls]
+                case 'on_chat_model_stream' | 'on_llm_stream':
+                    response = chunk['data']['chunk']
+                    answer['reply_id'] = response.id
+                    answer['reasoning'] = [
+                        b for b in getattr(response, 'content_blocks', [])
+                        if b.get("type") == "reasoning"
+                    ]
+                    answer['text'] = getattr(response, 'text', '')
+                    answer['tool_calling'] = [
+                        slice_dict(tc, conversation.TOOL_CALLING_KEYS, 'include')
+                        for tc in getattr(response, 'tool_calls', [])
+                    ]
+                    answer['invalid_tool_calling'] = [
+                        slice_dict(tc, conversation.invalid_tool_calling_keys, 'include')
+                        for tc in getattr(response, 'invalid_tool_calls', [])
+                    ]
                 case 'on_chat_model_end':
-                    if (usage:= response.usage_metadata):
-                        answer['token'] = conversation.Token(input_token=usage.get('input_tokens',0),output_token=usage.get('output_tokens',0))
+                    response = chunk['data']['output']
+                    answer['reply_id'] = response.id
+                    if usage := getattr(response, 'usage_metadata', None):
+                        answer['token'] = conversation.Token(input_token=usage.get('input_tokens', 0),output_token=usage.get('output_tokens', 0),)
                 case _:
-                    ...
+                    continue
 
             yield answer
         
@@ -237,7 +253,7 @@ class AgentMiniService(BaseMiniService):
         response:AIMessage = await self.chat_model.ainvoke(message,)
 
     async def batch(self,inputs:list[str]):
-       async for respone in self.chat_model.abatch_as_completed():
+       async for response in self.chat_model.abatch_as_completed():
            yield 
 
     def _verify_status(self):

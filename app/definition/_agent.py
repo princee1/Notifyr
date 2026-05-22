@@ -1,3 +1,6 @@
+from dataclasses import dataclass, field
+from typing import Callable, Dict, List, Literal, Optional, TypedDict,Any, Union
+from langchain.agents.middleware.types import AgentState, dynamic_prompt
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_cohere import ChatCohere
@@ -9,6 +12,7 @@ from app.definition._service import ServiceStatus
 from app.models.odm.agents_model import AgentModel
 from app.models.llm_model import LLMProfileModel
 from app.utils.helper import subset_model
+from langchain.messages import AnyMessage,SystemMessage
 from pydantic import SecretStr
 from langchain.agents.middleware import wrap_model_call, ModelRequest, ModelResponse
 
@@ -63,6 +67,85 @@ class AgentContextDoesNotExistError(BaseError):
 ############################                                          ###################################
 #########################################################################################################
 
+#AnyMessage = Union[AIMessage,HumanMessage,]
+@dataclass
+class NotifyrContext:
+    request_id:str
+    session_id:str
+    channel:str
+    user_id:str
+    permissions:set[str]
+    auth: Literal['guest','subscribed','registered']
+    save:bool=True
+    user: Optional[dict]  = field(default=None,init=False)
+
+    def __post_init__(self):
+        ...
+        # NOTE the user will coerce into a schema : base64 -> str -> user_model
+
+class SummaryMessage(SystemMessage):
+
+    @classmethod
+    def create(cls,content: str,session_id: str,):
+        return cls(content=content,id=session_id,additional_kwargs={
+            "session_id": session_id,
+            "memory_type": "session_summary",},
+            )
+
+class SessionState(TypedDict):
+    id:str
+    created_at: int
+    closed_at: int | None
+    messages: List[AnyMessage]
+    summary:str | None
+    metadata:dict[str,Any]
+    tags:List[str]
+
+class NotifyrAgentState(AgentState):
+    preferences:Dict[str,Any]
+    permission:List[str]
+    guest:Optional[Dict]
+    sessions: Dict[str,SessionState]
+
+#########################################################################################################
+############################                                          ###################################
+#########################################################################################################
+
+def SummaryMessageInjectionFactory(agentModel:AgentModel,llmModel:LLMProfileModel):
+
+    @wrap_model_call
+    async def inject_session_summaries(request: ModelRequest[NotifyrContext],handler: Callable[[ModelRequest[NotifyrContext]], ModelResponse])->ModelResponse:
+        state:NotifyrAgentState = request.state
+        injected_messages = [state["messages"][0]]
+
+        for i,(session_id,session) in enumerate(state.get("sessions",{}).items()):
+            injected_messages.append(SummaryMessage.create(session['summary'],session_id))
+
+        injected_messages.extend(state["messages"][1:])
+        request.override(messages=injected_messages)
+        return await handler(request)
+
+    return inject_session_summaries
+
+def ContextWindowMessageManager(agentModel:AgentModel,llmModel:LLMProfileModel):
+    # TODO Trim/Filtering
+
+    @wrap_model_call
+    async def manager(request: ModelRequest[NotifyrContext],handler: Callable[[ModelRequest[NotifyrContext]], ModelResponse])->ModelResponse:
+        ...
+    return
+
+#########################################################################################################
+############################                                          ###################################
+#########################################################################################################
+
+@dynamic_prompt
+def dynamic_system_prompt(request: ModelRequest[NotifyrContext]) -> str:
+    return ''
+
+#########################################################################################################
+############################                                          ###################################
+#########################################################################################################
 
 def ChatModelFactory(agentModel:AgentModel,llmModel:LLMProfileModel,credentials: ChaCha20Poly1305SecretsWrapper,index:int=None)->BaseChatModel:
         api_key =lambda: credentials.to_plain()
@@ -168,3 +251,4 @@ def DynamicChatModelFactory(agentModel:AgentModel,llmModel:LLMProfileModel,crede
         return await handler(request.override(model=basic_model))
     
     return dynamic_model_selection,basic_chat_model
+

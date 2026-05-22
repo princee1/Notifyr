@@ -49,7 +49,7 @@ class AvatarConfig(BaseModel):
     type:Literal['raw','icon','url'] = 'icon'
     value: str = ''
 
-class MemoryPolicy(BaseModel):
+class StoreMemoryPolicy(BaseModel):
     allowed_types: list[str]
     namespace: str
     ttl: Optional[int]
@@ -61,9 +61,9 @@ class AgentModel(BaseDocument):
     system:System
     model: str | List[str]
     store_model:Optional[str] = None
-    preference_model:Optional[str] = None
+    memory_model:Optional[str] = None
     tools: List[ToolModels] = Field(default_factory=list)
-    memory_policy: Optional[MemoryPolicy] = None
+    store_policy: Optional[StoreMemoryPolicy] = None
     generation:GenerationConfig = GenerationConfig()
     avatar = Optional[AvatarConfig] = AvatarConfig()
     profile: Optional[ModelProfileConfig] = ModelProfileConfig()

@@ -11,6 +11,7 @@ from app.services.database.redis_service import RedisService
 from app.classes.conversation import Message, Reply, Session, User
 from app.services.setting_service import SettingService
 from app.services.vault_service import VaultService
+from app.services.worker.arq_service import ArqIngestTaskService
 
 def message_to_request(message:Message,session:Session,user:User,content_block_limit:int=3)->agent_message.PromptRequest:
     message.content_block = message.content_block[content_block_limit:]
@@ -53,7 +54,7 @@ def iterator_factory(callback:AsyncGenerator[Any,Message],session:Session,user:U
 class ChatService(BaseService):
     """Answer message with priority because of the rate limit """
 
-    def __init__(self,configService:ConfigService,settingService:SettingService,mongooseService:MongooseService,remoteAgentService:RemoteAgentService,redisService:RedisService,costService:CostService,vaultService:VaultService) -> None:
+    def __init__(self,configService:ConfigService,arqService:ArqIngestTaskService,settingService:SettingService,mongooseService:MongooseService,remoteAgentService:RemoteAgentService,redisService:RedisService,costService:CostService,vaultService:VaultService) -> None:
         super().__init__()
         self.mongooseService = mongooseService
         self.remoteAgentService = remoteAgentService
@@ -63,13 +64,12 @@ class ChatService(BaseService):
         self.vaultService = vaultService
         self.settingService = settingService
     
-    async def start_chat(self):
+    async def end_chat(self,session:Session,thread:str,agent:str):
+        # TODO Delete current message by session and add them into a session object and summarize
+        # TODO Add a job that will turn the old conversation into a knowledge Graph
         ...
     
-    async def end_chat(self):
-        ...
-    
-    async def fetch_chat(self,):
+    async def fetch_chat(self,Session,thread:str,agent:str):
         ...
     
     async def stream_answer(self,generator:AsyncGenerator[Any,Message],_session:Session,_user:User,_agent:str,*args,_wait=0.5,**kwargs):
