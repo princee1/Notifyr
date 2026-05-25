@@ -18,7 +18,8 @@ from app.utils.helper import SliceMode, slice_dict
 Time = Union[int | float | timedelta | None]
 Config = Literal['vector_config','graph_config']
 
-QUEUE_NAME = 'arq:data_ingestion_task'
+INGESTION_QUEUE_NAME = 'arq:data_ingestion_task'
+CONVERSATION_QUEUE_NAME ='arq:conversation_task'
 
 class DataTaskNotFoundError(BaseError):
     def __init__(self, job_id:str,reason:str):
@@ -97,13 +98,13 @@ class ArqIngestTaskService(BaseService):
         async def close(self):
             await self._worker.close()
 
-        async def enqueue_task(self,task_name:str,job_id:str=None,expires:Time=None,defer_by:Time = None,kwargs:dict={}):
+        async def enqueue_job(self,task_name:str,job_id:str=None,queue_name:str= INGESTION_QUEUE_NAME,expires:Time=None,defer_by:Time = None,kwargs:dict={}):
             task_name = self.task_registry[task_name]
-            task = await self._worker.enqueue_job(task_name,_job_id=job_id,_queue_name=QUEUE_NAME,_expires=expires,_defer_by=defer_by, **kwargs)
+            task = await self._worker.enqueue_job(task_name,_job_id=job_id,_queue_name=queue_name,_expires=expires,_defer_by=defer_by, **kwargs)
             return task
         
-        async def get_queued_jobs(self)->list[JobDef]:
-            return await self._worker.queued_jobs(queue_name=QUEUE_NAME) or []
+        async def get_queued_jobs(self,queue_name:str=INGESTION_QUEUE_NAME)->list[JobDef]:
+            return await self._worker.queued_jobs(queue_name=queue_name) or []
             
         async def get_jobs_results(self,success:bool|None=None)->list[JobDef]:
             results = await self._worker.all_job_results()
@@ -118,8 +119,8 @@ class ArqIngestTaskService(BaseService):
             
             return temp
         
-        async def fetch(self,job_id:str):
-            return Job(job_id,self._worker,QUEUE_NAME)
+        async def fetch(self,job_id:str,queue_name:str=INGESTION_QUEUE_NAME):
+            return Job(job_id,self._worker,queue_name)
         
         async def info(self,job_id:str|Job):
             if isinstance(job_id,str):
@@ -193,8 +194,8 @@ class ArqIngestTaskService(BaseService):
                     
                 raise WatchError('Could not commit the change')
   
-        async def dequeue_task(self,job_id:str):
-            q_val = await self.redisService.rem(RedisConstant.EVENT_DB,QUEUE_NAME,job_id)
+        async def dequeue_job(self,job_id:str,queue_name:str=INGESTION_QUEUE_NAME):
+            q_val = await self.redisService.rem(RedisConstant.EVENT_DB,queue_name,job_id)
             j_val,r_del = await self.delete(job_id)
             return
 

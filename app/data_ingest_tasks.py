@@ -461,7 +461,7 @@ if APP_MODE == ApplicationMode.arq:
     from app.services import LoggerService
     from app.services import SystemService
     from app.services import SettingService
-    from app.services.worker.arq_service import ArqIngestTaskService,QUEUE_NAME
+    from app.services.worker.arq_service import ArqIngestTaskService,INGESTION_QUEUE_NAME
 
     from app.container import Get,build_container
     import asyncio
@@ -479,7 +479,7 @@ if APP_MODE == ApplicationMode.arq:
     class WorkerSettings:
         functions = task_registry
         redis_settings = RedisSettings.from_dsn(arqService.arq_url)
-        queue_name = QUEUE_NAME
+        queue_name = INGESTION_QUEUE_NAME
         max_jobs = 5
         allow_abort_jobs = True
         keep_result_forever = True

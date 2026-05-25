@@ -101,7 +101,7 @@ class JobArqRessource(BaseHTTPRessource):
             case JobStatus.queued | JobStatus.deferred:
                 info = await self.arqService.info(job)
                 size,uri,task = info.kwargs.get('size',0),info.kwargs.get('uri',None),info.kwargs.get('_nickname',None)
-                await self.arqService.dequeue_task(job_id)
+                await self.arqService.dequeue_job(job_id)
 
                 if  task == ArqDataTaskConstant.FILE_DATA_TASK:
                     file_path = self.arqService.compute_data_file_upload_path(uri)
@@ -200,7 +200,7 @@ class DataIngestRessource(BaseHTTPRessource):
                 merchant.safe_payment(
                     None,
                     (FileResponseUploadModel(metadata=[meta]),db_config),
-                    self.arqService.enqueue_task,ArqDataTaskConstant.FILE_DATA_TASK,
+                    self.arqService.enqueue_job,ArqDataTaskConstant.FILE_DATA_TASK,
                     job_id=uri,
                     expires=ingestTask.expires,
                     defer_by=ingestTask.defer_by,
@@ -268,7 +268,7 @@ class DataIngestRessource(BaseHTTPRessource):
         merchant.safe_payment(
             None,
             (metadata,db_config),
-            self.arqService.enqueue_task,ArqDataTaskConstant.CRAWL_DATA_TASK,
+            self.arqService.enqueue_job,ArqDataTaskConstant.CRAWL_DATA_TASK,
             job_id=uri,
             expires=ingestTask.expires,
             defer_by=ingestTask.defer_by,
@@ -317,7 +317,7 @@ class DataIngestRessource(BaseHTTPRessource):
         merchant.safe_payment(
             None,
             metadata,
-            self.arqService.enqueue_task,ArqDataTaskConstant.RESEARCH_DATA_TASK,
+            self.arqService.enqueue_job,ArqDataTaskConstant.RESEARCH_DATA_TASK,
             job_id=uri,
             expires=ingestTask.expires,
             defer_by=ingestTask.defer_by,

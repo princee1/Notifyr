@@ -11,7 +11,7 @@ DEFAULT_TEMPERATURE = 1
 class BaseTemperatureMaxTokenModel(BaseModel):
     base_url: Optional[str] = None
     temperature: float | None = None
-    max_tokens: int | None = None
+    max_tokens: Optional[int] = Field(None, ge=4000)
 
     @field_validator('temperature')
     def validate_temperature(cls, v):
@@ -103,8 +103,8 @@ class LLMProfileModel(BaseProfileModel):
 
     research_config: Optional[WebResearchConfigModel] = None
 
-    max_input_tokens:Optional[int] = None
-    max_output_tokens:Optional[int] = None
+    max_input_tokens:Optional[int] = Field(None, ge=4000)
+    max_output_tokens:Optional[int] =  Field(None, ge=4000)
 
     api_key:str
     api_name:str = 'default'

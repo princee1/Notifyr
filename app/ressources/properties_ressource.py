@@ -12,7 +12,7 @@ from app.definition._service import StateProtocol, ServiceStatus
 from app.depends.dependencies import get_auth_permission, get_query_params
 from app.errors.properties_error import GlobalKeyDoesNotExistsError
 from app.manager.broker_manager import Broker
-from app.models.custom_model import CustomModel, UpdateCustomModel
+from app.models.odm.custom_model import CustomModel, UpdateCustomModel
 from app.models.properties_model import GlobalVarModel, SettingsModel
 from app.services import CustomService
 from app.services.database.mongoose_service import MongooseService

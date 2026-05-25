@@ -5,7 +5,7 @@ from app.classes.crawl import CrawlLLMConfig
 from app.definition import _service
 from app.errors.llm_error import LLMConfigNotConfiguredError
 from app.errors.service_error import BuildFailureError, BuildOkError, BuildWarningError
-from app.models.llm_model import (
+from app.models.odm.llm_model import (
     EMBEDDER_PROVIDER_SET, LLMProfileModel, 
     VectorEmbeddingConfig, CrawlLLMConfigModel, WebResearchConfigModel, 
     GraphitiLLMConfig, GraphitiEmbeddingConfig,

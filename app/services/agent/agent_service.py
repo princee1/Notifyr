@@ -1,10 +1,9 @@
 import asyncio
 import functools
 from typing import Any, Callable, Dict, List, NamedTuple, Self,Any
-from fastapi import HTTPException
 from pydantic import ValidationError
 from app.classes.secrets import ChaCha20SecretsWrapper
-from app.definition._agent import AgentContextDoesNotExistError, AgentInputFormatNotSupportedError, AgentNotAvailableError, ChatModelFactory, ContextWindowMessageManager, DynamicChatModelFactory, NotifyrAgentState, NotifyrContext, SummaryMessageInjectionFactory, Thread, dynamic_system_prompt
+from app.definition._agent import AgentContextDoesNotExistError, AgentInputFormatNotSupportedError, AgentNotAvailableError, ChatModelFactory, ContextStrictTrimmerFactory, DynamicChatModelFactory, NotifyrAgentState, NotifyrContext, SessionInjectionFactory, Thread, dynamic_system_prompt
 from app.classes.cost_definition import InsufficientCreditsError, InvalidPurchaseRequestError
 from app.classes.prompt import PromptToken
 from app.definition import _service
@@ -120,19 +119,23 @@ class AgentMiniService(BaseMiniService):
         middleware.append(handle_tool_errors)
         middleware.append(dynamic_tool_selection)
 
+        summaryInjector = SessionInjectionFactory(self.agent_model,self.depService.model)
+        
         if isinstance(self.agent_model.model,str):
             self.chat_model = ChatModelFactory(self.agent_model,self.depService.model,self.depService.credentials)
+            trimmer_middleware = ContextStrictTrimmerFactory(self.agent_model,self.depService.model)
+            middleware.append(trimmer_middleware)
+            middleware.append(summaryInjector)
         else:
-            dynamic_model_selection,chat_model = DynamicChatModelFactory(self.agent_model,self.depService.model,self.depService.credentials)
+            trimmer_middleware,dynamic_model_selection,chat_model = DynamicChatModelFactory(self.agent_model,self.depService.model,self.depService.credentials)
             self.chat_model = chat_model
+
+            middleware.append(trimmer_middleware)
+            middleware.append(summaryInjector)
             middleware.append(dynamic_model_selection)
 
-        summaryInjector = SummaryMessageInjectionFactory(self.agent_model,self.depService.model)
-        middleware.append(summaryInjector)
+        middleware = reversed(middleware)
 
-        if (ctxtManager:=ContextWindowMessageManager(self.agent_model,self.depService.model)):
-            middleware.append(ctxtManager)
-    
         tools = self._init_tools()
         prompt = agents_prompt.SYSTEM_PROMPT(self.agent_model.system)
         self.prompt = SystemMessage([{'type':'text','text':prompt,"cache_control": {"type": "ephemeral"}}])

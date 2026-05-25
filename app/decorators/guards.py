@@ -15,7 +15,7 @@ from app.models.odm.agents_model import AgentModel
 from app.models.orm.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, ContentSubscriptionORM, SubscriptionContactStatusORM
 from app.models.ingest_model import DataIngestModel, WebCrawlingDataIngestModel
 from app.models.orm.link_model import LinkORM
-from app.models.llm_model import LLMProfileModel
+from app.models.odm.llm_model import LLMProfileModel
 from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM
 from app.services.admin_service import AdminService
@@ -428,16 +428,19 @@ class LLMProviderGuard(Guard):
                 raise  LLMProviderDoesNotExistError(provider)
             
             if llm_model.models:
-                if agentModel.model not in llm_model.models:
+                if len(set(agentModel._model).difference(llm_model.models))>1:
                     raise LLMModelNotPermittedError(agentModel.provider,agentModel.model,llm_model.models)
             else:
                 models = LLMProviderConstant.MODELS[llm_model.provider]
-                if agentModel.model not in models:
+                if len(set(agentModel._model).difference(models))>1:
                     raise LLMModelNotPermittedError(llm_model.provider,agentModel.model,list(models))
             
-            if agentModel.max_tokens and llm_model.max_output_tokens and agentModel.max_tokens > llm_model.max_output_tokens:
-                raise LLMModelMaxTokenExceededError(agentModel.provider,agentModel.max_tokens,llm_model.max_output_tokens)
-                
+            if agentModel.generation.max_tokens != None and llm_model.max_output_tokens and agentModel.generation.max_tokens > llm_model.max_output_tokens:
+                raise LLMModelMaxTokenExceededError(agentModel.provider,agentModel.generation.max_tokens,llm_model.max_output_tokens,'output')
+            
+            if agentModel.profile.max_inputs_token != None and llm_model.max_input_tokens and agentModel.profile.max_inputs_token > llm_model.max_input_tokens:
+                raise LLMModelMaxTokenExceededError(agentModel.provider,agentModel.profile.max_inputs_token,llm_model.max_input_tokens,'input')
+
         return True,""
             
 

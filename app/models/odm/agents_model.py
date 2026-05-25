@@ -1,6 +1,6 @@
-from typing import Any, ClassVar, List, Literal, Optional
+from typing import Any, ClassVar, List, Literal, Optional, Self, Tuple
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from app.classes.profiles import BaseProfileModel,BaseDocument
 from app.classes.prompt import System
 from app.utils.constant import MongooseDBConstant
@@ -16,12 +16,13 @@ class GraphitiSearchConfig(str, Enum):
     RAG_COVERAGE = "rag_coverage"
 
 Effort=Literal['high','medium','low']
+MIN_OF_MAX_INPUT_TOKEN = 40_000
 
 class GenerationConfig(BaseModel):
     temperature: float = 0.7
     timeout:float = 20
     max_retries:int = 5
-    max_tokens:Optional[int] = None
+    max_tokens:Optional[int] = Field(None, ge=4000)
 
     top_p:Optional[float] = None
     top_k:Optional[int] = None
@@ -32,7 +33,7 @@ class GenerationConfig(BaseModel):
     proxy_url:Optional[str] = None    
     reasoning_format: Literal['parsed', 'raw', 'hidden'] | None = None
 
-class ModelProfileConfig(BaseModel):
+class ChatProfileConfig(BaseModel):
     image_input:Optional[bool] = False
     image_url_inputs:Optional[bool] = False
     pdf_inputs:Optional[bool] = False
@@ -40,8 +41,8 @@ class ModelProfileConfig(BaseModel):
 
     reasoning_output:Optional[bool] = True
     tool_calling:Optional[bool] = True
-
-    ...
+    max_inputs_token:Optional[int] = Field(None, ge=MIN_OF_MAX_INPUT_TOKEN)
+    
 class RateLimiterConfig(BaseModel):
     ...
 
@@ -55,21 +56,83 @@ class StoreMemoryPolicy(BaseModel):
     ttl: Optional[int]
     visibility: Literal["agent", "user", "global"]
 
+class TrimmerStrategy(BaseModel):
+    mode:Literal['summarize','trim'] ='trim'
+    keep_message:int = Field(100,ge=25,le=300)
+    tokens_trigger: int = Field(MIN_OF_MAX_INPUT_TOKEN*0.80,ge=MIN_OF_MAX_INPUT_TOKEN*.60)
+
+class DynamicModelSelectionConfig(BaseModel):
+    baseChatIndex:Optional[int] = None
+    summaryChatIndex:Optional[int] = None
+    reverse:Optional[bool] = False
+    trigger_message:Optional[int] = Field(default=None,ge=50)
+
+    @property
+    def _reverse(self):
+        if self.reverse:
+            return 1
+        return -1
+
+#########################################################################################################
+############################                                          ###################################
+#########################################################################################################
+
 class AgentModel(BaseDocument):
     
     provider: str = Field(description='The service id of the LLM Provider')
     system:System
     model: str | List[str]
-    store_model:Optional[str] = None
-    memory_model:Optional[str] = None
+    storeModel:Optional[str] = None
+    memoryModel:Optional[str] = None
     tools: List[ToolModels] = Field(default_factory=list)
-    store_policy: Optional[StoreMemoryPolicy] = None
+    storePolicy: Optional[StoreMemoryPolicy] = None
+    dynamicModel:Optional[DynamicModelSelectionConfig] = DynamicModelSelectionConfig()
+    trimmer:Optional[TrimmerStrategy] = TrimmerStrategy()
     generation:GenerationConfig = GenerationConfig()
-    avatar = Optional[AvatarConfig] = AvatarConfig()
-    profile: Optional[ModelProfileConfig] = ModelProfileConfig()
+    avatar: Optional[AvatarConfig] = AvatarConfig()
+    profile: Optional[ChatProfileConfig] = ChatProfileConfig()
     limiter : Optional[RateLimiterConfig] = RateLimiterConfig()
 
     _collection:ClassVar[str] = MongooseDBConstant.AGENT_COLLECTION
+
+    @field_validator('profile','avatar',mode='after')
+    def ensure_not_none(cls,v):
+        if v == None:
+            raise ValueError('Cannot be forced None')
+        return v
+
+    @field_validator('model',mode='after')
+    def validate_list_model(cls,m:list[str]|str):
+        if isinstance(m,str):
+            return m
+        if len(m) == 0:
+            raise ValueError('You must provide at least one model')
+        if len(m) == 1:
+            return m[0]
+        return m
+
+    @property
+    def _model(self):
+        if isinstance(self.model,str):
+            return [self.model]
+        return self.model
+
+    @model_validator(mode='after')
+    def _validate_agent(self:Self)->Self:
+        if self.dynamicModel != None:
+            if isinstance(self.model,str):
+                raise ValueError('Dynamic model only works with a list model')
+            if isinstance(self.model,list) and len(self.model)<=1:
+                raise ValueError('Dynamic model only works with a list model with at least 2 model')
+        else:
+            if isinstance(self.model,list) and len(self.model) >=2:
+                raise ValueError('')
+
+        if self.trimmer and self.profile.max_inputs_token != None:
+            if self.trimmer.tokens_trigger >= self.profile.max_inputs_token*0.95:
+                raise ValueError('Token trigger cant be higher than 95% of the max_input_token')
+
+        return self
 
     class Settings:
         name = MongooseDBConstant.AGENT_COLLECTION

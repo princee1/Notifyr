@@ -63,6 +63,7 @@ class ChatService(BaseService):
         self.costService = costService
         self.vaultService = vaultService
         self.settingService = settingService
+        self.arqService = arqService
     
     async def end_chat(self,session:Session,thread:str,agent:str):
         # TODO Delete current message by session and add them into a session object and summarize

@@ -9,7 +9,7 @@ prefix=AgenticConstant.CONVERSATION_ROUTER('')
 
 def ConversationRouter():
 
-    agentService = Get(AgentService)
+    agentService:AgentService = Get(AgentService)
     mongooseService = Get(MongooseService)
 
     async def on_startup():
@@ -20,4 +20,14 @@ def ConversationRouter():
 
     router = APIRouter(prefix=prefix,on_startup=[on_startup],on_shutdown=[on_shutdown])
 
-   
+    @router.post('/')
+    async def summarize_conversation():
+        ...
+    
+    @router.get('/')
+    async def fetch_conversation():
+        ...
+
+    @router.delete('/')
+    async def delete_conversation():
+        ...

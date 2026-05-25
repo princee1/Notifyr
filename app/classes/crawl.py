@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Literal, Optional, TypedDict
 from pydantic import BaseModel
 from app.classes.chunk import ChunkWrapper
 from app.definition._error import BaseError
-from app.models.llm_model import CrawlLLMConfigModel, WebResearchConfigModel
+from app.models.odm.llm_model import CrawlLLMConfigModel, WebResearchConfigModel
 
 
 @dataclass

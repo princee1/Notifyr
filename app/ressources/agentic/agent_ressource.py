@@ -13,7 +13,6 @@ from app.definition._cost import DataCost
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles, LockService
 from app.definition._service import MiniStateProtocol, StateProtocol
 from app.depends.funcs_dep import get_profile
-from app.errors.llm_error import LLMModelMaxTokenExceededError, LLMModelNotPermittedError, LLMProviderDoesNotExistError
 from app.manager.broker_manager import Broker
 from app.depends.dependencies import get_auth_permission
 from app.manager.merchant_manager import Merchant
@@ -25,7 +24,7 @@ from app.services.custom_service import CustomService
 from app.utils.constant import CostConstant, LLMProviderConstant
 from app.utils.helper import subset_model
 from app.services  import RemoteAgentService
-from app.models.llm_model import LLMProfileModel
+from app.models.odm.llm_model import LLMProfileModel
 
 
 base_attr = {'id','revision_id','created_at','last_modified','version'}
