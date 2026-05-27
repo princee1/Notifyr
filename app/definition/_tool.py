@@ -4,18 +4,21 @@ from app.models.odm.agents_model import StoreMemoryPolicy
 from app.models.tools_model import ToolModel
 from langchain.messages import SystemMessage, HumanMessage,ToolMessage
 from langchain.agents.middleware import wrap_tool_call,ModelRequest, ModelResponse
-from typing import Callable, Set, Type, TypedDict
+from typing import Callable, Optional, Set, Type, TypedDict
 from app.definition._error import BaseError
-from app.definition._agent import NotifyrContext,NotifyrAgentState
-from langchain.tools import ToolRuntime
+from app.definition._agent import NotifyrContext,NotifyrAgentState,ToolType,ToolMetadata
+from langchain.tools import ToolRuntime as BaseToolRuntime
 
 #########################################################################################################
 ############################                                          ###################################
 #########################################################################################################
 
+ToolRuntime=BaseToolRuntime[NotifyrContext,NotifyrAgentState]
 
+class ToolArtifact(TypedDict):
+    process_time:int
+    error:Optional[dict]
 
-NToolRuntime=ToolRuntime[NotifyrContext,NotifyrAgentState]
 
 #########################################################################################################
 ############################                TOOL DEFINITION           ###################################
@@ -24,18 +27,19 @@ NToolRuntime=ToolRuntime[NotifyrContext,NotifyrAgentState]
 class ContextCondition(TypedDict):
     auth:Set[str]
     channel:Set[str]
+
 class Tool:
 
     Condition: ContextCondition
 
-    def __init__(self,config:ToolModel,memory_policy:StoreMemoryPolicy,store_schema:Type[BaseModel]|None):
+    def __init__(self,config:ToolModel,memoryPolicy:StoreMemoryPolicy,storeSchema:Type[BaseModel]|None):
         self.config = config
-        self.store_schema = store_schema
-        self.memory_policy = memory_policy
+        self.storeSchema = storeSchema
+        self.memoryPolicy = memoryPolicy
 
     @property
     def name(self):
-        return self.config.name
+        return self.config.alias
 
     @property
     def description(self):
@@ -44,13 +48,26 @@ class Tool:
     @property
     def arg_schema(self)->Type[BaseModel]:
         ...
+    
+    @property
+    def tool_id(self):
+        return self.config.id
 
-    async def __call__(self,runtime:NToolRuntime):
+    def to_hitl(self):
+        if self.config.interrupt_on == None:
+            return None
+        if isinstance(self.config.interrupt_on,bool):
+            return {self.name:self.config.interrupt_on} 
+        return {self.name:self.config.interrupt_on.model_dump()}
+    
+    async def __call__(self,runtime:ToolRuntime):
         ...
     
 class ExecutionTool(Tool):
     ...
-class ContextPipelineTool(Tool):
+class RetrievalTool(Tool):
+    ...
+class ManagerTool(Tool):
     ...
 class DiscoveryTool(Tool):
     ...

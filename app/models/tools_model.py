@@ -1,18 +1,30 @@
+from app.classes.mongo import BaseDocument
 from app.classes.qdrant import QdrantFilterModel, QdrantSearchParamsModel
 from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
-from typing import List, Literal, Optional, Self, Union
+from typing import ClassVar, List, Literal, Optional, Self, Union
 from app.classes.url import URLMappingModel
+from app.utils.constant import MongooseDBConstant
 
 
 ####################################################################################################################################
 ##################################################                                                 #################################
 ####################################################################################################################################
+class InterruptOnConfig(BaseModel):
+    description:Optional[str] = Field(min_length=10,max_length=30)
+    allowed_decisions:List[Literal['approve','reject','reject','respond']]
 
-class ToolModel(BaseModel):
-    permission: List[str] = Field(default_factory=list)
+class ToolModel(BaseDocument):
+    alias:str = Field(min_length=10,max_length=30)
     description:str = Field(min_length=10,max_length=150)
-    name:str = Field(min_length=10,max_length=30)
+    policies: List[str] = Field(default_factory=list,description='For interrupts permission in tools')
+    interrupt_on: Optional[Union[bool,InterruptOnConfig]] = Field(default=None,description='For humain in the loop')
     
+    _collection: ClassVar[str] = MongooseDBConstant.TOOL_COLLECTION
+
+    class Settings:
+        is_root=True
+        abstract=True
+        name=MongooseDBConstant.TOOL_COLLECTION
 
 MAX_DISTANCE_SEARCH = 0.7
 
@@ -41,6 +53,11 @@ class BaseContextRetrievalToolModel(ToolModel):
     top_k:int = Field(default=3,ge=1,le=20)
     score_threshold:float = Field(default=0.60,ge=0,le=1)
     broad_search:Optional[BroadRerankerSearchConfig] = None
+
+    class Settings:
+        is_root=True
+        abstract=True
+        name=MongooseDBConstant.TOOL_COLLECTION
 
 class VectorToolModel(BaseContextRetrievalToolModel):
     collection:str
@@ -98,6 +115,7 @@ class CacheEvictionConfig(BaseModel):
     ...
 
 class CacheToolModel(ToolModel):
+    namespace:Optional[str] = None
     eviction:Optional[CacheEvictionConfig] = CacheEvictionConfig()
     top_k:int = Field(ge=1,le=3,default=3)
     similarity: float = Field(ge=0.25,le=1)

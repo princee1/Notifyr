@@ -16,6 +16,8 @@ from app.utils.constant import MongooseDBConstant, VaultConstant, VaultTTLSyncCo
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import ConnectionFailure, OperationFailure
 
+from app.utils.helper import subset_model
+
 
 D = TypeVar('D',bound=BaseDocument)
 
@@ -64,16 +66,35 @@ class MongooseService(TempCredentialsDatabaseService):
     async def count(self, model: Type[D], *args, **kwargs):
         return await model.find(*args, **kwargs).count()
     
-    def sync_find(self,collection:str,model:Type[D],filter={},projection:dict={},return_model=False)->list[D | dict]:
+    def sync_find(self,collection:str,model:Type[D],filter={},projection:dict={},return_model=False,as_subset_model=False,filter_out=False)->list[D | dict]:
         
         filter['_class_id'] = {"$regex": f"{model.__name__}$" }
-    
+
         if collection not in self.mongoConstant.available_collection:
             raise MongoCollectionDoesNotExists(collection)
 
         mongo_collection = self.sync_db[collection]
-        docs= mongo_collection.find(filter,projection).to_list()
-        return docs if not return_model else [model.model_construct(**doc) for doc in docs]
+        docs = mongo_collection.find(filter,projection).to_list()
+
+        if issubclass(model,BaseDocument) and return_model and as_subset_model:
+            model = subset_model(model,model.__name__,optional=False,__cache__=True) 
+        
+        if not return_model:
+            return docs
+        
+        if not filter_out:
+            return  [model.model_construct(**doc) for doc in docs]
+
+        _docs = []
+        for doc in docs:
+            try:
+                m = model(**doc)
+                _docs.append(m)
+            except:
+                ...
+        
+        return _docs
+                
     
     ##################################################
     # Document integrity

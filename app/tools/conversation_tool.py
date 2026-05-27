@@ -1,4 +1,4 @@
-from app.definition._tool import ContextPipelineTool,NToolRuntime as ToolRuntime
+from app.definition._tool import RetrievalTool, ManagerTool,ToolRuntime as ToolRuntime
 from app.services.config_service import ConfigService
 from app.services.database.mongoose_service import MongooseService
 from langgraph.checkpoint.mongodb import MongoDBSaver
@@ -8,7 +8,7 @@ from langchain.tools import  tool
 
 
 
-class ConversationTool(ContextPipelineTool):
+class ConversationTool(ManagerTool):
     
     def __init__(self,configService:ConfigService,mongooseService:MongooseService,checkpointer:MongoDBSaver):
         super().__init__()

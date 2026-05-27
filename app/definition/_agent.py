@@ -17,7 +17,7 @@ from langchain.messages import AIMessage, AnyMessage, HumanMessage, RemoveMessag
 from langchain.messages import ToolMessage
 from langchain_core.messages.utils import count_tokens_approximately
 from pydantic import SecretStr
-from langchain.agents.middleware import Runtime, wrap_model_call, ModelRequest, ModelResponse
+from langchain.agents.middleware import Runtime, before_model, wrap_model_call, ModelRequest, ModelResponse
 from langchain.agents.middleware import SummarizationMiddleware as BaseSummarizationMiddleware
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 
@@ -104,17 +104,20 @@ class AgentSetDynamicModelOutOfRange(BaseError):
 #########################################################################################################
 
 class SessionMessage(SystemMessage):
+
     @classmethod
-    def create(cls,content: str,session_id: str,tags:list[str],message_count:int):
+    def create(cls,content: str,session_id: str,tags:list[str],message_count:int,token:int):
         return cls(content=content,id=session_id,additional_kwargs={
             "session_id": session_id,
             'message_count':message_count,
             "memory_type": "session_summary",
+            'token':token,
             "lc_source":'session_summarization',
             "tags":tags},
             )
     
 class SummarizationMiddleware(BaseSummarizationMiddleware):
+
     @staticmethod
     def _partition_messages(
         conversation_messages: list[AnyMessage],cutoff_index: int,) -> tuple[list[AnyMessage], list[AnyMessage]]:
@@ -163,6 +166,9 @@ class SummarizationMiddleware(BaseSummarizationMiddleware):
         if cutoff_index <= 0:
             return None
 
+        if cutoff_index <= FIRST_KEEP_MESSAGE:
+            return None
+
         messages_to_summarize, preserved_messages = self._partition_messages(messages, cutoff_index)
 
         summary = await self._acreate_summary(messages_to_summarize)
@@ -186,7 +192,6 @@ class NotifyrContext:
     session_id:str
     channel:str
     user_id:str
-    permissions:set[str]
     auth: Literal['guest','subscribed','registered']
     save:bool=True
     user: Optional[dict]  = field(default=None,init=False)
@@ -196,6 +201,11 @@ class NotifyrContext:
         ...
         # NOTE the user will coerce into a schema : base64 -> str -> user_model
 
+ToolType = Literal['retrieval','execution','discovery','manager']
+
+class ToolMetadata(TypedDict):
+    tool_type:ToolType
+
 class SessionState(TypedDict):
     id:str
     created_at: int
@@ -203,12 +213,13 @@ class SessionState(TypedDict):
     messages: List[AnyMessage | SessionMessage]
     tool_message:List[ToolMessage]
     summary:str | None
+    total_token:int
     metadata:dict[str,Any]
     tags:List[str]
 
 class NotifyrAgentState(AgentState):
-    preferences:Dict[str,Any]
-    permission:List[str]
+    memory:Dict[str,Any]
+    policy:Dict[str,Any]
     guest:Optional[Dict]
     sessions: Dict[str,SessionState]
     complexity: float
@@ -235,14 +246,17 @@ class ThreadMetrics:
         
         for m in self.messages:
             if isinstance(m,AIMessage):
-               self.total_tokens+= m.usage_metadata["total_tokens"]
+               if m.usage_metadata:
+                self.total_tokens+= m.usage_metadata.get("total_tokens",0)
             elif isinstance(m,ToolMessage):
                 self.tool_call_count+=1
             elif isinstance(m,SessionMessage):
                 self.session_count +=1
                 self.session_message_count += m.additional_kwargs.get('message_count',0)
+                self.total_tokens += m.additional_kwargs.get('total_token',0)
             elif isinstance(m,HumanMessage) and m.additional_kwargs.get('lc_source',None) == 'summarization':
-                self.summarized_count = m.additional_kwargs.get('message_count',0)
+                self.summarized_count += m.additional_kwargs.get('message_count',0)
+                self.total_tokens += m.additional_kwargs.get('total_token',0)
         
         for m in reversed(self.messages):
             if isinstance(m,HumanMessage) and m.additional_kwargs.get('lc_source',None) ==None:
@@ -306,6 +320,18 @@ class ThreadMetrics:
 ############################                                          ###################################
 #########################################################################################################
 
+@before_model
+async def filter_retrieval_tool_message(state: AgentState[Any], runtime: Runtime[ContextT]) -> dict[str, Any] | None:
+    messages = []
+    for m in state['messages']:
+        if isinstance(m,ToolMessage) and (metadata:=m.additional_kwargs.get('notifyr_metadata',None)):
+            metadata:ToolMetadata = metadata
+            if metadata['tool_type'] == 'retrieval' or metadata['tool_type'] == 'discovery':
+                continue
+        messages.append(m)
+        
+    return {'messages':messages}
+        
 def ContextStrictTrimmerFactory(agentModel:AgentModel,llmModel:LLMProfileModel):
 
     if agentModel.trimmer == None:
@@ -340,7 +366,8 @@ def ContextStrictTrimmerFactory(agentModel:AgentModel,llmModel:LLMProfileModel):
                 cutoff_index = i # TODO ratio based on the count and the total_token
                 break
         
-        injected_messages += [state["messages"[cutoff_index:]]]
+        injected_messages += tool_message
+        injected_messages += state["messages"][cutoff_index:]
         request.override(message=injected_messages)
 
         return await handler(message=injected_messages)
@@ -356,7 +383,9 @@ def SessionInjectionFactory(agentModel:AgentModel,llmModel:LLMProfileModel):
         injected_messages = [state["messages"][0:FIRST_KEEP_MESSAGE]]
 
         for i,(session_id,session) in enumerate(state.get("sessions",{}).items()):
-            injected_messages.append(SessionMessage.create(session['summary'],session_id))
+            message = SessionMessage.create(session['summary'],session_id,session.get('tags',[],
+                                            len(session.get('messages',[])),session.get('total_token',0)))
+            injected_messages.append(message)
             injected_messages.extend(session.get('tool_message',[]))
 
         injected_messages.extend(state["messages"][FIRST_KEEP_MESSAGE:])
@@ -373,6 +402,8 @@ def SessionInjectionFactory(agentModel:AgentModel,llmModel:LLMProfileModel):
 def dynamic_system_prompt(request: ModelRequest[NotifyrContext]) -> str:
     # if the user is a guest indicate the agent to not hesitate to learn about the user through the conversation tool, 
     # if there's missing keys and it is guest ask them with the conversation tool
+    # ask for policy permission
+    # adapt the response for the channel
     return ''
 
 #########################################################################################################

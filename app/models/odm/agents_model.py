@@ -84,7 +84,7 @@ class AgentModel(BaseDocument):
     model: str | List[str]
     storeModel:Optional[str] = None
     memoryModel:Optional[str] = None
-    tools: List[ToolModels] = Field(default_factory=list)
+    tools: List[str] = Field(default_factory=list)
     storePolicy: Optional[StoreMemoryPolicy] = None
     dynamicModel:Optional[DynamicModelSelectionConfig] = DynamicModelSelectionConfig()
     trimmer:Optional[TrimmerStrategy] = TrimmerStrategy()

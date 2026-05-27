@@ -3,7 +3,7 @@ import aiohttp
 import asyncio
 from urllib.parse import urlparse
 from pydantic import BaseModel, ValidationError
-from app.definition._tool import ExecutionTool,Tool,ContextPipelineTool
+from app.definition._tool import ExecutionTool,Tool,RetrievalTool
 from app.models.odm.outbound_model import HTTPOutboundModel, OutboundCredentials
 from app.services.config_service import ConfigService
 from app.services.custom_service import CustomService
@@ -135,11 +135,11 @@ class APIBaseTool:
     def to_credentials(self)->OutboundCredentials:
         return self.outboundService.credentials.to_plain()
 
-class APIFetchTool(APIBaseTool, ContextPipelineTool):
+class APIFetchTool(APIBaseTool, RetrievalTool):
     
     def __init__(self, configService: ConfigService, httpOutboundService: ProfileMiniService[HTTPOutboundModel], customService: CustomService, config: APIToolModel):
         super().__init__(configService, customService, httpOutboundService)
-        ContextPipelineTool.__init__(self, config)
+        RetrievalTool.__init__(self, config)
         self.after_init()
 
     async def __call__(self, body: Optional[Dict[str, Any]] = None, path: Dict[str, Any] = {}, query: Dict[str, Any] = {}) -> Dict[str, Any]:

@@ -44,7 +44,6 @@ class Context:
         auth: Optional[str] = None,
         save: bool = False,
         user_encoded: Optional[str] = None,
-        permissions: Optional[List[str]] = None,
     ):
         self.user = user
         self.request_id = request_id
@@ -53,7 +52,6 @@ class Context:
         self.auth = auth
         self.save = save
         self.user_encoded = user_encoded
-        self.permissions = permissions or []
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Context':

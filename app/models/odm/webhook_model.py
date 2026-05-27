@@ -138,8 +138,7 @@ class KafkaWebhookModel(WebhookProfileModel):
     auth:Optional[AuthConfig] = None
 
     _secret_key:ClassVar[list[str]] = ['auth']
-
-    unique_indexes: ClassVar[list[str]] = ['client_id','topic']
+    _unique_indexes: ClassVar[list[str]] = ['client_id','topic']
 
     @field_validator("bootstrap_servers")
     def non_empty_bootstrap(cls, v):
@@ -155,8 +154,7 @@ class SQSWebhookModel(WebhookProfileModel):
     deduplication_id_template: Optional[str] = None
     # NOTE queue_url is the url
 
-    unique_indexes: ClassVar[list[str]] = ['aws_access_key_id','region']
-    
+    _unique_indexes: ClassVar[list[str]] = ['aws_access_key_id','region']
     _secret_key:ClassVar[list[str]] = ['aws_secret_access_key']
 
 class RedisWebhookModel(WebhookProfileModel):
@@ -219,17 +217,17 @@ class PostgresWebhookModel(DBWebhookModel):
     url: Optional[str] = None
     port: Optional[int] = 5432
     table:str = Field("notifyr_webhooks",max_length=150)
+    
     _scheme:ClassVar[Optional[str]] = 'postgresql'
-
-    unique_indexes: ClassVar[list[str]] = ['table','host']
+    _unique_indexes: ClassVar[list[str]] = ['table','host']
 
 class MongoDBWebhookModel(DBWebhookModel):
     url: Optional[str] = None
     port: Optional[int] = 27017
     collection:str = Field("notifyr_webhooks",max_length=150)
-    _scheme:ClassVar[Optional[str]] = 'mongodb'
 
-    unique_indexes: ClassVar[list[str]] = ['table','collection']
+    _scheme:ClassVar[Optional[str]] = 'mongodb'
+    _unique_indexes: ClassVar[list[str]] = ['host','collection']
 
 ######################################################
 # Registry of Profile Implementations

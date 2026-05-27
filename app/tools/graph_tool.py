@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from app.classes.nodes import KGraphFacts, SourceDescription
-from app.definition._tool import ContextPipelineTool
+from app.definition._tool import RetrievalTool
 from app.models.tools_model import BroadRerankerSearchConfig, KnowledgeGraphToolModel, MemoryToolModel
 from app.services.config_service import ConfigService
 from app.services.custom_service import CustomService
@@ -15,7 +15,7 @@ class ContextSearchParam:
     
 #NOTE  "Is this semantic knowledge?"
 
-class KnowledgeGraphTool(ContextPipelineTool):
+class KnowledgeGraphTool(RetrievalTool):
     group_type:GroupType = 'domain' 
     
     def __init__(self,graphitiService:GraphitiService,configService:ConfigService,config:KnowledgeGraphToolModel):

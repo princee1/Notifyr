@@ -369,7 +369,8 @@ setup_database_config(){
       { "role": "readWrite", "db": "notifyr", "collection":"tasks" },
       { "role": "readWrite", "db": "notifyr", "collection":"errorProfile" },
       { "role": "readWrite", "db": "notifyr", "collection":"workflow" },
-      { "role": "readWrite", "db": "notifyr", "collection":"chat" }]}'
+      { "role": "readWrite", "db": "notifyr", "collection":"chat" },
+      { "role": "readWrite", "db": "notifyr", "collection":"tool" },
       { "role": "readWrite", "db": "notifyr", "collection":"chat_write" }]}' \
 
       default_ttl="12h" \

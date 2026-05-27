@@ -1,23 +1,25 @@
 from app.classes.chunk import ChunkContext
 from app.classes.embeddings import EmbeddingWrapper
 from app.classes.qdrant import QdrantCollectionDoesNotExistError
-from app.definition._tool import ContextPipelineTool
+from app.definition._tool import RetrievalTool
 from app.models.tools_model import VectorToolModel
 from app.services.config_service import ConfigService
 from app.services.custom_service import CustomService
 from app.services.database.qdrant_service import QdrantService
 from app.prompt import tools_prompt
+from app.services.database.redis_service import RedisService
 
 class GraphChunkContext(ChunkContext):
 	computed_similarity:float
 
-class VectorRagTool(ContextPipelineTool):
+class VectorRagTool(RetrievalTool):
 
-	def __init__(self,qdrantService:QdrantService,configService:ConfigService,customService:CustomService,config:VectorToolModel):
+	def __init__(self,qdrantService:QdrantService,configService:ConfigService,customService:CustomService,redisService:RedisService,config:VectorToolModel):
 			super().__init__(config)
 			self.qdrantService = qdrantService
 			self.configService = configService
 			self.customService = customService
+			self.redisService = redisService
 			self.config = config
 			self.filter = self.qdrantService.to_filter(self.config.filter)
 	

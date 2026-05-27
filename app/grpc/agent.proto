@@ -42,7 +42,6 @@ message Context {
     string auth = 5;
     bool save = 6;
     optional string user_encoded = 7;
-    repeated string permissions = 8;
 }
 
 message PromptRequest {
