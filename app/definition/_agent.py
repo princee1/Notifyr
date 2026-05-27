@@ -17,7 +17,8 @@ from langchain.messages import AIMessage, AnyMessage, HumanMessage, RemoveMessag
 from langchain.messages import ToolMessage
 from langchain_core.messages.utils import count_tokens_approximately
 from pydantic import SecretStr
-from langchain.agents.middleware import Runtime, before_model, wrap_model_call, ModelRequest, ModelResponse
+from langchain.agents.middleware import ModelFallbackMiddleware, Runtime, before_model, wrap_model_call, ModelRequest, ModelResponse
+from langchain.agents.middleware.model_call_limit import ModelCallLimitExceededError
 from langchain.agents.middleware import SummarizationMiddleware as BaseSummarizationMiddleware
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 
@@ -332,47 +333,58 @@ async def filter_retrieval_tool_message(state: AgentState[Any], runtime: Runtime
         
     return {'messages':messages}
         
-def ContextStrictTrimmerFactory(agentModel:AgentModel,llmModel:LLMProfileModel):
+def MessageTrimmerFactory(agentModel:AgentModel,llmModel:LLMProfileModel,summary_model:BaseChatModel=None):
 
     if agentModel.trimmer == None:
         return do_nothing
     
-    @wrap_model_call
-    async def trimmer(request: ModelRequest[NotifyrContext],handler: Callable[[ModelRequest[NotifyrContext]], ModelResponse])->ModelResponse:
-        state:NotifyrAgentState = request.state
-        messages= state['messages']
+    if agentModel.trimmer == 'trim':
 
-        injected_messages = messages[0:FIRST_KEEP_MESSAGE]
-        cutoff_index = FIRST_KEEP_MESSAGE
-        message_count = len(messages)
+        @wrap_model_call
+        async def trimmer(request: ModelRequest[NotifyrContext],handler: Callable[[ModelRequest[NotifyrContext]], ModelResponse])->ModelResponse:
+            state:NotifyrAgentState = request.state
+            messages= state['messages']
 
-        tool_message = []
-        total_tokens = 0
-        count = 0
+            injected_messages = messages[0:FIRST_KEEP_MESSAGE]
+            cutoff_index = FIRST_KEEP_MESSAGE
+            message_count = len(messages)
 
-        for i,m in enumerate(messages[FIRST_KEEP_MESSAGE:],start=FIRST_KEEP_MESSAGE):
-            if isinstance(m,ToolMessage):
-                tool_message.append(m)
-                continue
-            count+=1
-            if isinstance(m,AIMessage):
-                total_tokens += m.usage_metadata["total_tokens"]
+            tool_message = []
+            total_tokens = 0
+            count = 0
 
-            if (message_count - FIRST_KEEP_MESSAGE - count) >= agentModel.trimmer.keep_message:
-                cutoff_index = i - 2
-                break
+            for i,m in enumerate(messages[FIRST_KEEP_MESSAGE:],start=FIRST_KEEP_MESSAGE):
+                if isinstance(m,ToolMessage):
+                    tool_message.append(m)
+                    continue
+                count+=1
+                if isinstance(m,AIMessage):
+                    total_tokens += m.usage_metadata["total_tokens"]
 
-            if total_tokens >= agentModel.trimmer.tokens_trigger:
-                cutoff_index = i # TODO ratio based on the count and the total_token
-                break
-        
-        injected_messages += tool_message
-        injected_messages += state["messages"][cutoff_index:]
-        request.override(message=injected_messages)
+                if (message_count - FIRST_KEEP_MESSAGE - count) >= agentModel.trimmer.keep_message:
+                    cutoff_index = i - 2
+                    break
 
-        return await handler(message=injected_messages)
+                if total_tokens >= agentModel.trimmer.tokens_trigger:
+                    cutoff_index = i # TODO ratio based on the count and the total_token
+                    break
+            
+            injected_messages += tool_message
+            injected_messages += state["messages"][cutoff_index:]
+            request.override(message=injected_messages)
 
-    return trimmer
+            return await handler(message=injected_messages)
+
+        return trimmer
+    
+    if summary_model == None:
+        ...
+    
+    return SummarizationMiddleware(summary_model,
+        trigger=('tokens',agentModel.trimmer.tokens_trigger),
+        keep=('messages',agentModel.trimmer.keep_message),
+        trim_tokens_to_summarize=agentModel.trimmer.tokens_trigger *.75
+        )
 
 def SessionInjectionFactory(agentModel:AgentModel,llmModel:LLMProfileModel):
     # TODO filter by session tags
@@ -500,8 +512,9 @@ def ChatModelFactory(agentModel:AgentModel,llmModel:LLMProfileModel,credentials:
 
 def DynamicChatModelFactory(agentModel:AgentModel,llmModel:LLMProfileModel,credentials: ChaCha20Poly1305SecretsWrapper):
 
-    # Tuple[ranking,index@models]
+    dynamic_middlewares = []
 
+    # Tuple[ranking,index@models]
     models:list[tuple[int,int]] = [ (MODEL_RANKINGS[llmModel.provider][m],i)  for i,m in enumerate(agentModel.model,) ]
     models = sorted(models,lambda t:t[0])
     chatModels:list[BaseChatModel] = []
@@ -509,61 +522,67 @@ def DynamicChatModelFactory(agentModel:AgentModel,llmModel:LLMProfileModel,crede
     basic_chat_model = None
     summary_model = None
 
-    for (_,index) in models:
+    for i,(_,index) in enumerate(models):
         _chat = ChatModelFactory(agentModel,llmModel,credentials,index)
         chatModels.append(_chat)
 
         if agentModel.dynamicModel.baseChatIndex == index and basic_chat_model == None:
+            chatIndex = i
             basic_chat_model = _chat
         
         if agentModel.dynamicModel.summaryChatIndex == index and summary_model == None:
            summary_model = _chat
         
     if basic_chat_model == None:
-        basic_chat_model = chatModels[len(models)//2]
+        chatIndex = len(models)//2
+        basic_chat_model = chatModels[chatIndex]
 
     if summary_model == None:
         summary_model = chatModels[0]
 
-    if agentModel.trimmer !=None:
-        if agentModel.trimmer.mode == 'summarize':
-            middleware  = SummarizationMiddleware(summary_model,
-                                          trigger=('tokens',agentModel.trimmer.tokens_trigger),
-                                          keep=('messages',agentModel.trimmer.keep_message),
-                                          trim_tokens_to_summarize=agentModel.trimmer.tokens_trigger *.75 )
-        else:
-            middleware = ContextStrictTrimmerFactory(agentModel,llmModel)
-    else:
-        middleware = do_nothing
-
     max_tokens = extract_max_tokens(agentModel,llmModel)
 
-    @wrap_model_call
-    async def dynamic_model_selection(request: ModelRequest[NotifyrContext],handler: Callable[[ModelRequest[NotifyrContext]], ModelResponse])->ModelResponse:
-        messages = request.state['messages']
-        state:NotifyrAgentState = request.state
-
-        message_count = len(messages)
-
-        if agentModel.dynamicModel.trigger_message == None or message_count < agentModel.dynamicModel.trigger_message:
-            return await handler(request)
+    if agentModel.dynamicModel.mode == 'fallback' or agentModel.dynamicModel.mode == 'both':
+        fallback_middleware = ModelFallbackMiddleware(*reversed(models[:chatIndex]))
+        dynamic_middlewares.append(fallback_middleware)
     
-        metrics = ThreadMetrics(messages)
-        retry_count = request.runtime.context.retry_count
-        if retry_count >=5:
-            return handler(request.override(model=chatModels[-1]))
+    if agentModel.dynamicModel.mode == 'optimization' or agentModel.dynamicModel.mode == 'both':
+        @wrap_model_call
+        async def dynamic_model_selection(request: ModelRequest[NotifyrContext],handler: Callable[[ModelRequest[NotifyrContext]], ModelResponse])->ModelResponse:
+            messages = request.state['messages']
+            state:NotifyrAgentState = request.state
 
-        complexity = metrics.compute_complexity(retry_count,max_tokens.input or MIN_OF_MAX_INPUT_TOKEN)
-        if state.get('complexity') != None:
-            complexity = 0.75*state['complexity'] + complexity *.25
+            message_count = len(messages)
 
-        state['complexity'] = complexity
+            if agentModel.dynamicModel.trigger_message == None or message_count < agentModel.dynamicModel.trigger_message:
+                return await handler(request)
         
-        index = round((len(chatModels)-1) * state['complexity'])
-        index *=agentModel.dynamicModel._reverse
-    
-        return await handler(request.override(model=chatModels[index]))
-    
+            metrics = ThreadMetrics(messages)
+            retry_count = request.runtime.context.retry_count
+            if retry_count >=5:
+                return handler(request.override(model=chatModels[-1]))
 
-    return middleware,dynamic_model_selection,basic_chat_model
+            complexity = metrics.compute_complexity(retry_count,max_tokens.input or MIN_OF_MAX_INPUT_TOKEN)
+            if state.get('complexity') != None:
+                complexity = 0.75*state['complexity'] + complexity *.25
 
+            state['complexity'] = complexity
+            
+            index = round((len(chatModels)-1) * state['complexity'])
+            index *= agentModel.dynamicModel._reverse
+        
+            return await handler(request.override(model=chatModels[index]))
+        
+        dynamic_middlewares.append(dynamic_model_selection)
+
+    return basic_chat_model,summary_model,dynamic_middlewares
+
+@wrap_model_call
+async def handle_agent(request: ModelRequest[NotifyrContext],handler: Callable[[ModelRequest[NotifyrContext]], ModelResponse])->ModelResponse:
+    try:
+        return await handler(request)
+    
+    except ModelCallLimitExceededError as e:
+        ...
+    
+    

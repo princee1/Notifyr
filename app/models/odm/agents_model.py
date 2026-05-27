@@ -62,6 +62,7 @@ class TrimmerStrategy(BaseModel):
     tokens_trigger: int = Field(MIN_OF_MAX_INPUT_TOKEN*0.80,ge=MIN_OF_MAX_INPUT_TOKEN*.60)
 
 class DynamicModelSelectionConfig(BaseModel):
+    mode:Literal['optimization','fallback','both'] = 'both'
     baseChatIndex:Optional[int] = None
     summaryChatIndex:Optional[int] = None
     reverse:Optional[bool] = False
@@ -72,6 +73,19 @@ class DynamicModelSelectionConfig(BaseModel):
         if self.reverse:
             return 1
         return -1
+
+class ModelCallLimitConfig(BaseModel):
+    thread_limit:Optional[int] = Field(default=None,)
+    run_limit:Optional[int] = Field(default=None,)
+    exit_behavior:Literal['end','error'] = 'end'
+
+    @model_validator(mode='after')
+    def validate_limit(self):
+        if self.thread_limit == None and self.run_limit == None:
+            return None
+        
+        return self
+
 
 #########################################################################################################
 ############################                                          ###################################
@@ -92,6 +106,7 @@ class AgentModel(BaseDocument):
     avatar: Optional[AvatarConfig] = AvatarConfig()
     profile: Optional[ChatProfileConfig] = ChatProfileConfig()
     limiter : Optional[RateLimiterConfig] = RateLimiterConfig()
+    callLimit: Optional[ModelCallLimitConfig] = ModelCallLimitConfig()
 
     _collection:ClassVar[str] = MongooseDBConstant.AGENT_COLLECTION
 
@@ -131,6 +146,10 @@ class AgentModel(BaseDocument):
         if self.trimmer and self.profile.max_inputs_token != None:
             if self.trimmer.tokens_trigger >= self.profile.max_inputs_token*0.95:
                 raise ValueError('Token trigger cant be higher than 95% of the max_input_token')
+
+        # if self.trimmer != None and isinstance(self.model,list):
+        #     if self.trimmer.mode == 'summarize' and len(self.model)>=2:
+        #         raise ValueError('Cannot summarize with only one model because the goal is to summarize with a simpler model')
 
         return self
 

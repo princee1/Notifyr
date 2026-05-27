@@ -3,7 +3,7 @@ import functools
 from typing import Any, Callable, Dict, List, NamedTuple, Self,Any, get_args
 from pydantic import ValidationError
 from app.classes.secrets import ChaCha20SecretsWrapper
-from app.definition._agent import AgentContextDoesNotExistError, AgentInputFormatNotSupportedError, AgentNotAvailableError, ChatModelFactory, ContextStrictTrimmerFactory, DynamicChatModelFactory, NotifyrAgentState, NotifyrContext, SessionInjectionFactory, Thread, dynamic_system_prompt
+from app.definition._agent import AgentContextDoesNotExistError, AgentInputFormatNotSupportedError, AgentNotAvailableError, ChatModelFactory, MessageTrimmerFactory, DynamicChatModelFactory, NotifyrAgentState, NotifyrContext, SessionInjectionFactory, Thread, dynamic_system_prompt
 from app.classes.cost_definition import InsufficientCreditsError, InvalidPurchaseRequestError
 from app.classes.prompt import PromptToken
 from app.definition import _service
@@ -45,7 +45,7 @@ from langchain.agents.factory import create_agent
 from langchain.tools import BaseTool, tool as tool_factory, ToolRuntime
 from langgraph.checkpoint.mongodb import MongoDBSaver
 from langgraph.store.mongodb import MongoDBStore
-from langchain.agents.middleware import HumanInTheLoopMiddleware 
+from langchain.agents.middleware import HumanInTheLoopMiddleware, ModelCallLimitMiddleware 
 from langchain.messages import HumanMessage, SystemMessage,AIMessage,AIMessageChunk
 from langchain_classic import hub
 from langchain_core.rate_limiters import InMemoryRateLimiter
@@ -196,20 +196,24 @@ class AgentMiniService(BaseMiniService):
         middleware.append(handle_tool_errors)
         middleware.append(dynamic_tool_selection)
 
+        if self.agent_model.callLimit!= None:
+            ModelCallLimitMiddleware(**self.agent_model.callLimit.model_dump())
+
         summaryInjector = SessionInjectionFactory(self.agent_model,self.depService.model)
-        
+
         if isinstance(self.agent_model.model,str):
             self.chat_model = ChatModelFactory(self.agent_model,self.depService.model,self.depService.credentials)
-            trimmer_middleware = ContextStrictTrimmerFactory(self.agent_model,self.depService.model)
+            trimmer_middleware = MessageTrimmerFactory(self.agent_model,self.depService.model,self.chat_model)
             middleware.append(trimmer_middleware)
             middleware.append(summaryInjector)
         else:
-            trimmer_middleware,dynamic_model_selection,chat_model = DynamicChatModelFactory(self.agent_model,self.depService.model,self.depService.credentials)
+            chat_model,summary_model,dynamic_middlewares = DynamicChatModelFactory(self.agent_model,self.depService.model,self.depService.credentials)
+            trimmer_middleware = MessageTrimmerFactory(self.agent_model,self.depService.model,summary_model)
             self.chat_model = chat_model
 
             middleware.append(trimmer_middleware)
             middleware.append(summaryInjector)
-            middleware.append(dynamic_model_selection)
+            middleware.extends(dynamic_middlewares)
 
         return reversed(middleware)
 
