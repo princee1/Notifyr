@@ -17,7 +17,7 @@ from app.services.config_service import ConfigService
 from app.services.database.redis_service import RedisService
 from app.services.monitoring_service import MonitoringService
 from app.services.worker.task_service import TaskService
-from app.utils.tools import RunInThreadPool
+from app.utils.toolbox import RunInThreadPool
 from app.utils.constant import APSchedulerConstant, MonitorConstant, RedisConstant,CeleryConstant
 
 P = ParamSpec("P")

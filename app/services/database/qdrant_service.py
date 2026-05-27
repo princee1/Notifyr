@@ -14,7 +14,7 @@ from app.services.vault_service import VaultService
 from app.classes.qdrant import QdrantCollectionDoesNotExistError, QdrantFilterModel, QdrantSearchParamsModel, QdrantChunkFilterCondition, TextFieldMatch
 from app.classes.qdrant import LIST_FIELDS,LITERAL_FIELDS,FLEXIBLE_TEXT_FIELDS
 from app.utils.helper import slice_dict
-from app.utils.tools import RunAsync
+from app.utils.toolbox import RunAsync
 from app.utils.globals import APP_MODE,ApplicationMode
 
 QDRANT_BUILD_STATE = 543

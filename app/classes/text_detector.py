@@ -7,7 +7,7 @@ from nltk.tokenize import word_tokenize, sent_tokenize
 from nltk import FreqDist
 from gensim import corpora, models
 import nltk, yake,re
-from app.utils.tools import RunAsync
+from app.utils.toolbox import RunAsync
 
 nltk.download(['stopwords', 'punkt', 'wordnet'], quiet=True)
 STOP_WORDS = set(stopwords.words('english'))

@@ -17,7 +17,7 @@ from app.services.profile_service import ProfileService
 from app.utils.constant import CostConstant,ArqDataTaskConstant, Crawl4AIConstant, ParseStrategy
 from app.utils.globals import APP_MODE,ApplicationMode
 from app.utils.helper import slice_dict, uuid_v1_mc
-from app.utils.tools import RunAsync
+from app.utils.toolbox import RunAsync
 from app.models.ingest_model import ResearchDataIngestModel, VectorConfig,KGraphConfig, WebCrawlingDataIngestModel
 
 task_registry = []

@@ -3,7 +3,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from typing import Union
 from app.utils.helper import DICT_SEP, flatten_dict, unflattened_dict
-from app.utils.tools import Time
+from app.utils.toolbox import Time
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms
 
 

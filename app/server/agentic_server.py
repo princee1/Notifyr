@@ -3,7 +3,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, WebSocketException,
 from app.classes.prompt import PromptToken
 from app.definition._router import get_instance_id
 from app.utils.constant import CostConstant, HTTPHeaderConstant
-from app.utils.tools import RunInThreadPool
+from app.utils.toolbox import RunInThreadPool
 from app.container import Get,Register
 from app.callback import Callbacks_Stream,Callbacks_Sub
 from app.services import RedisService

@@ -17,7 +17,7 @@ from app.utils.helper import flatten_dict, subset_model
 from app.models.odm.communication_model import  BaseProfileModel, ProfilModelValues
 from app.classes.profiles import ErrorProfileModel
 from typing import Generic, TypeVar
-from app.utils.tools import RunInThreadPool
+from app.utils.toolbox import RunInThreadPool
 
 TModel = TypeVar("TModel",bound=BaseProfileModel)
 

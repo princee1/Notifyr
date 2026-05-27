@@ -24,7 +24,7 @@ except ImportError as e:
 
 from app.classes.chunk import ChunkWrapper, ChunkPayload
 from app.utils.constant import ParseStrategy
-from app.utils.tools import Mock, RunAsync
+from app.utils.toolbox import Mock, RunAsync
 
 TEXT_READERS: dict[str, type[BaseReader]] = {
     "pdf": PDFReader,

@@ -6,7 +6,7 @@ from app.definition._error import BaseError
 from app.classes.schema import MLSchemaBuilder
 from app.utils.constant import HTMLTemplateConstant
 from app.utils.helper import strict_parseToBool, flatten_dict
-from app.utils.tools import Time
+from app.utils.toolbox import Time
 from app.utils.validation import CustomValidator
 # import fitz as pdf
 from cerberus import DocumentError, SchemaError

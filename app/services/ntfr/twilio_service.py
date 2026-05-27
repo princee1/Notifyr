@@ -20,7 +20,7 @@ from app.services.profile_service import ProfileMiniService, ProfileService
 from app.services.vault_service import VaultService
 from app.utils.constant import StreamConstant
 from app.utils.globals import APP_MODE, ApplicationMode
-from app.utils.tools import Mock, RunInThreadPool
+from app.utils.toolbox import Mock, RunInThreadPool
 from ..config_service import ConfigService, APP_MODE
 from app.utils.helper import b64_encode, get_value_in_list, phone_parser, uuid_v1_mc
 from twilio.request_validator import RequestValidator

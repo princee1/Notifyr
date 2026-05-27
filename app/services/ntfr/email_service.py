@@ -9,7 +9,7 @@ from app.services.mini.email.protocol_email_service import IMAPEmailMiniService,
 from app.services.logger_service import LoggerService
 from app.services.profile_service import ProfileMiniService, ProfileService
 from app.services.reactive_service import ReactiveService
-from app.utils.tools import Mock
+from app.utils.toolbox import Mock
 from app.interface.email import EmailReadInterface, EmailSendInterface
 
 

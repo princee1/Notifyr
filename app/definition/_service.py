@@ -15,7 +15,7 @@ from aiorwlock import RWLock
 from app.errors.service_error import *
 from typing import Generic, TypeVar
 
-from app.utils.tools import Mock, RunInThreadPool
+from app.utils.toolbox import Mock, RunInThreadPool
 
 MiniServiceMeta: list[tuple[Type,Any]] = []
 LiaisonDependency: Dict[str,dict] = {}

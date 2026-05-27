@@ -40,7 +40,7 @@ from app.models.crawal4ai_model import (
 from app.models.ingest_model import WebCrawlingDataIngestModel
 from app.prompt import crawl_prompt, graphiti_prompt
 from app.utils.constant import Crawl4AIConstant
-from app.utils.tools import RunAsync
+from app.utils.toolbox import RunAsync
 from uuid import uuid1
 
 

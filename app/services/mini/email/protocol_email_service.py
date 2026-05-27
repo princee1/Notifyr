@@ -21,7 +21,7 @@ from app.utils.helper import get_value_in_list, uuid_v1_mc
 from app.utils.prettyprint import SkipInputException
 #from app.classes.mail_oauth_access import OAuth, MailOAuthFactory
 from app.classes.mail_provider import IMAPCriteriaBuilder, SMTPConfig, IMAPConfig, IMAPSearchFilter as Search, SMTPErrorCode, get_email_provider_name, get_error_description
-from app.utils.tools import Time,Mock
+from app.utils.toolbox import Time,Mock
 
 from app.utils.constant import EmailHostConstant
 from app.classes.email import EmailBuilder, EmailMetadata, EmailReader, NotSameDomainEmailError, extract_email_id_from_msgid
