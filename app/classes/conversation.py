@@ -4,6 +4,9 @@ from time import time
 from pydantic import BaseModel, Field
 from app.utils.helper import generateId
 
+Auth = Literal['guest','subscribed','registered']
+Channel = Literal['sms','message','call','email','live-chat']
+
 # MIME type definitions by category
 FileMime = Literal['pdf', 'docx', 'pptx', 'csv', 'xlsx', 'txt', 'json', 'xml', 'yaml']
 ImageMime = Literal['jpeg', 'jpg', 'png', 'gif', 'webp', 'svg']
@@ -60,7 +63,9 @@ class ContentBlock(BaseModel):
                     temp['mime_type'] = f'text/{mime}'
         return temp        
 
-
+#########################################################################################################
+############################                                          ###################################
+#########################################################################################################
 
 class ToolCalling(TypedDict):
     id:str
@@ -85,17 +90,21 @@ class Message(BaseModel):
     mess_id:str = Field(default_factory=lambda :generateId(0))
     send_at:float = Field(default_factory=time)
 
+#########################################################################################################
+############################                                          ###################################
+#########################################################################################################
+
 @dataclass
 class Session:
     request_id:str
     session_id:str
-    channel:str
+    channel:Channel
     permission:list[str]
 
 @dataclass
 class User:
     user_id: str
-    auth: str
+    auth: Auth
     user: Optional[dict] = None
 
     encoded_user: Optional[str] = field(default=None,init=False)
@@ -132,6 +141,17 @@ class Answer(TypedDict):
     tool_calling:List[ToolCalling]
     invalid_tool_calling:List[InvalidToolCalling]
     token: Token
+
+#########################################################################################################
+############################                                          ###################################
+#########################################################################################################
+
+class InterruptDecision(BaseModel):
+    ...
+
+#########################################################################################################
+############################                                          ###################################
+#########################################################################################################
 
 class Thread(NamedTuple):
     agent:str

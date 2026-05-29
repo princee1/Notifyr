@@ -53,7 +53,7 @@ class SettingService(BaseService):
 
     def get_setting(self):
         try:
-            data= self.vaultService.secrets_engine.read(VaultConstant.SETTINGS_SECRETS)
+            data = self.vaultService.secrets_engine.read(VaultConstant.SETTINGS_SECRETS)
             SettingsModel(**data) # Validate the data
             return data
         except Exception as e:

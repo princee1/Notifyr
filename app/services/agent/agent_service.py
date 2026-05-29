@@ -3,7 +3,7 @@ import functools
 from typing import Any, Callable, Dict, List, NamedTuple, Self,Any, get_args
 from pydantic import ValidationError
 from app.classes.secrets import ChaCha20SecretsWrapper
-from app.definition._agent import AgentContextDoesNotExistError, AgentInputFormatNotSupportedError, AgentNotAvailableError, ChatModelFactory, MessageTrimmerFactory, DynamicChatModelFactory, NotifyrAgentState, NotifyrContext, SessionInjectionFactory, Thread, dynamic_system_prompt
+from app.definition._agent import AgentContextDoesNotExistError, AgentInputFormatNotSupportedError, AgentNotAvailableError, ChatModelFactory, MessageLimitFactory, MessageTrimmerFactory, DynamicChatModelFactory, NotifyrAgentState, NotifyrContext, SemanticInterruptParserFactory, SessionInjectionFactory, Thread, ThrottleFactory, dynamic_system_prompt, filter_non_relevant_message, inject_ai_turn
 from app.classes.cost_definition import InsufficientCreditsError, InvalidPurchaseRequestError
 from app.classes.prompt import PromptToken
 from app.definition import _service
@@ -124,9 +124,10 @@ class AgentMiniService(BaseMiniService):
             raise BuildFailureError('Could not validate the agent model')
         
         hitl_config = {}
-        
-        tools = self._init_tools(hitl_config)
-        middleware = self._init_middleware(hitl_config)
+        tool_limits = []
+
+        tools = self._init_tools(hitl_config,tool_limits)
+        middleware = self._init_middleware(hitl_config,tool_limits)
     
         prompt = agents_prompt.SYSTEM_PROMPT(self.agent_model.system)
         self.prompt = SystemMessage([{'type':'text','text':prompt,"cache_control": {"type": "ephemeral"}}])
@@ -141,6 +142,7 @@ class AgentMiniService(BaseMiniService):
                 checkpointer=self.checkpointer,
                 store=self.store,
                 )
+
         for id,service in self.outboundServices.items():
             if service.service_status not in acceptable_service:
                 raise BuildOkError(f'OutboundService [{id}] does not have a valid state: {service.service_status}')
@@ -154,8 +156,8 @@ class AgentMiniService(BaseMiniService):
     ############################                                          ###################################
     #########################################################################################################
 
-    def _init_tools(self,hitl_config:dict)->List[BaseTool]:
-        t = []
+    def _init_tools(self,hitl_config:dict,tool_limit:list)->List[BaseTool]:
+        tools = []
         for config in self.toolModels:
 
             if isinstance(config,VectorToolModel):
@@ -184,36 +186,57 @@ class AgentMiniService(BaseMiniService):
             if (hitl:=tool.to_hitl()) != None:
                 hitl_config.update(hitl)
             
+            if (limit:=tool.to_limit())!= None:
+                tool_limit.append(limit)
+            
             tool = tool_factory(tool.name,tool,description=tool.description,return_direct=tool.return_direct,args_schema=tool.arg_schema)
-            t.append(tool)
+            tools.append(tool)
         
-        return t
+        return tools
 
-    def _init_middleware(self,interrupt_on)->list[Callable|type]:
+    def _init_middleware(self,interrupt_on,tool_limits)->list[Callable|type]:
         middleware = []
-        hitl = HumanInTheLoopMiddleware(interrupt_on=interrupt_on)
+        dynamic_middlewares = []
+
         middleware.append(dynamic_system_prompt)
         middleware.append(handle_tool_errors)
+        # TODO add the tools calls limits
+        # TODO add the LLMToolsSelector and Todo Middleware
         middleware.append(dynamic_tool_selection)
+        middleware.append(HumanInTheLoopMiddleware(interrupt_on=interrupt_on))
+        
+        if self.agent_model.messageLimit != None:
+            message_limiter = MessageLimitFactory(self.agent_model)
+            middleware.append(message_limiter)
+        
+        if self.agent_model.throttle:
+            throttle = ThrottleFactory()
+            middleware.append(throttle)
 
         if self.agent_model.callLimit!= None:
-            ModelCallLimitMiddleware(**self.agent_model.callLimit.model_dump())
-
+            middleware.append(ModelCallLimitMiddleware(exit_behavior='error',**self.agent_model.callLimit.model_dump()))
+        
         summaryInjector = SessionInjectionFactory(self.agent_model,self.depService.model)
 
         if isinstance(self.agent_model.model,str):
             self.chat_model = ChatModelFactory(self.agent_model,self.depService.model,self.depService.credentials)
             trimmer_middleware = MessageTrimmerFactory(self.agent_model,self.depService.model,self.chat_model)
-            middleware.append(trimmer_middleware)
-            middleware.append(summaryInjector)
+            interrupt_middleware = SemanticInterruptParserFactory(self.agent_model,self.chat_model,self)
         else:
-            chat_model,summary_model,dynamic_middlewares = DynamicChatModelFactory(self.agent_model,self.depService.model,self.depService.credentials)
-            trimmer_middleware = MessageTrimmerFactory(self.agent_model,self.depService.model,summary_model)
-            self.chat_model = chat_model
+            purposed_models,dynamic_middlewares = DynamicChatModelFactory(self.agent_model,self.depService.model,self.depService.credentials)
+            trimmer_middleware = MessageTrimmerFactory(self.agent_model,self.depService.model,purposed_models.summary)
+            interrupt_middleware = SemanticInterruptParserFactory(self.agent_model,purposed_models.interrupt,self)
+            self.chat_model = purposed_models.basic
 
-            middleware.append(trimmer_middleware)
-            middleware.append(summaryInjector)
-            middleware.extends(dynamic_middlewares)
+        middleware.append(interrupt_middleware)
+        middleware.append(trimmer_middleware)
+        middleware.append(summaryInjector)
+        
+        middleware.append(filter_non_relevant_message)
+        # NOTE if too many ToolMessage still, i will remove them using the ClearToolEdit
+        middleware.append(inject_ai_turn)
+
+        middleware.extend(dynamic_middlewares)
 
         return reversed(middleware)
 
@@ -225,7 +248,7 @@ class AgentMiniService(BaseMiniService):
         content_blocks = []
         content_blocks.append({'type':'text','text':prompt})
         content_blocks.extend(contents or [])
-        message = HumanMessage(content_blocks=content_blocks,id=mess_id)
+        message = HumanMessage(content_blocks=content_blocks,id=mess_id,additional_kwargs={'__turn__':True})
 
         config = {"configurable": {"thread_id": thread,"checkpoint_ns": self.agent_model.id}} 
         
@@ -245,7 +268,7 @@ class AgentMiniService(BaseMiniService):
     async def stream(self,thread: str,prompt: str,context: NotifyrContext,contents: list = [],mess_id: str = None,):
         content_blocks = [{'type': 'text', 'text': prompt}]
         content_blocks.extend(contents or [])
-        message = HumanMessage(content_blocks=content_blocks,id=mess_id)
+        message = HumanMessage(content_blocks=content_blocks,id=mess_id,additional_kwargs={'__turn__':True})
 
         config = {"configurable": {"thread_id": thread,"checkpoint_ns": self.agent_model.id}}
         async for chunk in self.agent.astream_events(message,config=config,context=context,version="v2",):

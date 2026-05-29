@@ -8,6 +8,7 @@ from enum import Enum
 from app.utils.helper import subset_model
 
 from app.models.tools_model import ToolModels
+
 class GraphitiSearchConfig(str, Enum):
     PERSONALIZED_MEMORY = "personalized_memory"
     PRECISE_QA = "precise_qa"
@@ -60,12 +61,15 @@ class TrimmerStrategy(BaseModel):
     mode:Literal['summarize','trim'] ='trim'
     keep_message:int = Field(100,ge=25,le=300)
     tokens_trigger: int = Field(MIN_OF_MAX_INPUT_TOKEN*0.80,ge=MIN_OF_MAX_INPUT_TOKEN*.60)
+    keep_referenced_tools:Optional[bool] = Field(default=False,description='Whether we should add ToolMessage that are depend on by later AIMessage')
+
 
 class DynamicModelSelectionConfig(BaseModel):
     mode:Literal['optimization','fallback','both'] = 'both'
     baseChatIndex:Optional[int] = None
     summaryChatIndex:Optional[int] = None
-    reverse:Optional[bool] = False
+    interruptChatIndex:Optional[int] = None
+    reverse:Optional[bool] = Field(default=False,description='[F] the more complex the more higher the model (Fallback: [H->L]) [T]: The more complex the lower model (Fallback [L->H])')
     trigger_message:Optional[int] = Field(default=None,ge=50)
 
     @property
@@ -77,7 +81,6 @@ class DynamicModelSelectionConfig(BaseModel):
 class ModelCallLimitConfig(BaseModel):
     thread_limit:Optional[int] = Field(default=None,)
     run_limit:Optional[int] = Field(default=None,)
-    exit_behavior:Literal['end','error'] = 'end'
 
     @model_validator(mode='after')
     def validate_limit(self):
@@ -86,6 +89,10 @@ class ModelCallLimitConfig(BaseModel):
         
         return self
 
+class MessageLimitConfig(BaseModel):
+    guest:Optional[int] = Field(None,ge=10,le=100)
+    subscribed:Optional[int] = Field(None,ge=100,le=500)
+    registered:Optional[int] = Field(None,ge=300,le=600)
 
 #########################################################################################################
 ############################                                          ###################################
@@ -107,6 +114,8 @@ class AgentModel(BaseDocument):
     profile: Optional[ChatProfileConfig] = ChatProfileConfig()
     limiter : Optional[RateLimiterConfig] = RateLimiterConfig()
     callLimit: Optional[ModelCallLimitConfig] = ModelCallLimitConfig()
+    messageLimit: Optional[MessageLimitConfig] = MessageLimitConfig()
+    throttle:Optional[bool] = False
 
     _collection:ClassVar[str] = MongooseDBConstant.AGENT_COLLECTION
 

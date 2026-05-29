@@ -31,3 +31,11 @@ def ConversationRouter():
     @router.delete('/')
     async def delete_conversation():
         ...
+
+    @router.get('/interrupts/')
+    async def fetch_interrupts():
+        ...
+
+    @router.post('/interrupts')
+    async def resume_interrupts():
+        ...

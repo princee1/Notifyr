@@ -44,7 +44,6 @@ PROPERTIES_PREFIX = 'properties'
 @HTTPRessource(SETTINGS_ROUTE)
 class SettingsRessource(BaseHTTPRessource):
     
-    
     def __init__(self):
         super().__init__()
         self.configService = Get(ConfigService)
@@ -151,7 +150,7 @@ if CAPABILITIES['object']:
                         PARAMS_KEY_SEPARATOR, globalIter.var)
 
                 ptr.del_val()
-                self.assetService.save_globals()
+                await self.assetService.save_globals()
             self.propagate_asset_state(broker)
             return {"value": val}
 
@@ -183,7 +182,7 @@ if CAPABILITIES['object']:
                         continue
                     ptr[k] = v
 
-            self.assetService.save_globals()
+            await self.assetService.save_globals()
             self.propagate_asset_state(broker)
 
         def propagate_asset_state(self, broker: Broker):

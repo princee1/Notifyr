@@ -3,10 +3,10 @@ from pydantic import BaseModel
 from app.models.odm.agents_model import StoreMemoryPolicy
 from app.models.tools_model import ToolModel
 from langchain.messages import SystemMessage, HumanMessage,ToolMessage
-from langchain.agents.middleware import wrap_tool_call,ModelRequest, ModelResponse
+from langchain.agents.middleware import ToolCallLimitMiddleware, wrap_tool_call,ModelRequest, ModelResponse
 from typing import Callable, Optional, Set, Type, TypedDict
 from app.definition._error import BaseError
-from app.definition._agent import NotifyrContext,NotifyrAgentState,ToolType,ToolMetadata
+from app.definition._agent import NotifyrContext,NotifyrAgentState,ToolClass,ToolMetadata,BaseToolArtifact
 from langchain.tools import ToolRuntime as BaseToolRuntime
 
 #########################################################################################################
@@ -14,11 +14,6 @@ from langchain.tools import ToolRuntime as BaseToolRuntime
 #########################################################################################################
 
 ToolRuntime=BaseToolRuntime[NotifyrContext,NotifyrAgentState]
-
-class ToolArtifact(TypedDict):
-    process_time:int
-    error:Optional[dict]
-
 
 #########################################################################################################
 ############################                TOOL DEFINITION           ###################################
@@ -53,6 +48,9 @@ class Tool:
     def tool_id(self):
         return self.config.id
 
+    def to_limit(self)->None | ToolCallLimitMiddleware:
+        ...
+
     def to_hitl(self):
         if self.config.interrupt_on == None:
             return None
@@ -85,7 +83,7 @@ class ToolError(BaseError):
 @wrap_tool_call
 async def handle_tool_errors(request:ModelRequest,handler:Callable[[ModelRequest], ModelResponse]):
     try:
-        return handler(request)
+        return await handler(request)
     except:
         return ToolMessage()
 

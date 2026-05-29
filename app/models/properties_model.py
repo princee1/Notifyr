@@ -1,5 +1,5 @@
 from typing import Self
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from app.classes.template import AVAILABLE_LANG
 from app.utils.constant import SettingDBConstant,DEFAULT_SETTING
@@ -28,6 +28,9 @@ max_contact_expiration = contact_token_expi *1.8
 
 api_expiration = DEFAULT_SETTING[SettingDBConstant.API_EXPIRATION_SETTING]
 
+
+class AgentModel(BaseModel):
+    NATURE_PROMPT:str = Field(min_length=50,max_length=500)
 
 class SettingsModel(BaseModel):
     AUTH_EXPIRATION: int = None
