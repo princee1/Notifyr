@@ -1,7 +1,7 @@
 import asyncio
 from dataclasses import dataclass, field
 import math
-from typing import Callable, Dict, List, Literal, NamedTuple, Optional, TypedDict,Any, override
+from typing import Callable, Dict, List, Literal, NamedTuple, Optional, Type, TypedDict,Any, override
 from langchain.agents.middleware.types import AgentState, ContextT, dynamic_prompt
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
@@ -15,11 +15,13 @@ from app.definition._error import BaseError
 from app.definition._service import ServiceStatus
 from app.models.odm.agents_model import AgentModel,MIN_OF_MAX_INPUT_TOKEN
 from app.models.odm.llm_model import LLMProfileModel
+from app.prompt.agents_prompt import PERSONALIZED_PROMPT
 from app.utils.helper import _make_delay_fn, subset_model
+from langgraph.runtime import ExecutionInfo
 from langchain.messages import AIMessage, AnyMessage, HumanMessage, RemoveMessage,SystemMessage
 from langchain.messages import ToolMessage
 from langchain_core.messages.utils import count_tokens_approximately
-from pydantic import SecretStr, ValidationError
+from pydantic import BaseModel, SecretStr, ValidationError
 from langchain.agents.middleware import ModelFallbackMiddleware, Runtime, after_agent, before_agent, before_model, wrap_model_call, ModelRequest, ModelResponse,ContextEditingMiddleware
 from langchain.agents.middleware.model_call_limit import ModelCallLimitExceededError
 from langchain.agents.middleware import SummarizationMiddleware as BaseSummarizationMiddleware
@@ -120,7 +122,12 @@ class AgentMessageLimitExceededError(BaseError):
         self.auth = auth
 
 class AgentSessionAlreadyEndedError(BaseError):
-    ...
+    def __init__(self,session_id:str,execution_info:ExecutionInfo):
+        super().__init__()
+        self.run_id = execution_info.run_id
+        self.session_id = session_id
+        self.thread_id = execution_info.thread_id
+        self.checkpoint_ns = execution_info.checkpoint_ns
 
 #########################################################################################################
 ############################                                          ###################################
@@ -380,7 +387,7 @@ def ChatModelFactory(agentModel:AgentModel,llmModel:LLMProfileModel,credentials:
             
         match provider:
             case 'anthropic': 
-                return ChatAnthropic(
+                chat=  ChatAnthropic(
                     profile=profile,
                     streaming=True,
                     model_name=model,
@@ -394,7 +401,7 @@ def ChatModelFactory(agentModel:AgentModel,llmModel:LLMProfileModel,credentials:
                     base_url=llmModel.base_url
                 )
             case 'cohere': 
-                return ChatCohere(
+                chat = ChatCohere(
                     streaming=True,
                     profile=profile,
                     temperature=agentModel.generation.temperature,
@@ -411,7 +418,7 @@ def ChatModelFactory(agentModel:AgentModel,llmModel:LLMProfileModel,credentials:
                         base_url= llmModel.base_url or "https://generativelanguage.googleapis.com/v1beta"
                     case _:
                         base_url = llmModel.base_url or None
-                return ChatOpenAI(
+                chat = ChatOpenAI(
                     streaming=True,
                     profile=profile,
                     stream_usage=True,
@@ -430,7 +437,7 @@ def ChatModelFactory(agentModel:AgentModel,llmModel:LLMProfileModel,credentials:
                     openai_proxy=agentModel.generation.proxy_url
             )
             case 'groq': 
-                return ChatGroq(
+                chat = ChatGroq(
                     profile=profile,
                     streaming=True,
                     max_tokens=max_output_tokens,
@@ -446,6 +453,8 @@ def ChatModelFactory(agentModel:AgentModel,llmModel:LLMProfileModel,credentials:
                     base_url=llmModel.base_url
                 )
             case 'ollama': raise NotImplementedError()
+    
+        return PurposedModel(chat,chat,chat)
 
 def DynamicChatModelFactory(agentModel:AgentModel,llmModel:LLMProfileModel,credentials: ChaCha20Poly1305SecretsWrapper):
 
@@ -628,7 +637,7 @@ def SessionInjectionFactory(agentModel:AgentModel,llmModel:LLMProfileModel):
 def SemanticInterruptParserFactory(agentModel:AgentModel,model:BaseChatModel,agentService:Any):
     
     model = model.with_structured_output(include_raw=True)
-    model = model.with_retry((ValidationError,))
+    model = model.with_retry((ValidationError,),stop_after_attempt=2)
 
     @before_agent(can_jump_to=['end','tools','model'])
     async def interrupt_middleware(state: NotifyrAgentState, runtime: Runtime[NotifyrContext]):
@@ -651,8 +660,8 @@ def SemanticInterruptParserFactory(agentModel:AgentModel,model:BaseChatModel,age
                 last_message.append(m)
                 break
         
-        message = await model.ainvoke()
-        message['s']
+        message = await model.ainvoke(last_message)
+        ...
 
         return None
 
@@ -671,36 +680,26 @@ def MessageLimitFactory(agentModel:AgentModel):
         if limit == None:
             return None
         
-        ai_message = AIMessage('Message limit is reached with the agent',additional_kwargs={'__ended__':True})
-        error = AgentMessageLimitExceededError(runtime.execution_info.thread_id,
+        for val in [*state['sessions'].values(),*state['messages']]:
+            if isinstance(val,dict):
+                count+=val['count']
+            elif isinstance(val,(AIMessage,HumanMessage)):
+                count+=1
+            else:
+                continue
+
+            if count == limit -1 :
+                ai_message = AIMessage('Message limit is reached with the agent',additional_kwargs={'__ended__':True})
+                return {'messages':[ai_message],'jump_to':'end'}
+            
+            if count >= limit:
+                raise AgentMessageLimitExceededError(runtime.execution_info.thread_id,
                                                runtime.execution_info.checkpoint_ns,
                                                runtime.context.session_id,
                                                agentModel.id,
                                                limit,
                                                runtime.context.auth,
                                                )
-        
-        for m in reversed(state['messages']):
-            if isinstance(m,AIMessage):
-                break
-        
-        if m.additional_kwargs.get('__ended__',None):
-            raise error
-
-        for val in [*state['sessions'].values(),*state['messages']]:
-            if isinstance(val,dict):
-                count+=val['count']
-            elif isinstance(m,(AIMessage,HumanMessage)):
-                count+=1
-            else:
-                continue
-
-            if count == limit -1 :
-                return {'messages':ai_message,'jump_to':'end'}
-            
-            if count >= limit:
-                raise error
-        
         return None
 
     return message_limiter
@@ -774,24 +773,40 @@ async def inject_ai_turn(state: NotifyrAgentState, runtime: Runtime[NotifyrConte
     ai_turn.additional_kwargs['__turn__'] = True
     return None
 
-@dynamic_prompt
-def dynamic_system_prompt(request: ModelRequest[NotifyrContext]) -> str:
-    # if the user is a guest indicate the agent to not hesitate to learn about the user through the conversation tool, 
-    # if there's missing keys and it is guest ask them with the conversation tool
-    # ask for policy permission
-    # adapt the response for the channel
-    return ''
+def DynamicSystemPromptFactory(memoryModel:Type[BaseModel],memory_enabled):
+    MemoryModel =subset_model(memoryModel,f'Update{memoryModel.__class__.__name__}',optional=True)
 
+    @dynamic_prompt
+    def dynamic_system_prompt(request: ModelRequest[NotifyrContext]) -> SystemMessage:
+        state:NotifyrAgentState = request.state
+        system = request.system_message
+        content:list = system.content.copy()
+        auth =  request.runtime.context.auth
+        personalized_prompt = PERSONALIZED_PROMPT(
+            request.runtime.context.channel,
+            auth,
+            request.runtime.context.user if auth != 'guest' else state.get('guest',{}),
+            MemoryModel(**state.get('memory',{}) if memory_enabled else None),
+        )
+        prompt = {'type':'text','text':personalized_prompt}
+        content.append(prompt)
+        return SystemMessage(content)
+    
+    return dynamic_system_prompt
+    
+
+@before_model
+async def guard_session_ends(state: NotifyrAgentState, runtime: Runtime[NotifyrContext]):
+    for m in reversed(state['messages']):
+        if isinstance(m,AIMessage):
+            break
+            
+    if m.additional_kwargs.get('__ended__',None):
+        raise AgentSessionAlreadyEndedError(runtime.context.session_id,runtime.execution_info)
+    
+    return None
+    
 @wrap_model_call
 async def handle_agent(request: ModelRequest[NotifyrContext],handler: Callable[[ModelRequest[NotifyrContext]], ModelResponse])->ModelResponse:
-    try:
-        # TODO if __ended__ = True on last message
-        if False:
-            raise AgentSessionAlreadyEndedError
-
-        return await handler(request)
-    
-    except ModelCallLimitExceededError as e:
-        # TODO jump_to end and inject message if needed
-        ...
+    return await handler(request)
     

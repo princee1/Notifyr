@@ -79,8 +79,8 @@ class DynamicModelSelectionConfig(BaseModel):
         return -1
 
 class ModelCallLimitConfig(BaseModel):
-    thread_limit:Optional[int] = Field(default=None,)
-    run_limit:Optional[int] = Field(default=None,)
+    thread_limit:Optional[int] = Field(default=None,ge=100)
+    run_limit:Optional[int] = Field(default=None,ge=5)
 
     @model_validator(mode='after')
     def validate_limit(self):
@@ -93,6 +93,7 @@ class MessageLimitConfig(BaseModel):
     guest:Optional[int] = Field(None,ge=10,le=100)
     subscribed:Optional[int] = Field(None,ge=100,le=500)
     registered:Optional[int] = Field(None,ge=300,le=600)
+
 
 #########################################################################################################
 ############################                                          ###################################
@@ -116,6 +117,7 @@ class AgentModel(BaseDocument):
     callLimit: Optional[ModelCallLimitConfig] = ModelCallLimitConfig()
     messageLimit: Optional[MessageLimitConfig] = MessageLimitConfig()
     throttle:Optional[bool] = False
+    dynamicPrompt:Optional[bool] = Field(default=True,description='update the system prompt based on context,[NOTE may lose the cache]')
 
     _collection:ClassVar[str] = MongooseDBConstant.AGENT_COLLECTION
 

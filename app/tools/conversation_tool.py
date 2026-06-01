@@ -16,11 +16,12 @@ class ConversationTool(ManagerTool):
         self.mongooseService = mongooseService
         self.checkpointer = checkpointer
 
-    # it changes the preferences
+    # it changes the memory
     # it ask permission for the thread/ns 
     # it learns about a guest by asking question
     # it can changes 
     # it can fetch other conversation
     # fetch data in the store
+    # it can update the state
     async def __call__(self, runtime:ToolRuntime):
         ...

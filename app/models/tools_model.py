@@ -1,11 +1,68 @@
+from app.classes.conversation import Auth, Channel
 from app.classes.mongo import BaseDocument
 from app.classes.qdrant import QdrantFilterModel, QdrantSearchParamsModel
 from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
-from typing import ClassVar, List, Literal, Optional, Self, Union
+from typing import Any, ClassVar, Dict, List, Literal, Optional, Self, Union, get_args
 from app.classes.url import URLMappingModel
+from mongoquery import Query
 from app.utils.constant import MongooseDBConstant
 
+class ContextCondition(BaseModel):
+    auth:List[Auth] = Field(default_factory=list,le=len(get_args(Auth)))
+    channel:List[Channel] = Field(default_factory=list,le=len(get_args(Channel)))
 
+    user_rule:Dict[str,Any] = Field(default=None,max_length=1) # More granular mapping
+
+    _query:Query = PrivateAttr(default=None)
+
+    @field_validator('auth','channel',mode='after')
+    def remove_duplicate(cls,v:list[str]):
+        return list(set(v))
+
+    @model_validator(mode='after')
+    def rule_validation(self)->Self:
+        if self.user_rule is None:
+            return self
+        try:
+            self._query = Query(self.user_rule)
+        except Exception as e:
+            raise ValueError(f"Invalid mongo query: {e}")
+        return self
+    
+    @property
+    def as_is(self):
+        if not self.auth and not self.channel and not self.user_rule:
+            return None
+        return self
+
+    @staticmethod
+    def merge(c1:'ContextCondition',c2:'ContextCondition')->'ContextCondition':
+        if c1 == None and c2 == None:
+            return None
+        if c1 != None and c2 == None:
+            return c1
+        if c1 == None and c2 != None:
+            return c2
+
+        auth = list(set(c1.auth).union(c2.auth))
+        channel = list(set(c1.channel).union(c2.channel))
+
+        mapping = c1.user_rule.copy()
+        mapping.update(c2.user_rule)
+
+        return ContextCondition(auth=auth,channel=channel,user_rule=mapping)
+             
+    def verify(self,auth:str,channel:str,user:dict)->bool:
+        if self.auth and auth not in self.auth:
+            return False
+
+        if self.channel and channel not in self.channel:
+            return False
+        try:
+            return self._query.match(user)
+        except:
+            return False
+        
 ####################################################################################################################################
 ##################################################                                                 #################################
 ####################################################################################################################################
@@ -13,13 +70,28 @@ class InterruptOnConfig(BaseModel):
     description:Optional[str] = Field(min_length=10,max_length=30)
     allowed_decisions:List[Literal['approve','reject','reject','respond']]
 
+class CallLimitConfig(BaseModel):
+    thread:Optional[int] = Field(default=None,ge=1,)
+    run:Optional[int] = Field(default=None,ge=1)
+
+    @property
+    def as_is(self):
+        if self.thread == None and self.run == None:
+            return None
+        return self
 class ToolModel(BaseDocument):
     alias:str = Field(min_length=10,max_length=30)
     description:str = Field(min_length=10,max_length=150)
+    condition: Optional[ContextCondition] = None
+    limit:Optional[CallLimitConfig] = None
     policies: List[str] = Field(default_factory=list,description='For interrupts permission in tools')
     interrupt_on: Optional[Union[bool,InterruptOnConfig]] = Field(default=None,description='For humain in the loop')
     
     _collection: ClassVar[str] = MongooseDBConstant.TOOL_COLLECTION
+
+    @field_validator('limit',mode='after')
+    def validate_limit(cls,v:CallLimitConfig):
+        return v.as_is
 
     class Settings:
         is_root=True
@@ -27,7 +99,6 @@ class ToolModel(BaseDocument):
         name=MongooseDBConstant.TOOL_COLLECTION
 
 MAX_DISTANCE_SEARCH = 0.7
-
 
 ####################################################################################################################################
 ##################################################                                                 #################################
@@ -104,7 +175,10 @@ class APIControlModel(APIToolModel):
     ...
 
 class MCPToolModel(ToolModel):
-    ...
+    transports:Literal['http','stdio'] = 'http'
+    session_mode:Literal['stateless','stateful']
+    url:str
+    outbound:str
 
 
 ####################################################################################################################################

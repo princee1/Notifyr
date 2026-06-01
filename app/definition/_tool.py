@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from pydantic import BaseModel
 from app.models.odm.agents_model import StoreMemoryPolicy
-from app.models.tools_model import ToolModel
+from app.models.tools_model import ContextCondition, ToolModel
 from langchain.messages import SystemMessage, HumanMessage,ToolMessage
 from langchain.agents.middleware import ToolCallLimitMiddleware, wrap_tool_call,ModelRequest, ModelResponse
 from typing import Callable, Optional, Set, Type, TypedDict
@@ -19,19 +19,16 @@ ToolRuntime=BaseToolRuntime[NotifyrContext,NotifyrAgentState]
 ############################                TOOL DEFINITION           ###################################
 #########################################################################################################
 
-class ContextCondition(TypedDict):
-    auth:Set[str]
-    channel:Set[str]
 
 class Tool:
 
-    Condition: ContextCondition
+    Condition: ContextCondition = None
 
     def __init__(self,config:ToolModel,memoryPolicy:StoreMemoryPolicy,storeSchema:Type[BaseModel]|None):
         self.config = config
         self.storeSchema = storeSchema
         self.memoryPolicy = memoryPolicy
-
+    
     @property
     def name(self):
         return self.config.alias
@@ -48,8 +45,15 @@ class Tool:
     def tool_id(self):
         return self.config.id
 
+    def to_condition(self):
+        return [self.Condition,self.config.condition]
+
     def to_limit(self)->None | ToolCallLimitMiddleware:
-        ...
+        if self.config.limit == None:
+            return None
+        return ToolCallLimitMiddleware(tool_name=self.name,
+                                       thread_limit=self.config.limit.thread,
+                                       run_limit=self.config.limit.run)
 
     def to_hitl(self):
         if self.config.interrupt_on == None:
@@ -81,14 +85,31 @@ class ToolError(BaseError):
 #########################################################################################################
 
 @wrap_tool_call
-async def handle_tool_errors(request:ModelRequest,handler:Callable[[ModelRequest], ModelResponse]):
+async def handle_tool_errors(request:ModelRequest[NotifyrContext],handler:Callable[[ModelRequest[NotifyrContext]], ModelResponse]):
     try:
         return await handler(request)
     except:
         return ToolMessage()
 
+
 @wrap_tool_call
-async def dynamic_tool_selection(request: ModelRequest,handler: Callable[[ModelRequest], ModelResponse]) -> ModelResponse:
-    tools = []
-    request = request.override(tools=tools)
-    return handler(request)
+async def dynamic_tool_selection(request: ModelRequest[NotifyrContext],handler: Callable[[ModelRequest[NotifyrContext]], ModelResponse]) -> ModelResponse:
+
+    context = request.runtime.context
+    filtered_tools = []
+    for t in request.tools:
+        condition:ContextCondition
+
+        for condition in t.extras.get('__condition__',[]):
+            if condition == None:
+                filtered_tools.append(t)
+
+            if condition.as_is == None:
+                filtered_tools.append(t)
+            
+            if condition.verify(context.auth,context.channel,context.user):
+                filtered_tools.append(t)
+        
+    request = request.override(tools=filtered_tools)
+    return await handler(request)
+

@@ -364,7 +364,7 @@ class UploadFilesGuard(Guard):
             # extension check
             if self.allowed_extensions is not None:
                 lower = filename.lower()
-                ext = self.fileService.get_extension(ext)      
+                ext = self.fileService.get_extension(lower)      
                 if ext not in self.allowed_extensions:
                     raise InvalidExtensionError(filename, self.allowed_extensions)
 

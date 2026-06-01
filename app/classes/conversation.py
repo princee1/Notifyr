@@ -53,6 +53,8 @@ class ContentBlock(BaseModel):
     def exports(mode: str, type: str, value: str, mime: str | None) -> dict:
         """Create standardized Langchain multimodal content block."""
         temp = {'type':mode, type:value}
+        if mode == 'file' or mode == 'image':
+            temp['cache-control'] = {"type": "ephemeral"},
         if mime:
             match mode:
                 case 'image':
