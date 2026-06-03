@@ -1,6 +1,8 @@
 from typing import Any, ClassVar, List, Literal, Optional, Self, Tuple
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+from app.classes.conversation import Channel
+from app.classes.embeddings import EmbeddingModel
 from app.classes.profiles import BaseProfileModel,BaseDocument
 from app.classes.prompt import System
 from app.utils.constant import MongooseDBConstant
@@ -99,6 +101,8 @@ class MessageLimitConfig(BaseModel):
 ############################                                          ###################################
 #########################################################################################################
 
+
+
 class AgentModel(BaseDocument):
     
     provider: str = Field(description='The service id of the LLM Provider')
@@ -117,9 +121,17 @@ class AgentModel(BaseDocument):
     callLimit: Optional[ModelCallLimitConfig] = ModelCallLimitConfig()
     messageLimit: Optional[MessageLimitConfig] = MessageLimitConfig()
     throttle:Optional[bool] = False
+    interruptChannel:List[Channel] = Field(default_factory=list)
     dynamicPrompt:Optional[bool] = Field(default=True,description='update the system prompt based on context,[NOTE may lose the cache]')
 
+    embeddings:Optional[EmbeddingModel] = None
+
     _collection:ClassVar[str] = MongooseDBConstant.AGENT_COLLECTION
+
+
+    @field_validator('interruptChannel',mode='after')
+    def ensure_interrupt_channel(cls,v):
+        return list(set(v))
 
     @field_validator('profile','avatar',mode='after')
     def ensure_not_none(cls,v):

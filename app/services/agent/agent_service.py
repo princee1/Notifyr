@@ -30,7 +30,6 @@ from app.tools.api_tool import APIControlTool, APIFetchTool
 from app.tools.cache_tool import CacheTool
 from app.tools.conversation_tool import ConversationTool
 from app.tools.graph_tool import KnowledgeGraphTool,MemoryTool
-from app.tools.mcp_tool import MCPTool
 from app.tools.search_tool import SearchTool
 from app.tools.vector_tool import VectorRagTool
 from app.utils.constant import CostConstant, MongooseDBConstant
@@ -87,7 +86,8 @@ class AgentMiniService(BaseMiniService):
                 store:MongoDBStore,
                 toolModels:list[ToolModel],
                 outboundServices:Dict[str,ProfileMiniService[HTTPOutboundModel]]={},
-                clientServices:Dict[str,ProfileMiniService[BaseProfileModel]]={}):
+                clientServices:Dict[str,ProfileMiniService[BaseProfileModel]]={},
+                __as_subagent__=False):
             
             self.depService = llmMiniService
             super().__init__(llmMiniService,str(agent_model['id']))
@@ -103,6 +103,8 @@ class AgentMiniService(BaseMiniService):
             self.checkpointer = checkpointer
             self.store = store
             self.toolModels = toolModels
+
+            self.__as_subagent__ = __as_subagent__
 
             for outbound in self.outboundServices.values():
                 self.register(outbound)
@@ -159,6 +161,7 @@ class AgentMiniService(BaseMiniService):
 
     def _init_tools(self,hitl_config:dict,tool_limit:list)->List[BaseTool]:
         tools = []
+        mcp_tools = []
         for config in self.toolModels:
 
             if isinstance(config,VectorToolModel):
@@ -178,7 +181,7 @@ class AgentMiniService(BaseMiniService):
             elif isinstance(config,SearchToolModel):
                 tool = SearchTool(self.configService,self.qdrantService,self.customService)
             elif isinstance(config,MCPToolModel):
-                tool = MCPTool(self.configService)
+                continue
             elif isinstance(config,ConversationToolModel):
                 tool = ConversationTool(self.configService,self.mongooseService)
             
@@ -203,13 +206,13 @@ class AgentMiniService(BaseMiniService):
     def _init_middleware(self,interrupt_on,tool_limits:list[ToolCallLimitMiddleware])->list[Callable|type]:
         middleware = []
         dynamic_middlewares = []
+        dynamic_system_prompt = DynamicSystemPromptFactory(...,...)
 
         if self.agent_model.callLimit!= None:
             middleware.append(ModelCallLimitMiddleware(exit_behavior='error',**self.agent_model.callLimit.model_dump()))
 
         middleware.append(guard_session_ends)  # before model
-
-        dynamic_system_prompt = DynamicSystemPromptFactory(...,...)
+        
         middleware.append(dynamic_system_prompt) #wrap model
         middleware.append(handle_agent) #wrap model
         middleware.append(handle_tool_errors) # wrap tool
@@ -250,6 +253,11 @@ class AgentMiniService(BaseMiniService):
         self.chat_model = purposed_models.basic
         return reversed(middleware)
 
+    def _init_mcp_tool(self):
+        ...
+    
+    def _init_subagent(self):
+        ...
     #########################################################################################################
     ############################                                          ###################################
     #########################################################################################################

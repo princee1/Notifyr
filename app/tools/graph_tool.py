@@ -6,7 +6,7 @@ from app.services.config_service import ConfigService
 from app.services.custom_service import CustomService
 from app.services.database.graphiti_service import GraphitiService, GroupType,SearchResults,EntityNode,EpisodicNode,EntityEdge
 from app.services.database.qdrant_service import QdrantService
-from app.prompt import tools_prompt
+from app.prompt import rag_prompt
 
 @dataclass
 class ContextSearchParam:
@@ -36,7 +36,7 @@ class KnowledgeGraphTool(RetrievalTool):
             await self.graph_search(results,set(),contexts,params,0)
             if not self.reranker_config._skip:
                 contexts = sorted(contexts,key=lambda k:k['score'],reverse=True)[self.reranker_config.top_k:]
-            contexts = tools_prompt.GRAPH_CONTEXT_TEMPLATE(contexts)
+            contexts = rag_prompt.GRAPH_CONTEXT_TEMPLATE(contexts)
             return contexts
     
     async def graph_search(self,result:SearchResults,seen:set[str],contexts:list[KGraphFacts],params:ContextSearchParam,depth:int):

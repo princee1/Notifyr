@@ -6,7 +6,7 @@ from app.models.tools_model import VectorToolModel
 from app.services.config_service import ConfigService
 from app.services.custom_service import CustomService
 from app.services.database.qdrant_service import QdrantService
-from app.prompt import tools_prompt
+from app.prompt import rag_prompt
 from app.services.database.redis_service import RedisService
 
 class GraphChunkContext(ChunkContext):
@@ -33,7 +33,7 @@ class VectorRagTool(RetrievalTool):
 				results:list[GraphChunkContext] = []
 				await self.graph_search(contexts,0,set(),results)
 				contexts = sorted(results,key =lambda c:c.get('computed_similarity',0), reverse=True)[self.reranker_config.top_k:] #reranker
-			prompt_context = tools_prompt.CHUNK_CONTEXT_TEMPLATE(contexts)
+			prompt_context = rag_prompt.CHUNK_CONTEXT_TEMPLATE(contexts)
 			return prompt_context
 		except QdrantCollectionDoesNotExistError as e:
 			return ''

@@ -5,6 +5,7 @@ from app.container import Get, InjectInMethod
 from  app.definition._ressource import BaseHTTPRessource, HTTPMethod,HTTPRessource, IncludeWebsocket, PingService, LockService, UseHandler, UsePermission, UseRoles
 from app.services.database.redis_service import RedisService
 from app.services.chat_service import ChatService
+from app.services.ntfr.live_chat_service import LiveChatService
 from app.services.reactive_service import ReactiveService
 from app.services.worker.celery_service import CeleryService
 from app.services.setting_service import SettingService
@@ -31,7 +32,7 @@ class ChatModel(BaseModel):
 class LiveChatRessource(BaseHTTPRessource):
 
     @InjectInMethod()
-    def __init__(self,jwtAuthService:JWTAuthService, configService: ConfigService,contactService:ContactsService,chatService:ChatService,settingService:SettingService,reactiveService:ReactiveService):
+    def __init__(self,jwtAuthService:JWTAuthService,liveChatService:LiveChatService, configService: ConfigService,contactService:ContactsService,chatService:ChatService,settingService:SettingService,reactiveService:ReactiveService):
         super().__init__()
         self.contactService = contactService
         self.configService = configService
@@ -39,10 +40,11 @@ class LiveChatRessource(BaseHTTPRessource):
         self.chatService = chatService
         self.settingService = settingService
         self.reactiveService = reactiveService
+        self.liveChatService = liveChatService
     
     @LockService(SettingService,lockType='reader')
     @UseHandler(WebSocketHandler)
-    @BaseHTTPRessource.Get('/live-chat-permission/{ws_path}',)
+    @BaseHTTPRessource.Get('/live-chat-permission/{ws_path}/',)
     def issue_chat_permission(self, ws_path:str):
 
         self._check_ws_path(ws_path)

@@ -1,5 +1,4 @@
-
-from app.definition._service import BaseService, Service
+from app.definition._service import DEFAULT_BUILD_STATE, BaseService, Service
 from app.services.chat_service import ChatService
 from app.services.config_service import ConfigService
 from app.services.database.mongoose_service import MongooseService
@@ -17,3 +16,6 @@ class LiveChatService(BaseService):
         self.mongooseService = mongooseService
         self.chatService = chatService
         self.settingService = settingService
+    
+    def build(self, build_state = DEFAULT_BUILD_STATE):
+        ...

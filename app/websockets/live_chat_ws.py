@@ -14,14 +14,15 @@ from app.services.security_service import JWTAuthService
 class LiveChatWebSocket(BaseWebSocketRessource):
 
     @InjectInMethod()
-    def __init__(self,configService:ConfigService,liveChatService:LiveChatService):
+    def __init__(self,configService:ConfigService,liveChatService:LiveChatService,chatService:ChatService):
         super().__init__()
         self.configService = configService
         self.liveChatService = liveChatService
+        self.chatService = chatService
     
 
-    @BaseWebSocketRessource.WSEndpoint('/live-chat')
-    def websocket_endpoint(self, websocket:WebSocket,message:Any):
+    @BaseWebSocketRessource.WSEndpoint('/live-chat/')
+    async def websocket_endpoint(self, websocket:WebSocket,message:Any):
         ...
 
     

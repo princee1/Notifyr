@@ -641,6 +641,9 @@ def SemanticInterruptParserFactory(agentModel:AgentModel,model:BaseChatModel,age
 
     @before_agent(can_jump_to=['end','tools','model'])
     async def interrupt_middleware(state: NotifyrAgentState, runtime: Runtime[NotifyrContext]):
+        if runtime.context.channel not in agentModel.interruptChannel:
+            return None
+
         graph:CompiledStateGraph[NotifyrAgentState,NotifyrContext,Any,Any] = None
         if (graph:=getattr(agentService,'agent',None)) == None:
             return None
@@ -664,8 +667,7 @@ def SemanticInterruptParserFactory(agentModel:AgentModel,model:BaseChatModel,age
         ...
 
         return None
-
-    
+  
     return interrupt_middleware
 
 def MessageLimitFactory(agentModel:AgentModel):
@@ -794,7 +796,6 @@ def DynamicSystemPromptFactory(memoryModel:Type[BaseModel],memory_enabled):
     
     return dynamic_system_prompt
     
-
 @before_model
 async def guard_session_ends(state: NotifyrAgentState, runtime: Runtime[NotifyrContext]):
     for m in reversed(state['messages']):

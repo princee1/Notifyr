@@ -29,7 +29,7 @@ max_contact_expiration = contact_token_expi *1.8
 api_expiration = DEFAULT_SETTING[SettingDBConstant.API_EXPIRATION_SETTING]
 
 
-class AgentModel(BaseModel):
+class AgentSettingsModel(BaseModel):
     NATURE_PROMPT:str = Field(min_length=50,max_length=500)
 
 class SettingsModel(BaseModel):
@@ -66,7 +66,6 @@ class SettingsModel(BaseModel):
             if self.REFRESH_EXPIRATION <= self.AUTH_EXPIRATION * 2:
                 raise ValueError('REFRESH_EXPIRATION must be at least two times greater than AUTH_EXPIRATION')
             
-        
         if self.CONTACT_TOKEN_EXPIRATION is not None:
             if not (self.CONTACT_TOKEN_EXPIRATION >= contact_token_expi and self.CONTACT_TOKEN_EXPIRATION <= max_contact_expiration):
                 raise ValueError(f'CONTACT_TOKEN_EXPIRATION must be in [{contact_token_expi} , {max_contact_expiration}] ')
