@@ -123,7 +123,8 @@ class AgentModel(BaseDocument):
     throttle:Optional[bool] = False
     interruptChannel:List[Channel] = Field(default_factory=list)
     dynamicPrompt:Optional[bool] = Field(default=True,description='update the system prompt based on context,[NOTE may lose the cache]')
-
+    type:Literal['main-agent','sub-agent'] = 'main-agent'
+    
     embeddings:Optional[EmbeddingModel] = None
 
     _collection:ClassVar[str] = MongooseDBConstant.AGENT_COLLECTION

@@ -1,4 +1,4 @@
-from typing import List, Literal, overload
+from typing import List, Literal, Optional, overload
 import math
 from aiohttp_retry import dataclass
 from pydantic import BaseModel
@@ -150,3 +150,7 @@ class EmbeddingWrapper:
                 return e
             case _:
                 raise InvalidExportModeError(mode)
+            
+
+class EmbeddingInterface(BaseModel):
+    embeddings:Optional[EmbeddingModel] = None

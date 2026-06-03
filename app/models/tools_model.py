@@ -1,4 +1,5 @@
 from app.classes.conversation import Auth, Channel
+from app.classes.embeddings import EmbeddingModel
 from app.classes.mongo import BaseDocument
 from app.classes.qdrant import QdrantFilterModel, QdrantSearchParamsModel
 from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
@@ -86,6 +87,8 @@ class ToolModel(BaseDocument):
     limit:Optional[CallLimitConfig] = None
     policies: List[str] = Field(default_factory=list,description='For interrupts permission in tools')
     interrupt_on: Optional[Union[bool,InterruptOnConfig]] = Field(default=None,description='For humain in the loop')
+
+    embeddings:Optional[EmbeddingModel] = None
     
     _collection: ClassVar[str] = MongooseDBConstant.TOOL_COLLECTION
 
