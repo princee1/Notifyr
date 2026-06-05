@@ -7,7 +7,7 @@ from app.definition._agent import AgentContextDoesNotExistError, AgentInputForma
 from app.classes.cost_definition import InsufficientCreditsError, InvalidPurchaseRequestError
 from app.classes.prompt import PromptToken
 from app.definition import _service
-from app.definition._tool import Tool, dynamic_tool_selection, handle_tool_errors
+from app.definition._tool import Tool, dynamic_tool_selection
 from app.errors.llm_error import LLMProviderDoesNotExistError
 from app.errors.service_error import BuildFailureError, BuildOkError, MiniServiceDoesNotExistsError
 from app.grpc.agent_interceptor import AgentServerInterceptor, HandlerType
@@ -51,8 +51,6 @@ from langchain_classic import hub
 from langchain_core.rate_limiters import InMemoryRateLimiter
 from app.classes import conversation
 
-
-
 AVOID_RE_VALIDATE_BUILD_STATE = -100
 AVOID_RECREATE_AGENT_BUILD_STATE = -435
 RECREATE_MEMORY_BUILD_STATE = 895
@@ -68,7 +66,6 @@ InterruptConfig = Dict
 factory_include = ('temperature','model','timeout')
 acceptable_service = {ServiceStatus.AVAILABLE,ServiceStatus.WORKS_ALMOST_ATT,ServiceStatus.PARTIALLY_AVAILABLE}
 answer_exclude = {'token'}
-
 
 @MiniService(mirror=RemoteAgentMiniService,links=[LinkDep(LLMMiniService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)])
 class AgentMiniService(BaseMiniService):
@@ -215,7 +212,6 @@ class AgentMiniService(BaseMiniService):
         
         middleware.append(dynamic_system_prompt) #wrap model
         middleware.append(handle_agent) #wrap model
-        middleware.append(handle_tool_errors) # wrap tool
         
         middleware.append(dynamic_tool_selection) #wrap tool call
         middleware.extend(tool_limits) #after model

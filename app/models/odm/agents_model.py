@@ -105,26 +105,30 @@ class MessageLimitConfig(BaseModel):
 
 class AgentModel(BaseDocument):
     
-    provider: str = Field(description='The service id of the LLM Provider')
     system:System
-    model: str | List[str]
+    model: str | List[str] = Field(default_factory=list)
+    tools: List[str] = Field(default_factory=list)
+    type:Literal['main-agent','sub-agent'] = Field(default='main-agent')
+    rag:Literal['agentic','linear','hybrid'] = Field(default='agentic')
+    provider: str = Field(description='The service id of the LLM Provider')
+
+    interruptChannel:List[Channel] = Field(default_factory=list)
+    dynamicPrompt:Optional[bool] = Field(default=True,description='update the system prompt based on context,[NOTE may lose the cache]')
+
     storeModel:Optional[str] = None
     memoryModel:Optional[str] = None
-    tools: List[str] = Field(default_factory=list)
-    storePolicy: Optional[StoreMemoryPolicy] = None
-    dynamicModel:Optional[DynamicModelSelectionConfig] = DynamicModelSelectionConfig()
-    trimmer:Optional[TrimmerStrategy] = TrimmerStrategy()
+    throttle:bool = Field(default=False)
+    avatar: AvatarConfig = AvatarConfig()
     generation:GenerationConfig = GenerationConfig()
-    avatar: Optional[AvatarConfig] = AvatarConfig()
-    profile: Optional[ChatProfileConfig] = ChatProfileConfig()
+    profile: ChatProfileConfig = ChatProfileConfig()
+
     limiter : Optional[RateLimiterConfig] = RateLimiterConfig()
     callLimit: Optional[ModelCallLimitConfig] = ModelCallLimitConfig()
     messageLimit: Optional[MessageLimitConfig] = MessageLimitConfig()
-    throttle:Optional[bool] = False
-    interruptChannel:List[Channel] = Field(default_factory=list)
-    dynamicPrompt:Optional[bool] = Field(default=True,description='update the system prompt based on context,[NOTE may lose the cache]')
-    type:Literal['main-agent','sub-agent'] = 'main-agent'
-    
+    dynamicModel:Optional[DynamicModelSelectionConfig] = DynamicModelSelectionConfig()
+    trimmer:Optional[TrimmerStrategy] = TrimmerStrategy()
+    storePolicy: Optional[StoreMemoryPolicy] = None
+
     embeddings:Optional[EmbeddingModel] = None
 
     _collection:ClassVar[str] = MongooseDBConstant.AGENT_COLLECTION
@@ -177,13 +181,17 @@ class AgentModel(BaseDocument):
 
         return self
 
-    class Settings:
-        name = MongooseDBConstant.AGENT_COLLECTION
-    
     @field_validator('model',mode='after')
     def _validate_models(cls,m):
         if isinstance(m,list) and len(m) <1:
             raise ValueError('Dynamic model selection agents should have at least 2 model')
         return m
+    
+    @field_validator('embeddings',mode='before')
+    def ensure_no_embedding(cls,e):
+        return None
+
+    class Settings:
+        name = MongooseDBConstant.AGENT_COLLECTION
 
 AgentValidationModel = subset_model(AgentModel,f'Validation{AgentModel.__class__.__name__}')

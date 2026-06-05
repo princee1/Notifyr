@@ -9,22 +9,9 @@ from fastapi.exceptions import ResponseValidationError
 import hvac
 from minio import S3Error, ServerError
 import requests
+from app.errors.agent_error import *
 from app.errors.ingest_error import AgenticDatabaseNotAllowedError, IngestConfigNotPresentError, TaskIngestNameNotValidError
-from app.errors.agentic_error import (
-    AgenticServerConnectionRefusedError,
-    AgenticServerDisconnectedError,
-    AgenticStreamDoneError,
-    AgenticBadResponseError,
-    AgenticGrpcIdleError,
-    AgenticGrpcShutdownError,
-    AgenticClientError,
-    AgenticUnauthorizedError,
-    AgenticNotFoundError,
-    AgenticGatewayError,
-    AgenticTimeoutError,
-    AgenticConnectionError,
-    AgenticResponseValidationError,
-)
+from app.errors.agentic_error import *
 from app.errors.llm_error import LLMProviderDoesNotExistError, LLMModelNotPermittedError, LLMModelMaxTokenExceededError, LLMRateLimiterError, LLMConfigNotConfiguredError
 from app.services.worker.arq_service import DataTaskNotFoundError, JobAlreadyExistsError, JobDequeueError, JobDoesNotExistsError, JobInProgressError, JobStatusNotValidError,ResultNotFound, UnexpectedJobStatusError
 from app.classes.auth_permission import WSPathNotFoundError
@@ -61,13 +48,7 @@ from app.errors.db_error import DocumentAddConditionError, DocumentConditionWron
 from app.utils.fileIO import ExtensionNotAllowedError, MultipleExtensionError
 from aiomcache.exceptions import ClientException, ValidationException 
 from pymemcache import MemcacheClientError,MemcacheServerError,MemcacheUnexpectedCloseError
-from app.errors.upload_error import (
-    MaxFileLimitError,
-    FileTooLargeError,
-    TotalFilesSizeExceededError,
-    DuplicateFileNameError,
-    InvalidExtensionError,
-)
+from app.errors.upload_error import *
 from app.classes.embeddings import (
     EmbeddingException,
     EmptyVectorError,
@@ -1331,3 +1312,21 @@ class EmbeddingHandler(Handler):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="An embedding operation failed"
             ) from e
+        
+
+class AgentHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args,**kwargs)
+        except AgentToolDoesNotExistError as e:
+            ...
+        
+        except SemanticAgentAlreadyExistError as e:
+            ...
+        
+        except SemanticToolAlreadyExistError as e:
+            ...
+        
+        except DependencyAgentError as e:
+            ...

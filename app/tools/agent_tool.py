@@ -1,5 +1,6 @@
 from typing import Annotated, Callable
-from app.definition._tool import ExecutionTool,ToolRuntime
+from app.definition._agent import ToolMetadata
+from app.definition._tool import ExecutionTool, Tool,ToolRuntime
 from langgraph.graph.state import Command, CompiledStateGraph as GraphAgent
 from langchain.messages import HumanMessage, ToolMessage
 from app.models.odm.agents_model import AgentModel
@@ -9,9 +10,11 @@ from langchain.agents.middleware import wrap_model_call, ModelRequest, ModelResp
 from app.services.database.qdrant_service import QdrantService
 from app.services.database.redis_service import RedisService
 
-
 class AgentTool(ExecutionTool):
-    ...
+    
+    @classmethod
+    def to_metadata(cls,subclass:str):
+        return Tool.to_metadata('agent', subclass)
 
 class SubAgentTool(AgentTool):
 

@@ -148,7 +148,7 @@ class NotifyrContext:
         ...
         # NOTE the user will coerce into a schema : base64 -> str -> user_model
 
-ToolClass = Literal['retrieval','execution','discovery','manager']
+ToolClass = Literal['retrieval','execution','discovery','manager','agent']
 
 class BaseToolArtifact(TypedDict):
     process_time:int
@@ -156,8 +156,8 @@ class BaseToolArtifact(TypedDict):
     hashes:list[str]
 
 class ToolMetadata(TypedDict):
-    tool_class:ToolClass
-    sub_class:str
+    toolClass:ToolClass
+    subclass:str
 
 class SessionState(TypedDict):
     id:str
@@ -296,6 +296,7 @@ class ThreadMetrics:
                     self.total_tokens+= m.usage_metadata.get("total_tokens",0)
             elif isinstance(m,ToolMessage):
                 self.tool_call_count+=1
+                metadata:ToolMetadata = m.additional_kwargs.get('__tool_metadata__',{})
             elif isinstance(m,SessionMessage):
                 self.session_count +=1
                 self.session_message_count += m.additional_kwargs.get('message_count',0)
@@ -571,9 +572,9 @@ def MessageTrimmerFactory(agentModel:AgentModel,llmModel:LLMProfileModel,summary
                     metadata:ToolMetadata = m.additional_kwargs.get('__tool_metadata__',{})
                     if metadata.get('tool_class') in _tool_class_to_keep_as_is_:
                         tool_message.append((i,m))
-                    else:
-                        if agentModel.trimmer.keep_referenced_tools:
-                            tools_to_keep[m.tool_call_id] = (i,m)
+                    elif agentModel.trimmer.keep_referenced_tools:
+                        tools_to_keep[m.tool_call_id] = (i,m)
+                    
                 count+=1
                 if isinstance(m,AIMessage):
                     if m.usage_metadata:
@@ -604,7 +605,6 @@ def MessageTrimmerFactory(agentModel:AgentModel,llmModel:LLMProfileModel,summary
             request = request.override(messages=injected_messages)
             return await handler(request)
             
-
         return trimmer
     
     if summary_model == None:

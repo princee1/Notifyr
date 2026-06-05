@@ -3,6 +3,7 @@ from fastapi import Body, Depends, Request, Response,status
 from fastapi.responses import StreamingResponse
 from pydantic import ConfigDict
 from app.classes.auth_permission import AuthPermission, Role
+from app.classes.embeddings import EmbeddingModel, EmbeddingWrapper
 from app.container import InjectInMethod
 from app.decorators.guards import LLMProviderGuard
 from app.decorators.handlers import AgenticHandler, LLMHandler, AsyncIOHandler, CostHandler, GrpcHandler, MotorErrorHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler
@@ -13,15 +14,18 @@ from app.definition._cost import DataCost
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles, LockService
 from app.definition._service import MiniStateProtocol, StateProtocol
 from app.depends.funcs_dep import get_profile
+from app.errors.agent_error import AgentToolDoesNotExistError, SemanticAgentAlreadyExistError
 from app.manager.broker_manager import Broker
-from app.depends.dependencies import get_auth_permission
+from app.depends.dependencies import get_auth_permission, get_request_id
 from app.manager.merchant_manager import Merchant
 from app.models.odm.agents_model import AgentModel
+from app.models.tools_model import ToolModel
+from app.models.vector_model import QdrantEmbedRequestModel
 from app.services  import MongooseService
 from app.services.agent.llm_service import LLMService
 from app.services.agent.remote_agent_service import RemoteAgentMiniService
 from app.services.custom_service import CustomService
-from app.utils.constant import CostConstant, LLMProviderConstant
+from app.utils.constant import AgenticConstant, CostConstant, LLMProviderConstant
 from app.utils.helper import subset_model
 from app.services  import RemoteAgentService
 from app.models.odm.llm_model import LLMProfileModel
@@ -59,6 +63,24 @@ class AgentsRessource(BaseHTTPRessource):
         self.customService = customService
         self.provider_guard = LLMProviderGuard()
     
+    async def semantic_lookup(self, request_id:str, issuer:str, agentModel:AgentModel):
+        embedBody = QdrantEmbedRequestModel(query=agentModel.description,request_id=request_id,issuer=issuer)
+        embedding = await self.remoteAgentService.request('POST',AgenticConstant.VECTOR_ROUTER('/embed/'),json=embedBody.model_dump())
+
+        embedding:EmbeddingModel = EmbeddingModel(vector_id=agentModel.id,**embedding)
+        wrapper = EmbeddingWrapper(embedding,)
+        for agent in await self.mongooseService.find_all(AgentModel):
+            if (coef:=EmbeddingWrapper.cosine(wrapper,EmbeddingWrapper(agentModel.embeddings)))>=wrapper.threshold:
+                raise SemanticAgentAlreadyExistError(agentModel.id,agent.id,coef)
+
+        return embedding
+
+    async def lookup_tools(self,agentModel:AgentModel):
+        tools = [t.id for t in await self.mongooseService.find_all(ToolModel)]
+        diff = set(agentModel.tools).difference(tools)
+        if len(diff) > 0:
+            raise AgentToolDoesNotExistError(agentModel.id,diff)
+    
     @UsePermission(AdminPermission) 
     @Throttle(normal=(200,80))
     @UsePipe(MerchantPipe())
@@ -70,16 +92,18 @@ class AgentsRessource(BaseHTTPRessource):
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
     async def create_agent(self,agentModel:AgentModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],profile:str=Depends(get_agent), authPermission:AuthPermission=Depends(get_auth_permission)):
-        
         await self.mongooseService.primary_key_constraint(agentModel,True)
         await self.mongooseService.exists_unique(agentModel,True)
-        
+        # TODO check cross needed agent
+        await self.lookup_tools(agentModel)
+        embedding = await self.semantic_lookup(cost.request_id,cost.issuer,agentModel)
+        agentModel.embeddings = embedding
+
         merchant.safe_payment(
             None,
             None,
             agentModel.save
         )
-
         broker.propagate(StateProtocol(name=RemoteAgentService,to_build=True,to_destroy=True))
         return agentModel
 
@@ -89,7 +113,7 @@ class AgentsRessource(BaseHTTPRessource):
     @LockService(LLMService,lockType='reader',as_manager=False)
     @BaseHTTPRessource.HTTPRoute('/{agent}/',methods=[HTTPMethod.GET])
     async def read_agent(self,agent:str,request:Request,response:Response,profile:str=Depends(get_agent),authPermission:AuthPermission=Depends(get_auth_permission)):
-        return  await self.mongooseService.get(AgentModel,agent,True)
+        agent = await self.mongooseService.get(AgentModel,agent,True)
          
     @UsePipe(MerchantPipe(-1))
     @Throttle(normal=(200,80))
@@ -117,7 +141,7 @@ class AgentsRessource(BaseHTTPRessource):
     @UsePipe(DocumentFriendlyPipe,before=False)
     @LockService(LLMService,lockType='reader',as_manager=False)
     @BaseHTTPRessource.HTTPRoute('/{agent}/',methods=[HTTPMethod.PUT])
-    async def update_agent(self,agent:str,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],body: dict = Body(...),profile:str=Depends(get_agent),authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def update_agent(self,agent:str,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],body: dict = Body(...),request_id:str=Depends(get_request_id),profile:str=Depends(get_agent),authPermission:AuthPermission=Depends(get_auth_permission)):
         
         agentModel = await self.mongooseService.get(AgentModel,agent,True)
         agentUpdateModel = self.UpdateAgentModel.model_validate(body)
@@ -127,8 +151,15 @@ class AgentsRessource(BaseHTTPRessource):
         
         await self.mongooseService.primary_key_constraint(agentModel,True)
         await self.mongooseService.exists_unique(agentModel,True)
-        await agentModel.update_meta()
 
+        if 'description' in body:
+            embedding = await self.semantic_lookup(request_id,authPermission['client_id'] , agentModel)
+            agentModel.embeddings = embedding
+        
+        if 'tools' in body:
+            await self.lookup_tools(agentModel)
+
+        await agentModel.update_meta()
         broker.propagate(MiniStateProtocol(name=RemoteAgentService,to_build=True,to_destroy=True,id=agent))
         return agentModel
 

@@ -210,26 +210,6 @@ class CrawlingComparableURL(ComparableURL):
 
 			return params and query
 
-class ComparableEmbeddings:
-	def __init__(self,embedding:EmbeddingWrapper|None, mode:Literal['filter','compare'],filter_mode:SliceMode='include'):
-		self.mode = mode
-		self.filter_mode = filter_mode
-		self.embedding = embedding
-		self.filtered:set[str] = set()
-
-	def __eq__(self,other:dict):
-		target_embedding = EmbeddingWrapper(other)
-		is_similar = (self == target_embedding)
-		
-		if self.mode == 'filter':
-			if is_similar == (self.filter_mode == 'include'):
-				self.filtered.add(target_embedding.vector_id)
-			if (not is_similar) == (self.filter_mode == 'exclude'):
-				self.filtered.add(target_embedding.vector_id)
-			return True
-		else:
-			return is_similar
-
 class WebCrawlingUriMetadata(UriMetadata):
 	description: Optional[str] = None
 	pdf_size: Optional[int] = None

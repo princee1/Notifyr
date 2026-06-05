@@ -2,7 +2,7 @@ from typing import Annotated, List
 from fastapi import Depends, File, HTTPException, Request, Response, UploadFile,status
 from validators.uri import uri
 from app.classes.auth_permission import AuthPermission, Role
-from app.classes.embeddings import EmbeddingWrapper, EmbeddingModel
+from app.classes.embeddings import ComparableEmbeddings, EmbeddingWrapper, EmbeddingModel
 from app.container import Get, InjectInMethod
 from app.cost.ingest_cost import DeleteDocumentIngestCost, FileIngestCost, CrawlMarkdownIngestCost, ResearchMarkdownIngestCost
 from app.decorators.guards import ArqDataTaskGuard, DataIngestDatabaseGuard, UploadFilesGuard
@@ -29,7 +29,7 @@ from app.services.vault_service import VaultService
 from app.decorators.permissions import JWTRouteHTTPPermission, ProfilePermission
 from app.definition._ressource import UseLimiter
 from app.services.worker.arq_service import ArqIngestTaskService, JobAlreadyExistsError, JobInProgressError,JobStatus, UnexpectedJobStatusError
-from app.models.ingest_model import AbortedJobResponse,ComparableEmbeddings,CrawlingComparableURL,DeleteIngestUriMetadata,ResearchDataIngestModel,ResearchIngestDataResponse
+from app.models.ingest_model import AbortedJobResponse,CrawlingComparableURL,DeleteIngestUriMetadata,ResearchDataIngestModel,ResearchIngestDataResponse
 from app.models.ingest_model import ResearchIngestUriMetadata,WebCrawlingIngestDataResponse,WebCrawlingUriMetadata,WebCrawlingDataIngestModel,FileIngestUriMetadata,FileUploadIngestEnqueueResponse,FileUploadDataIngestModel
 from app.models.file_model import  FileResponseUploadModel, UploadError
 from app.data_ingest_tasks import DATA_TASK_REGISTRY_NAME
