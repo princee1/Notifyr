@@ -71,30 +71,42 @@ class InterruptOnConfig(BaseModel):
     description:Optional[str] = Field(min_length=10,max_length=30)
     allowed_decisions:List[Literal['approve','reject','reject','respond']]
 
-class CallLimitConfig(BaseModel):
-    thread:Optional[int] = Field(default=None,ge=1,)
-    run:Optional[int] = Field(default=None,ge=1)
+class ToolCallGuardConfig(BaseModel):
+    thread_limit:Optional[int] = Field(default=None,ge=1,)
+    run_limit:Optional[int] = Field(default=None,ge=3)
+    max_retries:Optional[int] = Field(default=None,ge=2,le=10)
+    max_delay:Optional[int] = Field(default=None,ge=60,le=280)
 
-    @property
-    def as_is(self):
-        if self.thread == None and self.run == None:
+    _limit:bool = PrivateAttr(default=True) 
+    _retry:bool = PrivateAttr(default=True) 
+
+    @model_validator(mode='after')
+    def validate_limit(self):
+        if self.thread_limit == None and self.run_limit == None:
+            self._limit=False
+        
+        if self.max_retries == None:
+            self._retry = False
+        
+        if self.max_delay==None:
+            self._retry = False
+
+        if not self._limit and not self._retry:
             return None
+                        
         return self
+
 class ToolModel(BaseDocument):
     alias:str = Field(min_length=10,max_length=30)
     description:str = Field(min_length=10,max_length=150)
     condition: Optional[ContextCondition] = None
-    limit:Optional[CallLimitConfig] = None
+    callGuard:Optional[ToolCallGuardConfig] = None
     policies: List[str] = Field(default_factory=list,description='For interrupts permission in tools')
     interrupt_on: Optional[Union[bool,InterruptOnConfig]] = Field(default=None,description='For humain in the loop')
 
     embeddings:Optional[EmbeddingModel] = None
     
     _collection: ClassVar[str] = MongooseDBConstant.TOOL_COLLECTION
-
-    @field_validator('limit',mode='after')
-    def validate_limit(cls,v:CallLimitConfig):
-        return v.as_is
 
     class Settings:
         is_root=True

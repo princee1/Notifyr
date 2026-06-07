@@ -4,8 +4,8 @@ from pydantic import BaseModel, Field
 from app.models.odm.agents_model import AgentModel, StoreMemoryPolicy
 from app.models.tools_model import ContextCondition, ToolModel
 from langchain.messages import SystemMessage, HumanMessage,ToolMessage
-from langchain.agents.middleware import ToolCallLimitMiddleware, wrap_tool_call,ModelRequest, ModelResponse
-from typing import Callable, Literal, Optional, Set, Type, TypedDict
+from langchain.agents.middleware import ToolCallLimitMiddleware, ToolRetryMiddleware, wrap_tool_call,ModelRequest, ModelResponse
+from typing import Callable, Dict, Literal, Optional, Set, Type, TypedDict
 from app.definition._error import BaseError
 from app.definition._agent import NotifyrContext,NotifyrAgentState,ToolClass,ToolMetadata,BaseToolArtifact
 from langchain.tools import BaseTool, ToolRuntime as BaseToolRuntime
@@ -21,18 +21,63 @@ from langgraph.store.base import BaseStore
 #########################################################################################################
 ############################                                          ###################################
 #########################################################################################################
+class ToolError(BaseError):
+    subclass:str ='Tool'
+
+class RetryToolError(ToolError):
+    subclass:str ='Retry'
+
+class SkipToolError(ToolError):
+    subclass:str ='Skip'
+    
+class UnexpectedToolError(ToolError):
+    subclass:str ='Unexpected'
+    
+
+#########################################################################################################
+############################                                          ###################################
+#########################################################################################################
+
+ToolStatus = Literal['success','error']
 
 ToolRuntime=BaseToolRuntime[NotifyrContext,NotifyrAgentState]
 
-class ArtifactTimer:
+class ToolResultContextFactory:
 
-    def __init__(self):
+    def __init__(self,marked:int = 5,deleted:bool = None):
+        """
+        deleted: None: dont add the __deleted__
+                 False: only when theres an error
+                 True: immediately
+        """
         self.start_time = 0
         self.end_time = 0
+        self.marked = marked
+        self.deleted = deleted
+        self.status:ToolStatus = 'error' 
+        self.deleted_status = None
+        self.error = None
     
     @property
     def delta(self):
         return self.end_time - self.start_time
+    
+    def as_artifact(self,other:dict|None=None):
+        return {'process_time':self.delta}
+
+    def as_option(self):
+        option = {'__marked__':self.marked,}
+        if self.deleted == None:
+            return option
+        
+        if self.deleted:
+            option['__deleted__'] = True
+        
+        if self.status == 'error':
+            option['__deleted__'] = True
+        
+        return option
+
 
     async def __aenter__(self):
         self.start_time = time()
@@ -40,6 +85,13 @@ class ArtifactTimer:
     
     async def __aexit__(self, exc_type, exc, tb):
         self.end_time = time()
+
+        if exc_type is None:
+            self.marked = 1
+            self.status = 'success'
+            return True
+
+
         return False
 
 
@@ -73,18 +125,23 @@ class Tool:
         return self.config.id
 
     @classmethod
-    def to_metadata(cls,tool:ToolClass,subclass:str)->ToolMetadata:
-        return ToolMetadata(toolClass=tool,subclass=subclass)
+    def to_metadata(cls,tool:ToolClass,subclass:str)->Dict[Literal['__tool_metadata__'],ToolMetadata]:
+        return {'__tool_metadata__':ToolMetadata(toolClass=tool,subclass=subclass)}
         
     def to_condition(self):
         return [self.Condition,self.config.condition]
 
     def to_limit(self)->None | ToolCallLimitMiddleware:
-        if self.config.limit == None:
+        if self.config.callGuard == None:
             return None
+        
+        if self.config.callGuard._limit:
+            return None
+        
         return ToolCallLimitMiddleware(tool_name=self.name,
-                                       thread_limit=self.config.limit.thread,
-                                       run_limit=self.config.limit.run)
+                                       thread_limit=self.config.callGuard.thread_limit,
+                                       run_limit=self.config.callGuard.run_limit,
+                                       )
 
     def to_hitl(self):
         if self.config.interrupt_on == None:
@@ -92,6 +149,21 @@ class Tool:
         if isinstance(self.config.interrupt_on,bool):
             return {self.name:self.config.interrupt_on} 
         return {self.name:self.config.interrupt_on.model_dump()}
+
+    def to_retry(self)->None | ToolRetryMiddleware:
+        if self.config.callGuard == None:
+            return None
+
+        if self.config.callGuard._retry:
+            return None
+        
+        return  ToolRetryMiddleware(
+            on_failure='error',
+            retry_on=(RetryToolError,),
+            tools=[self.name],
+            max_delay=self.config.callGuard.max_delay,
+            max_retries=self.config.callGuard.max_retries
+        )
     
     async def read_store(self,namespace:tuple[str,...],key:str,_store_:BaseStore=None):
         ...
@@ -139,8 +211,17 @@ class DiscoveryTool(Tool):
 async def handle_tool_errors(request:ModelRequest[NotifyrContext],handler:Callable[[ModelRequest[NotifyrContext]], ModelResponse]):
     try:
         return await handler(request)
-    except:
-        return ToolMessage()
+    except RetryToolError as e:
+        ...
+    except SkipToolError as e:
+        ...
+    except UnexpectedToolError as e:
+        ...
+    
+    add_kwargs = {'__marked__':3,}
+
+    mess = ToolMessage()
+    
 
 @wrap_tool_call
 async def dynamic_tool_selection(request: ModelRequest[NotifyrContext],handler: Callable[[ModelRequest[NotifyrContext]], ModelResponse]) -> ModelResponse:

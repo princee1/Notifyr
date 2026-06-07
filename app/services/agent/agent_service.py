@@ -3,7 +3,7 @@ import functools
 from typing import Any, Callable, Dict, List, NamedTuple, Self,Any, get_args
 from pydantic import ValidationError
 from app.classes.secrets import ChaCha20SecretsWrapper
-from app.definition._agent import AgentContextDoesNotExistError, AgentInputFormatNotSupportedError, AgentMessageLimitExceededError, AgentNotAvailableError, AgentSessionAlreadyEndedError, ChatModelFactory, DynamicSystemPromptFactory, MessageLimitFactory, MessageTrimmerFactory, DynamicChatModelFactory, NotifyrAgentState, NotifyrContext, SemanticInterruptParserFactory, SessionInjectionFactory, Thread, ThrottleFactory, dynamic_system_prompt, filter_non_relevant_message, guard_session_ends, handle_agent, inject_ai_turn
+from app.definition._agent import *
 from app.classes.cost_definition import InsufficientCreditsError, InvalidPurchaseRequestError
 from app.classes.prompt import PromptToken
 from app.definition import _service
@@ -159,6 +159,7 @@ class AgentMiniService(BaseMiniService):
     def _init_tools(self,hitl_config:dict,tool_limit:list)->List[BaseTool]:
         tools = []
         mcp_tools = []
+        rag_tools = []
         for config in self.toolModels:
 
             if isinstance(config,VectorToolModel):
@@ -190,6 +191,9 @@ class AgentMiniService(BaseMiniService):
             if (limit:=tool.to_limit())!= None:
                 tool_limit.append(limit)
             
+            if (retry:=tool.to_retry())!=None:
+                tool_limit.append(retry)
+            
             tool = tool_factory(tool.name,tool,infer_schema=False,
                                 description=tool.description,
                                 return_direct=tool.return_direct,
@@ -200,29 +204,43 @@ class AgentMiniService(BaseMiniService):
         
         return tools
 
-    def _init_middleware(self,interrupt_on,tool_limits:list[ToolCallLimitMiddleware])->list[Callable|type]:
+    def _init_middleware(self,interrupt_on,tool_limits:list[ToolCallLimitMiddleware[NotifyrAgentState,NotifyrContext]])->list[Callable|type]:
         middleware = []
         dynamic_middlewares = []
-        dynamic_system_prompt = DynamicSystemPromptFactory(...,...)
-
-        if self.agent_model.callLimit!= None:
-            middleware.append(ModelCallLimitMiddleware(exit_behavior='error',**self.agent_model.callLimit.model_dump()))
+        
+        thread_guard = ThreadGuardFactory(self.agent_model)
+        middleware.append(thread_guard)  # before agent
 
         middleware.append(guard_session_ends)  # before model
+
+        if self.agent_model.callGuard != None:
+            if self.agent_model.callGuard._limit:
+                middleware.append(ModelCallLimitMiddleware( # before model
+                    exit_behavior='error',
+                    **self.agent_model.callGuard.model_dump(include=ModelCallGuardConfig.limit_keys,)),
+                    )
+            if self.agent_model.callGuard._retry:
+                middleware.append(ModelRetryMiddleware( # wrap model
+                    on_failure='error',
+                    **self.agent_model.callGuard.model_dump(include=ModelCallGuardConfig.retry_keys,)),
+                    )
         
+        if self.agent_model.messageLimit != None:
+            message_limiter = MessageLimitFactory(self.agent_model) #before model
+            middleware.append(message_limiter)
+
+        dynamic_system_prompt = DynamicSystemPromptFactory(...,...)
         middleware.append(dynamic_system_prompt) #wrap model
         middleware.append(handle_agent) #wrap model
         
         middleware.append(dynamic_tool_selection) #wrap tool call
         middleware.extend(tool_limits) #after model
+
         # TODO add the LLMToolsSelector and Todo Middleware
+
         if interrupt_on:
             middleware.append(HumanInTheLoopMiddleware(interrupt_on=interrupt_on)) #after model
-        
-        if self.agent_model.messageLimit != None:
-            message_limiter = MessageLimitFactory(self.agent_model) #before model
-            middleware.append(message_limiter)
-        
+                
         if self.agent_model.throttle:
             throttle = ThrottleFactory() # wrap model
             middleware.append(throttle)
@@ -235,16 +253,17 @@ class AgentMiniService(BaseMiniService):
         summaryInjector = SessionInjectionFactory(self.agent_model,self.depService.model)
         trimmer_middleware = MessageTrimmerFactory(self.agent_model,self.depService.model,purposed_models.summary)
         interrupt_middleware = SemanticInterruptParserFactory(self.agent_model,purposed_models.interrupt,self)
+        marker_middleware = MarkerFactory(self.agent_model)
         
         middleware.append(interrupt_middleware) # before agent
+        middleware.append(marker_middleware) # before model
         middleware.append(trimmer_middleware) # summary: before model / trim: wrap model
         
         middleware.append(filter_non_relevant_message) #wrap model
         middleware.append(summaryInjector) #wrap model
-        # NOTE if too many ToolMessage still, i will remove them using the ClearToolEdit
         
         middleware.extend(dynamic_middlewares) # wrap model
-        middleware.append(inject_ai_turn) #after agent
+        middleware.append(inject_ai_turn) # after agent
 
         self.chat_model = purposed_models.basic
         return reversed(middleware)
@@ -389,7 +408,13 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
             except AgentSessionAlreadyEndedError as e:
                 context.abort(...,...)
             
+            except AgentThreadBlockedError as e:
+                context.abord(...,...)
+            
             except ModelCallLimitExceededError as e:
+                context.abort(...,...)
+            
+            except AgentModelRetryExceedError as e:
                 context.abort(...,...)
 
             except MiniServiceDoesNotExistsError as e:

@@ -1,15 +1,14 @@
-from typing import Any, ClassVar, List, Literal, Optional, Self, Tuple
+import math
+from typing import Any, ClassVar, Dict, List, Literal, Optional, Self, Tuple
 
-from pydantic import BaseModel, Field, field_validator, model_validator
-from app.classes.conversation import Channel
+from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
+from app.classes.conversation import Auth, Channel
 from app.classes.embeddings import EmbeddingModel
 from app.classes.profiles import BaseProfileModel,BaseDocument
 from app.classes.prompt import System
 from app.utils.constant import MongooseDBConstant
 from enum import Enum
 from app.utils.helper import subset_model
-
-from app.models.tools_model import ToolModels
 
 class GraphitiSearchConfig(str, Enum):
     PERSONALIZED_MEMORY = "personalized_memory"
@@ -65,7 +64,6 @@ class TrimmerStrategy(BaseModel):
     tokens_trigger: int = Field(MIN_OF_MAX_INPUT_TOKEN*0.80,ge=MIN_OF_MAX_INPUT_TOKEN*.60)
     keep_referenced_tools:Optional[bool] = Field(default=False,description='Whether we should add ToolMessage that are depend on by later AIMessage')
 
-
 class DynamicModelSelectionConfig(BaseModel):
     mode:Literal['optimization','fallback','both'] = 'both'
     baseChatIndex:Optional[int] = None
@@ -80,27 +78,78 @@ class DynamicModelSelectionConfig(BaseModel):
             return 1
         return -1
 
-class ModelCallLimitConfig(BaseModel):
+class ModelCallGuardConfig(BaseModel):
     thread_limit:Optional[int] = Field(default=None,ge=100)
     run_limit:Optional[int] = Field(default=None,ge=5)
+    max_retries=Optional[int] = Field(default=None,ge=2,le=10)
+    max_delay:Optional[int] = Field(default=None,ge=60,le=280)
+
+    _limit:bool = PrivateAttr(default=True)
+    _retry:bool = PrivateAttr(default=True)
+
+    limit_keys:ClassVar[tuple[str,...]] = ('thread_limit','run_limit')
+    retry_keys:ClassVar[tuple[str,...]] = ('max_retries','max_delay')
+
 
     @model_validator(mode='after')
     def validate_limit(self):
         if self.thread_limit == None and self.run_limit == None:
+            self._limit=False
+
+        if self.max_retries == None and self.max_delay == None:
+            self._retry = False
+
+        if not self._limit and not self._retry:
             return None
         
         return self
 
+
+def LimitConfigFactory(factor:int):
+    class LimitConfig(BaseModel):
+        
+        guest:Optional[int] = Field(None,ge=1*factor,le=10*factor)
+        subscribed:Optional[int] = Field(None,ge=10*factor,le=50*factor)
+        registered:Optional[int] = Field(None,ge=30*factor,le=60*factor)
+
+    return LimitConfig
+
+
+class ThreadMessageLimitConfig(LimitConfigFactory(5)):
+    """ """
+class SessionMessageLimitConfig(LimitConfigFactory(2)):
+    """ """
+class SessionCountLimitConfig(LimitConfigFactory(1)):
+    """ """
+
 class MessageLimitConfig(BaseModel):
-    guest:Optional[int] = Field(None,ge=10,le=100)
-    subscribed:Optional[int] = Field(None,ge=100,le=500)
-    registered:Optional[int] = Field(None,ge=300,le=600)
+    thread:ThreadMessageLimitConfig = ThreadMessageLimitConfig()
+    session:SessionMessageLimitConfig = SessionMessageLimitConfig()
+    sessionCount:SessionCountLimitConfig = SessionCountLimitConfig()
 
 
+class MessageMarkerLimitConfig(BaseModel):
+    ai:float|int = Field(default=math.inf,allow_inf_nan=True,ge=100)
+    human:int|float = Field(default=math.inf,allow_inf_nan=True,ge=100)
+
+class AuthMarkerFactorConfig(BaseModel):
+    guest:int = Field(default=1,ge=1,le=10)
+    subscribed:int =Field(default=1,ge=1,le=7)
+    registered:int = Field(default=1,ge=1,le=5)
+
+class ToolMarkerLimitConfig(BaseModel):
+    execution:int = Field(default=40,ge=40,allow_inf_nan=True)
+    error:int = Field(default=30,ge=30,allow_inf_nan=True)
+    manager:int = Field(default=20,ge=20,allow_inf_nan=True)
+    
+class MarkerConfig(BaseModel):
+    tool:ToolMarkerLimitConfig = Field(default_factory=ToolMarkerLimitConfig)
+    message:MessageMarkerLimitConfig = Field(default_factory=MessageMarkerLimitConfig)
+    factor:AuthMarkerFactorConfig = Field(default_factory=AuthMarkerFactorConfig)
+    
 #########################################################################################################
 ############################                                          ###################################
 #########################################################################################################
-
 
 
 class AgentModel(BaseDocument):
@@ -109,7 +158,7 @@ class AgentModel(BaseDocument):
     model: str | List[str] = Field(default_factory=list)
     tools: List[str] = Field(default_factory=list)
     type:Literal['main-agent','sub-agent'] = Field(default='main-agent')
-    rag:Literal['agentic','linear','hybrid'] = Field(default='agentic')
+    rag:Literal['agentic','linear','hybrid','auto'] = Field(default='agentic')
     provider: str = Field(description='The service id of the LLM Provider')
 
     interruptChannel:List[Channel] = Field(default_factory=list)
@@ -117,18 +166,20 @@ class AgentModel(BaseDocument):
 
     storeModel:Optional[str] = None
     memoryModel:Optional[str] = None
+
     throttle:bool = Field(default=False)
-    avatar: AvatarConfig = AvatarConfig()
-    generation:GenerationConfig = GenerationConfig()
-    profile: ChatProfileConfig = ChatProfileConfig()
+    avatar: AvatarConfig = Field(default_factory=AvatarConfig)
+    generation:GenerationConfig = Field(default_factory=GenerationConfig)
+    profile: ChatProfileConfig = Field(default_factory=ChatProfileConfig)
+    marker: MarkerConfig = Field(default_factory=MarkerConfig)
 
-    limiter : Optional[RateLimiterConfig] = RateLimiterConfig()
-    callLimit: Optional[ModelCallLimitConfig] = ModelCallLimitConfig()
-    messageLimit: Optional[MessageLimitConfig] = MessageLimitConfig()
-    dynamicModel:Optional[DynamicModelSelectionConfig] = DynamicModelSelectionConfig()
-    trimmer:Optional[TrimmerStrategy] = TrimmerStrategy()
+    limiter : Optional[RateLimiterConfig] = Field(default_factory=RateLimiterConfig)
+    callGuard: Optional[ModelCallGuardConfig] = Field(default_factory=ModelCallGuardConfig)
+    messageLimit: Optional[MessageLimitConfig] = Field(default_factory=MessageLimitConfig)
+    dynamicModel:Optional[DynamicModelSelectionConfig] = Field(default_factory=DynamicModelSelectionConfig)
+    trimmer:Optional[TrimmerStrategy] = Field(default_factory=TrimmerStrategy)
+    
     storePolicy: Optional[StoreMemoryPolicy] = None
-
     embeddings:Optional[EmbeddingModel] = None
 
     _collection:ClassVar[str] = MongooseDBConstant.AGENT_COLLECTION

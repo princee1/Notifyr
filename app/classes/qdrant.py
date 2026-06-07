@@ -140,4 +140,6 @@ LITERAL_FIELDS = {'extension','language','document_type','density'}
 LIST_FIELDS = {'keywords', 'topics'}
 
 class QdrantCollectionDoesNotExistError(BaseError):
-    ...
+    def __init__(self, collection_name):
+        super().__init__()
+        self.collection_name = collection_name

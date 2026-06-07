@@ -10,7 +10,7 @@ from app.decorators.handlers import CustomSchemaHandler, GatewayHandler, LLMHand
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.pipes import  DataClassToDictPipe, GraphRelationshipPipe, MerchantPipe, MiniServiceInjectorPipe, QueryToModelPipe, update_status_upon_no_metadata_pipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, LockService
-from app.depends.class_dep import FileDataIngestQuery
+from app.depends.class_dep import EmbeddingSimilarity, FileDataIngestQuery
 from app.depends.dependencies import get_auth_permission, get_request_id
 from app.depends.funcs_dep import get_profile
 from app.manager.broker_manager import Broker
@@ -230,7 +230,7 @@ class DataIngestRessource(BaseHTTPRessource):
     @PingService([RemoteAgentService,RedisService,{'cls':LLMService,'kwargs':VerifyLLMConfig(crawl=True)}])
     @LockService(RemoteAgentService,RedisService,ArqIngestTaskService,CustomService,LLMService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/web/',methods=[HTTPMethod.POST],response_model=WebCrawlingUriMetadata,mount=False)
-    async def ingest_web_crawling(self,request:Request,response:Response,ingestTask:WebCrawlingDataIngestModel, broker:Annotated[Broker,Depends(Broker)],cost:Annotated[CrawlMarkdownIngestCost,Depends(CrawlMarkdownIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],mode:DeleteMode = Depends(delete_mode_query),request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission)):
+    async def ingest_web_crawling(self,request:Request,response:Response,ingestTask:WebCrawlingDataIngestModel, broker:Annotated[Broker,Depends(Broker)],cost:Annotated[CrawlMarkdownIngestCost,Depends(CrawlMarkdownIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],similarity:Annotated[EmbeddingSimilarity,Depends(EmbeddingSimilarity)],request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission)):
         """
         Web crawl the web and extract meaningful information
         """
@@ -249,9 +249,9 @@ class DataIngestRessource(BaseHTTPRessource):
         embedding:dict = await self.remoteAgentService.request('POST',AgenticConstant.VECTOR_ROUTER('/embed/'),json=embedBody.model_dump())
         embedding['vector_id'] = uri
 
-        subject_embedding = EmbeddingWrapper(embedding)
+        subject_embedding = EmbeddingWrapper(embedding,threshold=similarity.threshold)
 
-        if mode == 'soft':
+        if similarity.mode == 'soft':
             comparable_urls = CrawlingComparableURL(ingestTask=ingestTask)
             comparable_embeddings = ComparableEmbeddings(subject_embedding,'filter','include')
             await self.arqService.search(ArqDataTaskConstant.CRAWL_DATA_TASK,{'subject':comparable_embeddings},None,'match')
@@ -294,7 +294,7 @@ class DataIngestRessource(BaseHTTPRessource):
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.RESEARCH_DATA_TASK),crawl4ai_guard,DataIngestDatabaseGuard(False))
     @PingService([RemoteAgentService,ArqIngestTaskService,RedisService,{'cls':LLMService,'kwargs':VerifyLLMConfig(research=True)}])
     @BaseHTTPRessource.HTTPRoute('/research/',methods=[HTTPMethod.POST],response_model=ResearchIngestDataResponse,mount=False)
-    async def ingest_research(self,request:Request,response:Response,ingestTask:ResearchDataIngestModel, broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[ResearchMarkdownIngestCost,Depends(ResearchMarkdownIngestCost)],mode:DeleteMode = Depends(delete_mode_query), request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def ingest_research(self,request:Request,response:Response,ingestTask:ResearchDataIngestModel, broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[ResearchMarkdownIngestCost,Depends(ResearchMarkdownIngestCost)],similarity:Annotated[EmbeddingSimilarity,Depends(EmbeddingSimilarity)], request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
         """
         Engage a broad research by fetching url concept and crawling those pages
         """
@@ -306,8 +306,8 @@ class DataIngestRessource(BaseHTTPRessource):
         embedding:dict = await self.remoteAgentService.request('POST',AgenticConstant.VECTOR_ROUTER('/embed/'),json=embedBody.model_dump())
         embedding['vector_id'] = uri
 
-        query_embedding = EmbeddingWrapper(embedding)
-        if mode == 'soft':
+        query_embedding = EmbeddingWrapper(embedding,threshold=similarity.threshold)
+        if similarity.mode == 'soft':
             comparable_embeddings = ComparableEmbeddings(query_embedding,'filter','include')
             await self.arqService.search(ArqDataTaskConstant.RESEARCH_DATA_TASK,{'query':comparable_embeddings},True,'single')
 

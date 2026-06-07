@@ -179,8 +179,6 @@ def PERSONALIZED_PROMPT(
 - Only ask when relevant to the current interaction.
 """)
 
-    
-
     if memory != None: 
         sections.append("## MEMORY MANAGEMENT")
         sections.append(MEMORY_RULES.strip())

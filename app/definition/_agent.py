@@ -26,6 +26,7 @@ from langchain.agents.middleware import ModelFallbackMiddleware, Runtime, after_
 from langchain.agents.middleware.model_call_limit import ModelCallLimitExceededError
 from langchain.agents.middleware import SummarizationMiddleware as BaseSummarizationMiddleware
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
+from langchain.agents.middleware import ModelRetryMiddleware as BaseModelRetryMiddleware
 
 BASE_MODEL_PROFILE = {
     'image_outputs':False,
@@ -112,7 +113,7 @@ class AgentSetDynamicModelOutOfRange(BaseError):
 
 class AgentMessageLimitExceededError(BaseError):
 
-    def __init__(self, thread_id:str,checkpoint_ns:str,session_id:str,agent:str,limit:str,auth:str):
+    def __init__(self,mode:Literal['thread','session','session_count'],thread_id:str,checkpoint_ns:str,session_id:str,agent:str,limit:str,auth:str):
         super().__init__(thread_id,session_id,agent,limit)
         self.thread_id = thread_id
         self.session_id = session_id
@@ -120,7 +121,8 @@ class AgentMessageLimitExceededError(BaseError):
         self.agent = agent 
         self.limit = limit
         self.auth = auth
-
+        self.mode = mode
+    
 class AgentSessionAlreadyEndedError(BaseError):
     def __init__(self,session_id:str,execution_info:ExecutionInfo):
         super().__init__()
@@ -128,6 +130,18 @@ class AgentSessionAlreadyEndedError(BaseError):
         self.session_id = session_id
         self.thread_id = execution_info.thread_id
         self.checkpoint_ns = execution_info.checkpoint_ns
+
+class AgentThreadBlockedError(BaseError):
+    def __init__(self,execution_info:ExecutionInfo):
+        super().__init__()
+        self.thread_id = execution_info.thread_id
+        self.checkpoint_ns = execution_info.checkpoint_ns
+
+class AgentModelRetryExceedError(BaseError):
+    def __init__(self, exc:Exception,attempted:int):
+        super().__init__()
+        self.exc = exc
+        self.attempted = attempted
 
 #########################################################################################################
 ############################                                          ###################################
@@ -148,7 +162,7 @@ class NotifyrContext:
         ...
         # NOTE the user will coerce into a schema : base64 -> str -> user_model
 
-ToolClass = Literal['retrieval','execution','discovery','manager','agent']
+ToolClass = Literal['retrieval','execution','discovery','manager','agent','error']
 
 class BaseToolArtifact(TypedDict):
     process_time:int
@@ -177,6 +191,7 @@ class NotifyrAgentState(AgentState):
     guest:Optional[Dict]
     sessions: Dict[str,SessionState]
     complexity: float
+    blocked:bool
 
 @wrap_model_call
 async def do_nothing(request: ModelRequest[NotifyrContext],handler: Callable[[ModelRequest[NotifyrContext]], ModelResponse])->ModelResponse:
@@ -201,7 +216,7 @@ class SessionMessage(SystemMessage):
     
 class SummarizationMiddleware(BaseSummarizationMiddleware):
     """Summarize the tool but keep the raw ToolMessage and maybe keep the tool call"""
-    _tool_class_to_keep_as_is_:set[ToolClass] = {'execution','manager'}
+    _tool_class_to_keep_as_is_:set[ToolClass] = {'execution','manager','error'}
 
     @classmethod
     def _mark_messages(cls,
@@ -216,8 +231,9 @@ class SummarizationMiddleware(BaseSummarizationMiddleware):
 
             if isinstance(m,(ToolMessage,)):
                 metadata:ToolMetadata = m.additional_kwargs.get('__tool_metadata__',{})
-                if metadata.get('tool_class',None) in cls._tool_class_to_keep_as_is_:
+                if (toolClass:=metadata.get('tool_class',None)) in cls._tool_class_to_keep_as_is_:
                     continue
+
                 tool_message_count +=1
 
             elif isinstance(m,HumanMessage) and m.additional_kwargs.get('lc_source',None) == 'summarization':
@@ -273,6 +289,11 @@ class SummarizationMiddleware(BaseSummarizationMiddleware):
                 *new_messages,
                 *messages[cutoff_index:],
             ]}
+
+class ModelRetryMiddleware(BaseModelRetryMiddleware):
+    
+    def _handle_failure(self, exc, attempts_made):
+        raise AgentModelRetryExceedError(exc,attempts_made)
 
 #########################################################################################################
 ############################                                          ###################################
@@ -541,8 +562,7 @@ def DynamicChatModelFactory(agentModel:AgentModel,llmModel:LLMProfileModel,crede
 #########################################################################################################
 
 def MessageTrimmerFactory(agentModel:AgentModel,llmModel:LLMProfileModel,summary_model:BaseChatModel=None):
-    _tool_class_to_keep_as_is_:set[ToolClass] = {'execution','manager'}
-
+    _tool_class_to_keep_as_is_:set[ToolClass] = {'execution','manager','error'}
 
     if agentModel.trimmer == None:
         return do_nothing
@@ -560,6 +580,7 @@ def MessageTrimmerFactory(agentModel:AgentModel,llmModel:LLMProfileModel,summary
 
             tool_message = []
             tools_to_keep = {}
+            seen_tool =set()
 
             total_tokens = 0
             count = 0
@@ -568,17 +589,24 @@ def MessageTrimmerFactory(agentModel:AgentModel,llmModel:LLMProfileModel,summary
                 if m.additional_kwargs.get('__deleted__',False):
                     continue 
 
+                if isinstance(m,HumanMessage) and m.additional_kwargs('lc_source',None) == 'summarization':
+                    continue
+
                 if isinstance(m,ToolMessage):
                     metadata:ToolMetadata = m.additional_kwargs.get('__tool_metadata__',{})
-                    if metadata.get('tool_class') in _tool_class_to_keep_as_is_:
+                    if metadata.get('tool_class',None) in _tool_class_to_keep_as_is_:
+                        seen_tool.add(m.id)
                         tool_message.append((i,m))
                     elif agentModel.trimmer.keep_referenced_tools:
+                        seen_tool.add(m.id)
                         tools_to_keep[m.tool_call_id] = (i,m)
-                    
+                    else:
+                        ...
+                
+                if isinstance(m,AIMessage) and m.usage_metadata:
+                    total_tokens += m.usage_metadata.get("total_tokens",0)
+
                 count+=1
-                if isinstance(m,AIMessage):
-                    if m.usage_metadata:
-                        total_tokens += m.usage_metadata.get("total_tokens",0)
 
                 if (message_count - FIRST_KEEP_MESSAGE - count) >= agentModel.trimmer.keep_message:
                     cutoff_index = i - 2
@@ -588,6 +616,13 @@ def MessageTrimmerFactory(agentModel:AgentModel,llmModel:LLMProfileModel,summary
                     cutoff_index = i # TODO ratio based on the count and the total_token
                     break
             
+            if cutoff_index == FIRST_KEEP_MESSAGE:
+                return await handler(request)
+            
+            for m in messages[FIRST_KEEP_MESSAGE:cutoff_index]:
+                if m.id not in seen_tool:
+                    m.additional_kwargs['__deleted__'] = True
+
             if agentModel.trimmer.keep_referenced_tools:
                 for i,m in enumerate(messages[cutoff_index:],start=cutoff_index):
                     if not isinstance(m,AIMessage):
@@ -599,7 +634,7 @@ def MessageTrimmerFactory(agentModel:AgentModel,llmModel:LLMProfileModel,summary
             if agentModel.trimmer.keep_referenced_tools:
                 tool_message = sorted(tool_message,key=lambda v:v[0])
 
-            injected_messages += [ t[1] for t in  tool_message ] 
+            injected_messages += [ t[1] for t in tool_message] 
             injected_messages += state["messages"][cutoff_index:]
             
             request = request.override(messages=injected_messages)
@@ -672,36 +707,48 @@ def SemanticInterruptParserFactory(agentModel:AgentModel,model:BaseChatModel,age
 
 def MessageLimitFactory(agentModel:AgentModel):
 
-    config = agentModel.messageLimit.model_dump()
+    session_config = agentModel.messageLimit.session.model_dump()
+    thread_config = agentModel.messageLimit.thread.model_dump()
 
     @before_model(can_jump_to=['end'])
     async def message_limiter(state: NotifyrAgentState, runtime: Runtime[NotifyrContext]) -> dict[str, Any] | None:
-        count = 0
-        limit = config.get(runtime.context.auth,None)
+        s_count = 0
+        t_count = 0
+
+        thread_limit = thread_config.get(runtime.context.auth,None)
+        session_limit = session_config.get(runtime.context.auth,None)
         
-        if limit == None:
+        if thread_limit == None and session_limit == None:
             return None
         
+        execution = runtime.execution_info 
+
         for val in [*state['sessions'].values(),*state['messages']]:
             if isinstance(val,dict):
-                count+=val['count']
+                t_count+=val['count']
             elif isinstance(val,(AIMessage,HumanMessage)):
-                count+=1
+                s_count+=1
+                t_count+=1
             else:
                 continue
 
-            if count == limit -1 :
-                ai_message = AIMessage('Message limit is reached with the agent',additional_kwargs={'__ended__':True})
+            if session_limit != None and s_count == session_limit - 1:
+                ai_message = AIMessage('Message limit is reached with this session',additional_kwargs={'__ended__':True})
                 return {'messages':[ai_message],'jump_to':'end'}
+
+            if session_limit != None and s_count == session_limit:
+                raise AgentMessageLimitExceededError('session',execution.thread_id,execution.checkpoint_ns,
+                                                           runtime.context.session_id,agentModel.id,
+                                                           session_limit,runtime.context.auth)
+
+            if thread_limit != None and t_count == thread_limit - 1:
+                ai_message = AIMessage('Message limit is reached with the agent',additional_kwargs={'__ended__':True})
+                return {'messages':[ai_message],'jump_to':'end','blocked':True}
             
-            if count >= limit:
-                raise AgentMessageLimitExceededError(runtime.execution_info.thread_id,
-                                               runtime.execution_info.checkpoint_ns,
-                                               runtime.context.session_id,
-                                               agentModel.id,
-                                               limit,
-                                               runtime.context.auth,
-                                               )
+            if thread_limit != None and t_count >= thread_limit:
+                raise AgentMessageLimitExceededError('thread',execution.thread_id,execution.checkpoint_ns,
+                                                           runtime.context.session_id,agentModel.id,
+                                                           thread_limit,runtime.context.auth)
         return None
 
     return message_limiter
@@ -740,6 +787,97 @@ def ThrottleFactory():
 
 to_filter_tool_class:set[ToolClass] = {'manager'}
 
+def MarkerFactory(agentModel:AgentModel):
+
+    marker = agentModel.marker.model_dump()
+   
+    ToolMessageLimit:dict[ToolClass,int] = {'execution':35,'manager':30,'error':20} 
+    MessageLimit:dict[Literal['ai','humain'],int] = {}
+    Factor:dict[Auth,int] = {}
+
+    @before_model
+    async def marker(state: NotifyrAgentState, runtime: Runtime[NotifyrContext]):
+        auth = runtime.context.auth
+
+        for m in state['messages']:
+
+            if not isinstance(m,AIMessage,HumanMessage,ToolMessage):
+                continue
+                
+            if isinstance(m,HumanMessage) and m.additional_kwargs.get('lc_source',None) == 'summarization':
+                continue
+
+            if m.additional_kwargs.get('__deleted__',False):
+                continue
+            
+            marked:int = m.additional_kwargs.get('__marked__',0)
+
+            if marked > 1:
+                if isinstance(m,ToolMessage):
+                    metadata:ToolMetadata = m.additional_kwargs.get('__tool_metadata__',{})
+                    limit = ToolMessageLimit.get(metadata['toolClass'],math.inf)
+                elif isinstance(m,(AIMessage,HumanMessage)):
+                    limit = MessageLimit.get(m.type,math.inf)   
+                
+                marked*= Factor.get(auth,1)
+
+                if marked >= limit:
+                    m.additional_kwargs['__deleted__'] = True
+                    continue
+        
+            m.additional_kwargs['__marked__'] = m.additional_kwargs.get('__marked__',0) + 1
+
+        return None
+
+    return marker
+
+def DynamicSystemPromptFactory(memoryModel:Type[BaseModel],memory_enabled):
+    MemoryModel =subset_model(memoryModel,f'Update{memoryModel.__class__.__name__}',optional=True)
+
+    @dynamic_prompt
+    def dynamic_system_prompt(request: ModelRequest[NotifyrContext]) -> SystemMessage:
+        state:NotifyrAgentState = request.state
+        system = request.system_message
+        content:list = system.content.copy()
+        auth =  request.runtime.context.auth
+        personalized_prompt = PERSONALIZED_PROMPT(
+            request.runtime.context.channel,
+            auth,
+            request.runtime.context.user if auth != 'guest' else state.get('guest',{}),
+            MemoryModel(**state.get('memory',{}) if memory_enabled else None),
+        )
+        prompt = {'type':'text','text':personalized_prompt}
+        content.append(prompt)
+        return SystemMessage(content)
+    
+    return dynamic_system_prompt
+
+def ThreadGuardFactory(agentModel:AgentModel):
+    if agentModel.messageLimit == None:
+        session_count_config = {}
+    else:
+        session_count_config = agentModel.messageLimit.sessionCount.model_dump()
+
+    @before_agent
+    async def thread_guard(state: NotifyrAgentState, runtime: Runtime[NotifyrContext]):
+        if state.get('blocked',False):
+            raise AgentThreadBlockedError(runtime.execution_info)
+        
+        execution = runtime.execution_info
+        
+        if (limit:=session_count_config.get(runtime.context.auth,None))!= None and len(state.get('sessions',{})) >= limit:
+            raise AgentMessageLimitExceededError('thread',execution.thread_id,execution.checkpoint_ns,
+                                                           runtime.context.session_id,agentModel.id,
+                                                           limit,runtime.context.auth,)
+        
+        return None
+    
+    return thread_guard
+
+#########################################################################################################
+############################                                          ###################################
+#########################################################################################################
+
 @wrap_model_call
 async def filter_non_relevant_message(request: ModelRequest[NotifyrContext],handler: Callable[[ModelRequest[NotifyrContext]], ModelResponse])->ModelResponse:
     messages = []
@@ -775,27 +913,6 @@ async def inject_ai_turn(state: NotifyrAgentState, runtime: Runtime[NotifyrConte
     ai_turn.additional_kwargs['__turn__'] = True
     return None
 
-def DynamicSystemPromptFactory(memoryModel:Type[BaseModel],memory_enabled):
-    MemoryModel =subset_model(memoryModel,f'Update{memoryModel.__class__.__name__}',optional=True)
-
-    @dynamic_prompt
-    def dynamic_system_prompt(request: ModelRequest[NotifyrContext]) -> SystemMessage:
-        state:NotifyrAgentState = request.state
-        system = request.system_message
-        content:list = system.content.copy()
-        auth =  request.runtime.context.auth
-        personalized_prompt = PERSONALIZED_PROMPT(
-            request.runtime.context.channel,
-            auth,
-            request.runtime.context.user if auth != 'guest' else state.get('guest',{}),
-            MemoryModel(**state.get('memory',{}) if memory_enabled else None),
-        )
-        prompt = {'type':'text','text':personalized_prompt}
-        content.append(prompt)
-        return SystemMessage(content)
-    
-    return dynamic_system_prompt
-    
 @before_model
 async def guard_session_ends(state: NotifyrAgentState, runtime: Runtime[NotifyrContext]):
     for m in reversed(state['messages']):
@@ -806,8 +923,7 @@ async def guard_session_ends(state: NotifyrAgentState, runtime: Runtime[NotifyrC
         raise AgentSessionAlreadyEndedError(runtime.context.session_id,runtime.execution_info)
     
     return None
-    
+   
 @wrap_model_call
 async def handle_agent(request: ModelRequest[NotifyrContext],handler: Callable[[ModelRequest[NotifyrContext]], ModelResponse])->ModelResponse:
     return await handler(request)
-    

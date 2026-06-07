@@ -6,13 +6,14 @@ from app.classes.auth_permission import AuthPermission, Role
 from app.classes.embeddings import EmbeddingModel, EmbeddingWrapper
 from app.container import InjectInMethod
 from app.decorators.guards import LLMProviderGuard
-from app.decorators.handlers import AgenticHandler, LLMHandler, AsyncIOHandler, CostHandler, GrpcHandler, MotorErrorHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler
+from app.decorators.handlers import AgentHandler, AgenticHandler, LLMHandler, AsyncIOHandler, CostHandler, GrpcHandler, MotorErrorHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, AgentPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe
 from app.definition._cost import DataCost
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles, LockService
 from app.definition._service import MiniStateProtocol, StateProtocol
+from app.depends.class_dep import EmbeddingSimilarity
 from app.depends.funcs_dep import get_profile
 from app.errors.agent_error import AgentToolDoesNotExistError, SemanticAgentAlreadyExistError
 from app.manager.broker_manager import Broker
@@ -63,13 +64,15 @@ class AgentsRessource(BaseHTTPRessource):
         self.customService = customService
         self.provider_guard = LLMProviderGuard()
     
-    async def semantic_lookup(self, request_id:str, issuer:str, agentModel:AgentModel):
+    async def semantic_lookup(self, request_id:str, issuer:str, agentModel:AgentModel,threshold:float):
         embedBody = QdrantEmbedRequestModel(query=agentModel.description,request_id=request_id,issuer=issuer)
         embedding = await self.remoteAgentService.request('POST',AgenticConstant.VECTOR_ROUTER('/embed/'),json=embedBody.model_dump())
 
         embedding:EmbeddingModel = EmbeddingModel(vector_id=agentModel.id,**embedding)
-        wrapper = EmbeddingWrapper(embedding,)
+        wrapper = EmbeddingWrapper(embedding,threshold=threshold)
         for agent in await self.mongooseService.find_all(AgentModel):
+            if agentModel.embeddings == None:
+                continue
             if (coef:=EmbeddingWrapper.cosine(wrapper,EmbeddingWrapper(agentModel.embeddings)))>=wrapper.threshold:
                 raise SemanticAgentAlreadyExistError(agentModel.id,agent.id,coef)
 
@@ -81,23 +84,23 @@ class AgentsRessource(BaseHTTPRessource):
         if len(diff) > 0:
             raise AgentToolDoesNotExistError(agentModel.id,diff)
     
-    @UsePermission(AdminPermission) 
-    @Throttle(normal=(200,80))
     @UsePipe(MerchantPipe())
-    @UseGuard(LLMProviderGuard())
-    @UseInterceptor(DataCostInterceptor(CostConstant.AGENT_CREDIT))
-    @UseHandler(LLMHandler,RedisHandler,CostHandler)
-    @LockService(LLMService,lockType='reader',as_manager=False)
-    @UsePipe(DocumentFriendlyPipe,before=False)
+    @Throttle(normal=(200,80))
+    @UsePermission(AdminPermission) 
     @HTTPStatusCode(status.HTTP_201_CREATED)
+    @UsePipe(DocumentFriendlyPipe,before=False)
+    @UseInterceptor(DataCostInterceptor(CostConstant.AGENT_CREDIT))
+    @UseHandler(LLMHandler,RedisHandler,CostHandler,AgentHandler)
+    @LockService(LLMService,lockType='reader',as_manager=False)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
-    async def create_agent(self,agentModel:AgentModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],profile:str=Depends(get_agent), authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def create_agent(self,agentModel:AgentModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],similarity:Annotated[EmbeddingSimilarity,Depends(EmbeddingSimilarity)], profile:str=Depends(get_agent), authPermission:AuthPermission=Depends(get_auth_permission)):
         await self.mongooseService.primary_key_constraint(agentModel,True)
         await self.mongooseService.exists_unique(agentModel,True)
         # TODO check cross needed agent
         await self.lookup_tools(agentModel)
-        embedding = await self.semantic_lookup(cost.request_id,cost.issuer,agentModel)
-        agentModel.embeddings = embedding
+        if similarity.mode == 'hard':
+            embedding = await self.semantic_lookup(cost.request_id,cost.issuer,agentModel)
+            agentModel.embeddings = embedding
 
         merchant.safe_payment(
             None,
@@ -118,7 +121,7 @@ class AgentsRessource(BaseHTTPRessource):
     @UsePipe(MerchantPipe(-1))
     @Throttle(normal=(200,80))
     @UsePermission(AdminPermission)
-    @UseHandler(CostHandler,RedisHandler)
+    @UseHandler(CostHandler,RedisHandler,AgentHandler)
     @UsePipe(DocumentFriendlyPipe,before=False)
     @LockService(LLMService,lockType='reader',as_manager=False)
     @UseInterceptor(DataCostInterceptor(CostConstant.AGENT_CREDIT,'refund'))
@@ -137,11 +140,11 @@ class AgentsRessource(BaseHTTPRessource):
 
     @Throttle(uniform=(100,200))
     @UsePermission(AdminPermission)
-    @UseHandler(PydanticHandler,LLMHandler)
     @UsePipe(DocumentFriendlyPipe,before=False)
+    @UseHandler(PydanticHandler,LLMHandler,AgentHandler)
     @LockService(LLMService,lockType='reader',as_manager=False)
     @BaseHTTPRessource.HTTPRoute('/{agent}/',methods=[HTTPMethod.PUT])
-    async def update_agent(self,agent:str,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],body: dict = Body(...),request_id:str=Depends(get_request_id),profile:str=Depends(get_agent),authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def update_agent(self,agent:str,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],embeddingLookup:Annotated[EmbeddingSimilarity,Depends(EmbeddingSimilarity)],body: dict = Body(...),request_id:str=Depends(get_request_id),profile:str=Depends(get_agent),authPermission:AuthPermission=Depends(get_auth_permission)):
         
         agentModel = await self.mongooseService.get(AgentModel,agent,True)
         agentUpdateModel = self.UpdateAgentModel.model_validate(body)
@@ -152,8 +155,8 @@ class AgentsRessource(BaseHTTPRessource):
         await self.mongooseService.primary_key_constraint(agentModel,True)
         await self.mongooseService.exists_unique(agentModel,True)
 
-        if 'description' in body:
-            embedding = await self.semantic_lookup(request_id,authPermission['client_id'] , agentModel)
+        if 'description' in body and embeddingLookup.mode == 'hard':
+            embedding = await self.semantic_lookup(request_id,authPermission['client_id'] , agentModel,embeddingLookup.threshold)
             agentModel.embeddings = embedding
         
         if 'tools' in body:
@@ -181,22 +184,23 @@ class AgentsRessource(BaseHTTPRessource):
     @LockService(LLMService,lockType='reader',as_manager=False)
     @BaseHTTPRessource.HTTPRoute('/prompt/{agent}/',methods=[HTTPMethod.POST],mount=False)
     async def prompt_playground(self,request:Request,agent:Annotated[RemoteAgentMiniService,Depends(get_agent)], response:Response,profile:str=Depends(get_agent), authPermission:AuthPermission= Depends(get_auth_permission)):
-        stream = False
-        if not stream:
-            return await agent.Prompt()
-        else:
-            async def response_stream():
-                replies = await agent.PromptStream()
-                async for reply in replies:
-                    ...
-                    yield reply
+        return await agent.Prompt()
+    
+    @UsePermission(AgentPermission)
+    @UseHandler(LLMHandler,AgenticHandler,GrpcHandler)
+    @BaseHTTPRessource.HTTPRoute('/stream/prompt/{agent}/',methods=[HTTPMethod.POST],mount=False)
+    async def stream_prompt_playground(self,request:Request,response:Response,agent:Annotated[RemoteAgentMiniService,Depends(get_agent)]):
+        async def response_stream():
+            replies = await agent.PromptStream()
+            async for reply in replies:
+                ...
+                yield reply
             
-            return StreamingResponse(
-                content=response_stream(),
-                media_type="text/event-stream",
-                headers={
-                    "Cache-Control": "no-cache",
-                    "Connection": "keep-alive"
-                    }
-            )
-            
+        return StreamingResponse(
+            content=response_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive"
+                }
+        )
