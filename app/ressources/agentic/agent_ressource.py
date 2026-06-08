@@ -79,10 +79,12 @@ class AgentsRessource(BaseHTTPRessource):
         return embedding
 
     async def lookup_tools(self,agentModel:AgentModel):
-        tools = [t.id for t in await self.mongooseService.find_all(ToolModel)]
+        tools_model = await self.mongooseService.find_all(ToolModel)
+        tools = [t.id for t in tools_model]
         diff = set(agentModel.tools).difference(tools)
         if len(diff) > 0:
             raise AgentToolDoesNotExistError(agentModel.id,diff)
+        # TODO make sure we do not have similar tools
     
     @UsePipe(MerchantPipe())
     @Throttle(normal=(200,80))

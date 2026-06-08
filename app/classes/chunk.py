@@ -6,12 +6,15 @@ Density = Literal['low','medium','high']
 DocumentType = Literal['textfile','webpage']
 Extension = Literal["pdf", "docx", "md", "html", "pptx", "txt",'xml']
 
-class Chunk(TypedDict):
+
+class ChunkSource(TypedDict):
     chunk_id:str
-    text:str
-    document_name:str
-    document_id:str
     source:str
+    document_id:str
+    document_name:str
+
+class Chunk(ChunkSource):
+    text:str
     title:str
     section:str
     relationship:list[str]
@@ -19,6 +22,7 @@ class Chunk(TypedDict):
 class ChunkContext(Chunk):
     vector:list[float]
     similarity:float
+
 
 class ChunkPayload(Chunk):
     #info

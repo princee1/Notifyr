@@ -23,6 +23,8 @@ class SourceDescription:
     
 
 class KGraphFacts(TypedDict):
+    target_uuid:str
+    source_uuid:str
     target_summary:str|None
     source_summary:str|None
     fact:str

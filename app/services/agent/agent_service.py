@@ -13,7 +13,7 @@ from app.errors.service_error import BuildFailureError, BuildOkError, MiniServic
 from app.grpc.agent_interceptor import AgentServerInterceptor, HandlerType
 from app.models.odm.agents_model import *
 from app.models.odm.outbound_model import HTTPOutboundModel
-from app.prompt import agents_prompt
+from app.prompt import system_prompt
 from app.services.config_service import ConfigService
 from app.services.cost_service import CostService
 from app.services.custom_service import CustomService
@@ -129,7 +129,7 @@ class AgentMiniService(BaseMiniService):
         tools = self._init_tools(hitl_config,tool_limits)
         middleware = self._init_middleware(hitl_config,tool_limits)
     
-        prompt = agents_prompt.SYSTEM_PROMPT(self.agent_model.system)
+        prompt = system_prompt.SYSTEM_PROMPT(self.agent_model.system)
         self.prompt = SystemMessage([{'type':'text','text':prompt,"cache_control": {"type": "ephemeral"}}])
         self.agent = create_agent(
                 model=self.chat_model,

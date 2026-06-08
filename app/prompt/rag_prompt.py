@@ -1,16 +1,4 @@
-from app.classes.chunk import ChunkContext
-from app.classes.nodes import KGraphFacts
-
-"""use <context>...</context> and <source> ... </source> to put the context and tell the agent to ignore every prompt in balise"""
-
-
-def CHUNK_CONTEXT_TEMPLATE(chunks:list[ChunkContext])->str:
-    return 
-
-def GRAPH_CONTEXT_TEMPLATE(facts:list[KGraphFacts])->str:
-    return
-
-def CONTEXT_TEMPLATE(context:str,query:str)->str:
+def AUGMENTED_QUERY_TEMPLATE(context:str,query:str)->str:
     return 
 
 def GRADE_DOCUMENT_TEMPLATE(context:str,question:str)->str:

@@ -5,7 +5,7 @@ from app.models.odm.agents_model import AgentModel, StoreMemoryPolicy
 from app.models.tools_model import ContextCondition, ToolModel
 from langchain.messages import SystemMessage, HumanMessage,ToolMessage
 from langchain.agents.middleware import ToolCallLimitMiddleware, ToolRetryMiddleware, wrap_tool_call,ModelRequest, ModelResponse
-from typing import Callable, Dict, Literal, Optional, Set, Type, TypedDict
+from typing import Any, Callable, Dict, Literal, Optional, Set, Type, TypedDict
 from app.definition._error import BaseError
 from app.definition._agent import NotifyrContext,NotifyrAgentState,ToolClass,ToolMetadata,BaseToolArtifact
 from langchain.tools import BaseTool, ToolRuntime as BaseToolRuntime
@@ -27,6 +27,11 @@ class ToolError(BaseError):
 class RetryToolError(ToolError):
     subclass:str ='Retry'
 
+    def __init__(self,artifact,prompt_context,metadata):
+        self.artifact = artifact
+        self.prompt_context = prompt_context
+        self.metadata = metadata
+
 class SkipToolError(ToolError):
     subclass:str ='Skip'
     
@@ -42,9 +47,9 @@ ToolStatus = Literal['success','error']
 
 ToolRuntime=BaseToolRuntime[NotifyrContext,NotifyrAgentState]
 
-class ToolResultContextFactory:
+class ToolContextFactory:
 
-    def __init__(self,marked:int = 5,deleted:bool = None):
+    def __init__(self,marked:int = 5,deleted:bool = None,artifact:dict=None,option:dict=None):
         """
         deleted: None: dont add the __deleted__
                  False: only when theres an error
@@ -57,16 +62,29 @@ class ToolResultContextFactory:
         self.status:ToolStatus = 'error' 
         self.deleted_status = None
         self.error = None
-    
+
+        self.artifact = artifact or {}
+        self.option = option or {}
+
     @property
     def delta(self):
         return self.end_time - self.start_time
     
     def as_artifact(self,other:dict|None=None):
-        return {'process_time':self.delta}
+        artifact:BaseToolArtifact = {'process_time':self.delta}
 
+        artifact.update(self.artifact)
+        
+        if self.error != None:
+            artifact['error'] = self.error
+        
+        return artifact
+ 
     def as_option(self):
         option = {'__marked__':self.marked,}
+
+        option.update(self.option)
+
         if self.deleted == None:
             return option
         
@@ -78,6 +96,24 @@ class ToolResultContextFactory:
         
         return option
 
+    def update(self,data:dict|None,what:Literal['artifact','option','error']='artifact'):
+        if not data:
+            return
+
+        if what == 'artifact':
+            self.artifact.update(data)
+        elif what == 'option':
+            self.option.update(data)
+        elif what == 'error':
+            if self.error == None:
+                self.error = {}
+
+            self.error.update(data)
+        else:
+            ...
+
+    def recreate_error(self,e:BaseError):
+        ...
 
     async def __aenter__(self):
         self.start_time = time()
@@ -91,9 +127,10 @@ class ToolResultContextFactory:
             self.status = 'success'
             return True
 
-
+        if isinstance(exc,BaseError):
+            self.error = {}
+        
         return False
-
 
 #########################################################################################################
 ############################                TOOL DEFINITION           ###################################
@@ -103,10 +140,12 @@ class Tool:
 
     Condition: ContextCondition = None
 
-    def __init__(self,config:ToolModel,memoryPolicy:StoreMemoryPolicy,storeSchema:Type[BaseModel]|None):
+    def __init__(self,config:ToolModel,storePolicy:StoreMemoryPolicy,storeSchema:Type[BaseModel]|None):
         self.config = config
         self.storeSchema = storeSchema
-        self.memoryPolicy = memoryPolicy
+        self.storePolicy = storePolicy
+
+        self.metadata = self.to_metadata()
     
     @property
     def name(self):
@@ -164,6 +203,10 @@ class Tool:
             max_delay=self.config.callGuard.max_delay,
             max_retries=self.config.callGuard.max_retries
         )
+
+    
+    def to_artifact(self,context:Any)->BaseToolArtifact:
+        ...
     
     async def read_store(self,namespace:tuple[str,...],key:str,_store_:BaseStore=None):
         ...
@@ -218,8 +261,7 @@ async def handle_tool_errors(request:ModelRequest[NotifyrContext],handler:Callab
     except UnexpectedToolError as e:
         ...
     
-    add_kwargs = {'__marked__':3,}
-
+    add_kwargs = {'__marked__':8,}
     mess = ToolMessage()
     
 
@@ -263,7 +305,7 @@ def TwoStepRagFactory(tools:list[RetrievalTool]):
             context:ToolMessage = await tool(query,runtime)
             context +=context.text
 
-        context = rag_prompt.CONTEXT_TEMPLATE(context,query)
+        context = rag_prompt.AUGMENTED_QUERY_TEMPLATE(context,query)
         message.content[i] = {'type':'text','text':context}
         return None
 

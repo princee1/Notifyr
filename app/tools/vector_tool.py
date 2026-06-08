@@ -1,22 +1,29 @@
-from app.classes.chunk import ChunkContext
+from typing import List
+from app.classes.chunk import ChunkContext, ChunkSource
 from app.classes.embeddings import EmbeddingWrapper
 from app.classes.qdrant import QdrantCollectionDoesNotExistError
-from app.definition._tool import ToolResultContextFactory, RetrievalTool, ToolRuntime, ToolStatus
+from app.definition._tool import ToolContextFactory, RetrievalTool, ToolRuntime, ToolStatus
 from app.definition._agent import BaseToolArtifact, ToolMetadata
 from app.models.tools_model import VectorToolModel
 from app.services.config_service import ConfigService
 from app.services.custom_service import CustomService
 from app.services.database.qdrant_service import QdrantService
-from app.prompt import error_prompt, rag_prompt
+from app.prompt import context_prompt, rag_prompt
 from app.services.database.redis_service import RedisService
 from langchain.messages import HumanMessage,ToolMessage
+from app.utils.helper import slice_dict
 
+CHUNK_SOURCES_KEYS = {'chunk_id','source','document_id','document_name','computed_similarity','similarity'}
 class GraphChunkContext(ChunkContext):
 	computed_similarity:float
 
+class VectorChunkSource(ChunkSource):
+	computed_similarity:float
+	similarity:float
 
 class RagVectorArtifact(BaseToolArtifact):
-	...
+	sources:List[VectorChunkSource] 
+	collection:str
 
 class VectorRagTool(RetrievalTool):
 
@@ -28,14 +35,11 @@ class VectorRagTool(RetrievalTool):
 			self.redisService = redisService
 			self.config = config
 			self.filter = self.qdrantService.to_filter(self.config.filter)
-			
-			self.metadata = self.to_metadata()
-	
+				
 	async def __call__(self,query:str,runtime:ToolRuntime)->ToolMessage:
-
+		
 		try:
-			artifact = None
-			async with ToolResultContextFactory() as factory:
+			async with ToolContextFactory(artifact={'collection':self.config.collection}) as factory:
 				vector = await self.qdrantService.embed_query(query)
 				with_vector = (self.reranker_config != None)
 				config = self.config.model_dump(exclude=('filter',))
@@ -44,16 +48,19 @@ class VectorRagTool(RetrievalTool):
 					results:list[GraphChunkContext] = []
 					await self.graph_search(contexts,0,set(),results)
 					contexts = sorted(results,key =lambda c:c.get('computed_similarity',0), reverse=True)[self.reranker_config.top_k:] #reranker
-				prompt_context = rag_prompt.CHUNK_CONTEXT_TEMPLATE(contexts)
+				prompt_context = context_prompt.VECTOR_RAG_TEMPLATE(contexts)
 				artifact = self.to_artifact(contexts)
+				factory.update(artifact)
 				
 		except QdrantCollectionDoesNotExistError as e:
-			prompt_context = error_prompt.ERROR_TEMPLATE(f"[Collection {e.collection_name} not found]")
-			artifact = {'error_code':'collection_not_found','collection':e.collection_name,**factory.as_artifact()}
+			prompt_context = context_prompt.ERROR_TEMPLATE(f"[Collection {e.collection_name} not found]")
 		except ...:
-			return
-			
-		return ToolMessage(prompt_context,status=factory.status,artifact=factory.as_artifact(artifact),additional_kwargs={**factory.as_option(),**self.metadata})
+			...
+		return ToolMessage(prompt_context,
+					tool_call_id=runtime.tool_call_id,
+					status=factory.status,
+					artifact=factory.as_artifact(),
+					additional_kwargs={**factory.as_option(),**self.metadata})
 				
 	async def graph_search(self,contexts:list[ChunkContext],depth:int,seen:set[str],results:list[GraphChunkContext]):
 		if depth >= self.reranker_config.max_depth:
@@ -95,8 +102,14 @@ class VectorRagTool(RetrievalTool):
 		sim = child['similarity']/(depth+1)
 		child['computed_similarity'] = factor * sim
 	
-	def to_artifact(self,result:list[GraphChunkContext]|Exception)->RagVectorArtifact:
-		...
+	def to_artifact(self,result:list[GraphChunkContext])->RagVectorArtifact:
+		hashes = set()
+		sources = []
+		for r in result:
+			slice_dict(r,CHUNK_SOURCES_KEYS,'include',False)
+			sources.append(r)
+
+		return {'hashes':list(hashes),'sources':sources}
 
 	@property
 	def collection(self):

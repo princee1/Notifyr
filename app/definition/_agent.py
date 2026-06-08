@@ -15,7 +15,7 @@ from app.definition._error import BaseError
 from app.definition._service import ServiceStatus
 from app.models.odm.agents_model import AgentModel,MIN_OF_MAX_INPUT_TOKEN
 from app.models.odm.llm_model import LLMProfileModel
-from app.prompt.agents_prompt import PERSONALIZED_PROMPT
+from app.prompt.system_prompt import PERSONALIZED_PROMPT
 from app.utils.helper import _make_delay_fn, subset_model
 from langgraph.runtime import ExecutionInfo
 from langchain.messages import AIMessage, AnyMessage, HumanMessage, RemoveMessage,SystemMessage

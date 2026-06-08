@@ -20,12 +20,11 @@ class CacheArgsSchema(BaseModel):
 
 class CacheTool(RetrievalTool):
     
-    def __init__(self,configService:ConfigService,redisService:RedisService,config:CacheToolModel,qdrantService:QdrantService,store):
+    def __init__(self,configService:ConfigService,redisService:RedisService,config:CacheToolModel,qdrantService:QdrantService):
         super().__init__(config,)
         self.configService = configService
         self.redisService = redisService
         self.qdrantService = qdrantService
-        self.store  = store # NOTE for personal or global without an eviction time
 
     async def __call__(self,runtime:ToolRuntime,mode:CacheMode,query:str,response:str=None)->str:
         match mode:
