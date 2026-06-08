@@ -7,7 +7,7 @@ from app.definition._agent import *
 from app.classes.cost_definition import InsufficientCreditsError, InvalidPurchaseRequestError
 from app.classes.prompt import PromptToken
 from app.definition import _service
-from app.definition._tool import Tool, dynamic_tool_selection
+from app.definition._tool import Tool, dynamic_tool_selection, handle_tool_errors
 from app.errors.llm_error import LLMProviderDoesNotExistError
 from app.errors.service_error import BuildFailureError, BuildOkError, MiniServiceDoesNotExistsError
 from app.grpc.agent_interceptor import AgentServerInterceptor, HandlerType
@@ -235,6 +235,8 @@ class AgentMiniService(BaseMiniService):
         
         middleware.append(dynamic_tool_selection) #wrap tool call
         middleware.extend(tool_limits) #after model
+
+        middleware.append(handle_tool_errors)
 
         # TODO add the LLMToolsSelector and Todo Middleware
 

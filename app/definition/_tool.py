@@ -24,21 +24,28 @@ from langgraph.store.base import BaseStore
 class ToolError(BaseError):
     subclass:str ='Tool'
 
+    def __init__(self, prompt_context:str,artifact:dict,metadata:dict,tool_call_id:str):
+        super().__init__()
+        self.prompt_context = prompt_context
+        self.artifact = artifact
+        self.tool_call_id = tool_call_id
+
+        self.metadata = {'__error_metadata__':{'subclass':self.subclass}}
+        if isinstance(metadata,dict):
+            self.metadata.update(metadata)
+
 class RetryToolError(ToolError):
     subclass:str ='Retry'
 
-    def __init__(self,artifact,prompt_context,metadata):
-        self.artifact = artifact
-        self.prompt_context = prompt_context
-        self.metadata = metadata
-
 class SkipToolError(ToolError):
     subclass:str ='Skip'
+
+    def __init__(self, artifact,metadata,tool_call_id):
+        super().__init__('',artifact,metadata,tool_call_id)
     
 class UnexpectedToolError(ToolError):
-    subclass:str ='Unexpected'
+    subclass:str ='Unexpected Error'
     
-
 #########################################################################################################
 ############################                                          ###################################
 #########################################################################################################
@@ -253,17 +260,26 @@ class DiscoveryTool(Tool):
 @wrap_tool_call
 async def handle_tool_errors(request:ModelRequest[NotifyrContext],handler:Callable[[ModelRequest[NotifyrContext]], ModelResponse]):
     try:
-        return await handler(request)
-    except RetryToolError as e:
-        ...
-    except SkipToolError as e:
-        ...
-    except UnexpectedToolError as e:
-        ...
-    
-    add_kwargs = {'__marked__':8,}
-    mess = ToolMessage()
-    
+        try:
+            return await handler(request)
+        except RetryToolError as e:
+            add_kwargs = {'__marked__':2}
+            raise e
+        except SkipToolError as e:
+            add_kwargs = {'__deleted__':True}
+            raise e
+        except UnexpectedToolError as e:
+            add_kwargs = {'__marked__':8}
+            raise e
+    except ToolError as e:
+        return ToolMessage(
+            e.prompt_context,
+            artifact = e.artifact,
+            status='error',
+            tool_call_id = e.tool_call_id,
+            additional_kwargs = {**add_kwargs,**e.metadata}
+        )
+        
 
 @wrap_tool_call
 async def dynamic_tool_selection(request: ModelRequest[NotifyrContext],handler: Callable[[ModelRequest[NotifyrContext]], ModelResponse]) -> ModelResponse:

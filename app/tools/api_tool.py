@@ -144,7 +144,7 @@ class APIBaseTool:
 
             if e.status_code == 429:
                 prompt_context =  context_prompt.REST_API_TEMPLATE(text,response.status,response.method)
-                raise RetryToolError(factory.as_artifact(),prompt_context,{**factory.as_option(),**self.metadata})
+                raise RetryToolError(factory.as_artifact(),prompt_context,{**self.metadata},tool_call_id)
         
             prompt_context = context_prompt.ERROR_TEMPLATE(f'Text: {text} Status: {e.status_code} Reason: {e.reason}','Depending on the status code, the content and the reason you can try again with updated value')
 
@@ -152,13 +152,13 @@ class APIBaseTool:
             error = APIToolTimeoutError(e)
             factory.recreate_error(error)
             prompt_context = context_prompt.ERROR_TEMPLATE(error.message,)
-            raise RetryToolError(factory.as_artifact(),prompt_context,{**factory.as_option(),**self.metadata})
+            raise RetryToolError(factory.as_artifact(),prompt_context,{**self.metadata},tool_call_id)
 
         except (aiohttp.ClientConnectorError,aiohttp.ClientError,aiohttp.ClientSSLError,aiohttp.ClientConnectionError) as e:
             error = APIToolConnectionError(e)
             factory.recreate_error(error)
             prompt_context = context_prompt.ERROR_TEMPLATE(error.message)
-            raise RetryToolError(factory.as_artifact(),prompt_context,{**factory.as_option(),**self.metadata})
+            raise RetryToolError(factory.as_artifact(),prompt_context,{**self.metadata},tool_call_id)
         
         except ValidationError as e:
             prompt_context = context_prompt.ERROR_TEMPLATE(e.json(),instruction='The request body did not meet what we expected')
@@ -167,7 +167,7 @@ class APIBaseTool:
             prompt_context = context_prompt.ERROR_TEMPLATE(str(e))
             error = {'args':str(e.args),'type':e.__class__.__name__,'__mode__':'exception'}
             factory.update(error,'error')
-            raise UnexpectedToolError(prompt_context,factory.as_artifact(),{'__marked__':10,**self.metadata})
+            raise UnexpectedToolError(prompt_context,factory.as_artifact(),{**self.metadata},tool_call_id)
     
         return ToolMessage(
             prompt_context,
