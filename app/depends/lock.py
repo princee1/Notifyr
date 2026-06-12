@@ -11,7 +11,7 @@ def lock_logic(func:Callable[[list[tuple[str,dict]]],set]):
     @functools.wraps(func)
     async def callback(entries):
         tortoiseConnection:TortoiseConnectionService = Get(TortoiseConnectionService)
-        async with tortoiseConnection.statusLock.reader:
+        async with tortoiseConnection.lock('reader'):
             if tortoiseConnection.service_status not in _valid_state:
                 return []
             return await func(entries)

@@ -34,7 +34,6 @@ class ProfileMiniService(BaseMiniService,Generic[TModel]):
             self.validationModel = subset_model(self.model_type,f'Validation{self.model_type.__class__.__name__}')
             super().__init__(None,str(model['_id']))
             self.queue_name = f'{self.model_type._queue}:{self.miniService_id}'
-
         else:
             super().__init__(None,str(model.id))
             self.queue_name = f'{model._queue}:{self.miniService_id}'
@@ -78,11 +77,10 @@ class ProfileMiniService(BaseMiniService,Generic[TModel]):
 
 
 @Service(is_manager=True)
-class ProfileService(BaseMiniServiceManager):
+class ProfileService(BaseMiniServiceManager[ProfileMiniService[BaseProfileModel]]):
 
     def __init__(self, mongooseService: MongooseService, configService: ConfigService,redisService:RedisService,loggerService:LoggerService,vaultService:VaultService):
         super().__init__()
-        self.MiniServiceStore:MiniServiceStore[ProfileMiniService[BaseProfileModel]] = MiniServiceStore[ProfileMiniService[BaseProfileModel]](self.__class__.__name__)
         self.mongooseService = mongooseService
         self.configService = configService
         self.redisService = redisService
@@ -119,14 +117,14 @@ class ProfileService(BaseMiniServiceManager):
     
     async def async_verify_dependency(self):
         try:
-            async with self.vaultService.statusLock.reader:
+            async with self.vaultService.lock('reader'):
                 if self.vaultService.service_status not in VaultService._ping_available_state:
                     raise ValueError
                 
                 if not self.vaultService.is_loggedin:
                     raise ValueError
             
-            async with self.mongooseService.statusLock.reader:
+            async with self.mongooseService.lock('reader'):
                 if self.mongooseService.service_status not in VaultService._ping_available_state:
                     raise ValueError
                     

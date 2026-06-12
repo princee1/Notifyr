@@ -17,7 +17,7 @@ from app.utils.globals import CAPABILITIES
     is_manager=True,
     links=[LinkDep(ProfileService,to_build=True,to_destroy=True)]
 )
-class WebhookService(BaseMiniServiceManager):
+class WebhookService(BaseMiniServiceManager[BaseMiniService|WebhookAdapterInterface]):
 
     model_class_to_service = {
         RedisWebhookModel: RedisWebhookMiniService,
@@ -39,8 +39,6 @@ class WebhookService(BaseMiniServiceManager):
         self.profilesService = profileService
         self.reactiveService = reactiveService
         self.redisService = redisService
-
-        self.MiniServiceStore = MiniServiceStore[WebhookAdapterInterface|BaseMiniService](self.name)
 
     def verify_dependency(self):
         if not CAPABILITIES['webhook']:

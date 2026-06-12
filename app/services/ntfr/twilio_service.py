@@ -97,7 +97,7 @@ class TwilioAccountMiniService(_service.BaseMiniService,TwilioInterface):
             raise _service.BuildFailureError(f'Profile is not active {self.depService.model.profile_state.name} ')
 
     async def async_verify_dependency(self):
-        async with self.depService.statusLock.reader:
+        async with self.depService.lock('reader'):
             self.verify_dependency()
             return True
 
@@ -143,7 +143,7 @@ class TwilioAccountMiniService(_service.BaseMiniService,TwilioInterface):
     is_manager=True,
     links=[_service.LinkDep(ProfileService,to_build=True,to_destroy=True,)]
 )
-class TwilioService(_service.BaseMiniServiceManager,TwilioInterface):
+class TwilioService(_service.BaseMiniServiceManager[TwilioAccountMiniService],TwilioInterface):
     
     def __init__(self, configService: ConfigService,mongooseService:MongooseService,vaultService:VaultService,profileService:ProfileService) -> None:
         super().__init__()
@@ -151,8 +151,6 @@ class TwilioService(_service.BaseMiniServiceManager,TwilioInterface):
         self.mongooseService = mongooseService
         self.vaultService = vaultService
         self.profileService = profileService
-
-        self.MiniServiceStore = _service.MiniServiceStore[TwilioAccountMiniService](self.__class__.__name__)
     
     async def pingService(self,infinite_wait:bool,data:dict,profile:str=None,as_manager:bool=False,**kwargs):
         if self.main == None:
@@ -222,7 +220,7 @@ class BaseTwilioCommunication(_service.BaseService,ProfileEventInterface):
             raise _service.BuildFailureError
         
     async def async_verify_dependency(self):
-        async with self.twilioService.statusLock.reader:
+        async with self.twilioService.lock(None,'reader'):
             return self.twilioService.service_status not in _service.ACCEPTABLE_STATES
         
     def set_url(self,status_callback,subject_id=None,twilio_tracking=None):

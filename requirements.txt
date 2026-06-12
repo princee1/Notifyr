@@ -47,7 +47,6 @@ psycopg2_binary==2.9.10
 pydantic==2.10.6
 pydantic_core==2.27.2
 PyJWT==2.10.1
-PyJWT==2.10.1
 pymemcache==4.0.0
 pymongo==4.15.4
 python-dotenv==1.2.1

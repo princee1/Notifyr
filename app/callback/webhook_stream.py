@@ -39,7 +39,7 @@ async def DB_Webhook_Stream(entries:list[tuple[str,DBPayload]]):
         payloads[mini_service_id]['ids'].append(ids)
         payloads[mini_service_id]['vals'].append(val['data'])
 
-    async with webhookService.statusLock.reader:
+    async with webhookService.lock(None,'reader'):
         for mini_service_id, webhook_entries in payloads.items():
             try:
                 vals = webhook_entries['vals']

@@ -159,6 +159,7 @@ class AgentModel(BaseDocument):
     tools: List[str] = Field(default_factory=list)
     type:Literal['main-agent','sub-agent'] = Field(default='main-agent')
     rag:Literal['agentic','linear','hybrid','auto'] = Field(default='agentic')
+    cache:Literal['agentic','linear'] = Field(default='agentic')
     provider: str = Field(description='The service id of the LLM Provider')
 
     interruptChannel:List[Channel] = Field(default_factory=list)

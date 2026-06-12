@@ -158,7 +158,7 @@ class BaseEmailService(_service.BaseMiniService, ProfileEventInterface):
             raise _service.BuildFailureError(f'Profile is not active {self.depService.model.profile_state.name} ')
 
     async def async_verify_dependency(self):
-        async with self.depService.statusLock.reader:
+        async with self.depService.lock('reader'):
             self.verify_dependency()
             return True
 

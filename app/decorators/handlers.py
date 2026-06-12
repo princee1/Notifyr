@@ -6,6 +6,7 @@ from typing import Callable
 import aiohttp
 from amqp import AccessRefused
 from fastapi.exceptions import ResponseValidationError
+import grpc
 import hvac
 from minio import S3Error, ServerError
 import requests
@@ -1224,7 +1225,14 @@ class AgenticHandler(Handler):
 
 class GrpcHandler(Handler):
     async def handle(self, function, *args, **kwargs):
-        return await super().handle(function, *args, **kwargs)
+        try:
+            return await super().handle(function, *args, **kwargs)
+        except grpc.aio.AioRpcError as e:
+            e.code()
+            e.details()
+            e.initial_metadata()
+            
+            raise HTTPException()
 
 class GraphitiHandler(Handler):
     ...

@@ -200,8 +200,8 @@ class APIFetchTool(APIBaseTool, RetrievalTool):
         self.after_init()
 
     async def __call__(self,runtime:ToolRuntime, body: Optional[Dict[str, Any]] = None, path: Dict[str, Any] = {}, query: Dict[str, Any] = {}) -> Dict[str, Any]:
-        async with self.customService.statusLock.reader:
-            async with self.outboundService.statusLock.reader:
+        async with self.customService.lock('reader'):
+            async with self.outboundService.lock('reader'):
                 return await self.request(runtime.tool_call_id,method='GET', path=path, query=query, body=body)
             
     @classmethod
@@ -216,8 +216,8 @@ class APIControlTool(APIBaseTool, ExecutionTool):
         self.after_init()
   
     async def __call__(self,runtime:ToolRuntime,method:Method,body:Optional[Dict[str,Any]]=None,path:Dict[str,Any]={},query:Dict[str,Any]={}) -> Dict[str, Any]:
-        async with self.customService.statusLock.reader:
-            async with self.outboundService.statusLock.reader:
+        async with self.customService.lock('reader'):
+            async with self.outboundService.lock('reader'):
                 return await self.request(runtime.tool_call_id,method=method, path=path,body=body,query=query)
 
     @classmethod

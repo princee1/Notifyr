@@ -77,7 +77,7 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
 
     async def _check_vault_status(self):
         temp_service = None 
-        async with self.vaultService.statusLock.reader:
+        async with self.vaultService.lock('reader'):
             if self.vaultService.service_status == ServiceStatus.AVAILABLE:
                 ...
             else: 
@@ -87,7 +87,6 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
     async def creds_rotation(self):
         temp_service = await self._check_vault_status()
         async with self.statusLock.writer:
-
             retry =0
             while retry<self.max_retry:
                 try:

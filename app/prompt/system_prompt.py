@@ -24,7 +24,7 @@ uncertainty_map = {
     }
 
 
-def SYSTEM_PROMPT(cfg: System) -> str:
+def SYSTEM_TEMPLATE(cfg: System) -> str:
     lines = []
 
     # Identity
@@ -143,7 +143,7 @@ def _missing_user_fields(user: dict) -> list[str]:
     ]
 
 
-def PERSONALIZED_PROMPT(
+def PERSONALIZED_TEMPLATE(
     channel: Channel,
     auth: Auth,
     user: dict,

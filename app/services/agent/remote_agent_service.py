@@ -56,8 +56,100 @@ class AgenticHTTPState(Enum):
     GRACEFUL_DISCONNECTION = 'Graceful Disconnection'
 
 
+
+@MiniService(links=[LinkDep(LLMMiniService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)])
+class RemoteAgentMiniService(BaseMiniService):
+    
+    def __init__(self,configService:ConfigService,costService:CostService,remoteAgentService:'RemoteAgentService',llmProviderMiniService:LLMMiniService,agentModel:dict):
+        self.depService = llmProviderMiniService
+        super().__init__(llmProviderMiniService, str(agentModel['id']))
+        self.configService = configService
+        self.remoteAgentService = remoteAgentService
+        self.costService = costService
+        self.agentModel = agentModel
+
+    def build(self, build_state = ...):
+        try: 
+            if build_state == DEFAULT_BUILD_STATE:
+                m = AgentValidationModel.model_validate(self.agent_model).model_dump()
+                self.agent_model:AgentModel = AgentValidationModel.model_construct(**m)
+        except ValidationError as e:
+            raise BuildFailureError()
+
+    def SilentFail(mode:Literal['direct','generator']):
+
+        def decorator(func:Callable):
+            @functools.wraps(func)
+            def swrapper(self:Self,request:agent_message.PromptRequest|Callable[...,agent_message.PromptRequest])->agent_message.PromptAnswer:
+                if self.service_status not in acceptable_service_status:
+                    return
+                return func(self,request) 
+
+            @functools.wraps(func)
+            async def awrapper(self:Self,request:agent_message.PromptRequest)->agent_message.PromptAnswer:
+                async with self.lock('reader'):
+                    if self.service_status not in acceptable_service_status:
+                        return
+                    await self.costService.check_enough_credits(CostConstant.TOKEN_CREDIT,max(self.agent_model.generation.max_tokens or 15600*3,self.depService.model.max_output_tokens or 15600*3))
+                    return await func(self,request)
+
+            return awrapper if asyncio.iscoroutinefunction(func) else swrapper
+        
+        return decorator
+    
+    if APP_MODE == ApplicationMode.worker:
+
+        @SilentFail('direct')
+        def Prompt(self, request:agent_message.PromptRequest):
+            request = request.to_proto()
+            reply = self.remoteAgentService.stub.Prompt(request)
+            return agent_message.PromptAnswer.from_proto(reply)
+
+        @SilentFail('direct')
+        def Completion(self,):
+            ...
+
+    elif APP_MODE == ApplicationMode.server:
+
+        @SilentFail('direct')
+        async def Prompt(self, request:agent_message.PromptRequest):
+            request = request.to_proto()
+            reply = await self.remoteAgentService.stub.Prompt(request)
+            return agent_message.PromptAnswer.from_proto(reply)
+
+        @SilentFail('generator')
+        async def PromptStream(self, request:agent_message.PromptRequest):
+            request = request.to_proto()
+            replies = self.remoteAgentService.stub.PromptStream(request)
+            async for reply in replies:
+                reply = agent_message.PromptAnswer.from_proto(reply)
+                yield reply
+
+        @SilentFail('direct')
+        async def StreamPrompt(self, request_generator:AsyncGenerator):
+            reply = await self.remoteAgentService.stub.StreamPrompt(request_generator)
+            return agent_message.PromptAnswer.from_proto(reply)
+        
+        @SilentFail('generator')
+        async def S2SPrompt(self, request_generator:AsyncGenerator):
+            replies = self.remoteAgentService.stub.S2SPrompt(request_generator)
+            async for reply in replies:
+                reply = agent_message.PromptAnswer.from_proto(reply)
+                yield reply
+
+        @SilentFail('direct')
+        async def Completion(self,request:agent_message.PromptRequest):
+            request = request.to_proto()
+            reply = await self.remoteAgentService.stub.Completion(request)
+            return agent_message.PromptAnswer.from_proto(reply)
+
+        @SilentFail('generator')
+        async def S2SBatch(self,request_generator:AsyncGenerator):
+            ...
+
+
 @Service(is_manager=True,links=[LinkDep(LLMService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)])
-class RemoteAgentService(BaseMiniServiceManager):
+class RemoteAgentService(BaseMiniServiceManager[RemoteAgentMiniService]):
     
     def __init__(self,configService:ConfigService,mongooseService:MongooseService,vaultService:VaultService,llmProviderService:LLMService,uvicornService:UvicornWorkerService):
         super().__init__()
@@ -68,8 +160,6 @@ class RemoteAgentService(BaseMiniServiceManager):
         self.mongooseService = mongooseService
         self.uvicornService = uvicornService
 
-        self.MiniServiceStore = MiniServiceStore[RemoteAgentMiniService](self.name)
-        
         # HTTP health check state
         self.http_state: AgenticHTTPState = AgenticHTTPState.DISCONNECTED
         self.http_message:str = None
@@ -174,7 +264,7 @@ class RemoteAgentService(BaseMiniServiceManager):
     else:
         async def grpc_state_callback(self,state:grpc.ChannelConnectivity):
             print('State:',state)
-            async with self.statusLock.writer:
+            async with self.lock(None,'writer'):
                 self.grpc_state = state
 
         async def connect_channel(self):
@@ -197,7 +287,7 @@ class RemoteAgentService(BaseMiniServiceManager):
         
     async def grpc_state_callback(self,state:grpc.ChannelConnectivity):
         print('State:',state)
-        async with self.statusLock.writer:
+        async with self.lock(None,'writer'):
            self.grpc_state = state
                 
     async def init_http_session(self, timeout: int = 30):
@@ -279,7 +369,7 @@ class RemoteAgentService(BaseMiniServiceManager):
                 pass
             self.http_health_task = None
 
-        async with self.statusLock.writer:
+        async with self.lock(None,'writer'):
             self.http_state = AgenticHTTPState.DISCONNECTED
 
     def start_agentic_healthcheck(self):
@@ -294,7 +384,7 @@ class RemoteAgentService(BaseMiniServiceManager):
         async def _http_health_check():
             async for websocket in connect(health_url,additional_headers=self.Headers,max_size=100,):
                 try:
-                    async with self.statusLock.writer:
+                    async with self.lock(None,'writer'):
                         self.http_state = AgenticHTTPState.CONNECTED
                         self.http_message = 'Connected'
                     async for message in websocket:
@@ -317,7 +407,7 @@ class RemoteAgentService(BaseMiniServiceManager):
                     state = AgenticHTTPState.GRACEFUL_DISCONNECTION
                     break
                 finally:
-                    async with self.statusLock.writer:
+                    async with self.lock('writer'):
                         self.http_state = state
                         self.http_message = e.reason
 
@@ -342,93 +432,3 @@ class RemoteAgentService(BaseMiniServiceManager):
     @property
     def agentic_http_host(self):
         return f"{self.configService.AGENTIC_HOST}:8000"
-
-
-@MiniService(links=[LinkDep(LLMMiniService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)])
-class RemoteAgentMiniService(BaseMiniService):
-    
-    def __init__(self,configService:ConfigService,costService:CostService,remoteAgentService:RemoteAgentService,llmProviderMiniService:LLMMiniService,agentModel:dict):
-        self.depService = llmProviderMiniService
-        super().__init__(llmProviderMiniService, str(agentModel['id']))
-        self.configService = configService
-        self.remoteAgentService = remoteAgentService
-        self.costService = costService
-        self.agentModel = agentModel
-
-    def build(self, build_state = ...):
-        try: 
-            if build_state == DEFAULT_BUILD_STATE:
-                m = AgentValidationModel.model_validate(self.agent_model).model_dump()
-                self.agent_model:AgentModel = AgentValidationModel.model_construct(**m)
-        except ValidationError as e:
-            raise BuildFailureError()
-
-    def SilentFail(mode:Literal['direct','generator']):
-
-        def decorator(func:Callable):
-            @functools.wraps(func)
-            def swrapper(self:Self,request:agent_message.PromptRequest|Callable[...,agent_message.PromptRequest])->agent_message.PromptAnswer:
-                if self.service_status not in acceptable_service_status:
-                    return
-                return func(self,request) 
-
-            @functools.wraps(func)
-            async def awrapper(self:Self,request:agent_message.PromptRequest)->agent_message.PromptAnswer:
-                if self.service_status not in acceptable_service_status:
-                    return
-                await self.costService.check_enough_credits(CostConstant.TOKEN_CREDIT,max(self.agent_model.generation.max_tokens or 15600*3,self.depService.model.max_output_tokens or 15600*3))
-                return await func(self,request)
-
-            return awrapper if asyncio.iscoroutinefunction(func) else swrapper
-        
-        return decorator
-    
-    if APP_MODE == ApplicationMode.worker:
-
-        @SilentFail('direct')
-        def Prompt(self, request:agent_message.PromptRequest):
-            request = request.to_proto()
-            reply = self.remoteAgentService.stub.Prompt(request)
-            return agent_message.PromptAnswer.from_proto(reply)
-
-        @SilentFail('direct')
-        def Completion(self,):
-            ...
-
-    elif APP_MODE == ApplicationMode.server:
-
-        @SilentFail('direct')
-        async def Prompt(self, request:agent_message.PromptRequest):
-            request = request.to_proto()
-            reply = await self.remoteAgentService.stub.Prompt(request)
-            return agent_message.PromptAnswer.from_proto(reply)
-
-        @SilentFail('generator')
-        async def PromptStream(self, request:agent_message.PromptRequest):
-            request = request.to_proto()
-            replies = self.remoteAgentService.stub.PromptStream(request)
-            async for reply in replies:
-                reply = agent_message.PromptAnswer.from_proto(reply)
-                yield reply
-
-        @SilentFail('direct')
-        async def StreamPrompt(self, request_generator:AsyncGenerator):
-            reply = await self.remoteAgentService.stub.StreamPrompt(request_generator)
-            return agent_message.PromptAnswer.from_proto(reply)
-        
-        @SilentFail('generator')
-        async def S2SPrompt(self, request_generator:AsyncGenerator):
-            replies = self.remoteAgentService.stub.S2SPrompt(request_generator)
-            async for reply in replies:
-                reply = agent_message.PromptAnswer.from_proto(reply)
-                yield reply
-
-        @SilentFail('direct')
-        async def Completion(self,request:agent_message.PromptRequest):
-            request = request.to_proto()
-            reply = await self.remoteAgentService.stub.Completion(request)
-            return agent_message.PromptAnswer.from_proto(reply)
-
-        @SilentFail('generator')
-        async def S2SBatch(self,request_generator:AsyncGenerator):
-            ...

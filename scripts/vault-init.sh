@@ -402,6 +402,14 @@ setup_database_config(){
       creation_statements='["~notifyr/celery/backend/*","&notifyr/celery/backend/*", "+@string","+@transaction", "+@hash", "+@list", "+@set", "+@sortedset", "+@stream","+@keyspace", "+@pubsub", "-@admin", "-@dangerous", "-@connection", "+PING","+SELECT","+SCAN","+EXEC","+EVALSHA","+script|load", "+script|exists","+MULTI"]'
       #creation_statements='["~notifyr/celery/backend/*", "+PING","+SELECT","+SET","+SETEX","+GET","+DEL","+EXPIRE","+PEXPIRE","+TTL","+PTTL","+SCAN","+@hash","+@sortedset","+@read","+SMEMBERS","+PUBLISH","+SUBSCRIBE","+EXISTS","+EVAL", "+EVALSHA","+script|load", "+script|exists","+MULTI"]'
 
+
+    # vault write notifyr-database/roles/agentic-rol \
+    #   db_name="redis" \
+    #   default_ttl="12h" \
+    #   max_ttl="24h" \
+    #   creation_statements='["~notifyr/agentic/"]'
+
+
     vault write notifyr-database/roles/admin-redis-celery-ntfr-role \
       db_name="redis" \
       default_ttl="2h" \

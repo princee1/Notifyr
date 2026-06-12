@@ -116,7 +116,7 @@ class VaultService(BaseService,SchedulerInterface):
 
     async def refresh_token(self):
 
-        async with self.statusLock.writer as locK:            
+        async with self.lock('writer'):            
             creation_state = DEFAULT_BUILD_STATE if  time.time() > self.next_tick else 0
             self.compute_next_tick_time()
             try:

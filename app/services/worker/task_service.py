@@ -123,7 +123,7 @@ class TaskService(BaseService,SchedulerInterface):
         if self.configService.APS_JOBSTORE != 'mongodb':
             SchedulerInterface.resume(self)
             return
-        async with self.mongooseService.statusLock.reader:
+        async with self.mongooseService.lock('reader'):
             SchedulerInterface.resume(self)
     
     async def _leader_loop(self):

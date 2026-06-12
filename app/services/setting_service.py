@@ -26,7 +26,7 @@ class SettingService(BaseService):
     
     async def async_verify_dependency(self):
         await super().async_verify_dependency()
-        async with self.vaultService.statusLock.reader:
+        async with self.vaultService.lock('reader'):
             return self.verify_dependency()
         
     def verify_dependency(self):

@@ -2,8 +2,10 @@ from datetime import timedelta
 from app.definition._service import BaseMiniService, BaseMiniServiceManager, BaseService, BuildFailureError, MiniService, Service, ServiceStatus
 from app.errors.security_error import CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError,AlreadyBlacklistedClientError
 from app.models.security_model import ChallengeORM, ClientORM, GroupClientORM, BlacklistORM
+from app.services.database.redis_service import RedisService
 from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.security_service import JWTAuthService
+from app.services.vault_service import VaultService
 
 
 @MiniService()
@@ -11,12 +13,14 @@ class ClientMiniService(BaseMiniService):
     ...
 
 @Service()
-class AdminService(BaseMiniServiceManager):
+class AdminService(BaseMiniServiceManager[ClientMiniService]):
 
-    def __init__(self,jwtAuthService:JWTAuthService,tortoiseConnService:TortoiseConnectionService):
+    def __init__(self,jwtAuthService:JWTAuthService,tortoiseConnService:TortoiseConnectionService,vaultService:VaultService,redisService:RedisService):
         super().__init__()
         self.jwtAuthService = jwtAuthService
         self.tortoiseConnService = tortoiseConnService
+        self.vaultService = vaultService
+        self.redisService = redisService
 
     def build(self,build_state=-1):
         ...

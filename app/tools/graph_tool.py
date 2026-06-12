@@ -51,7 +51,7 @@ class KnowledgeGraphTool(RetrievalTool):
 
         try:
             async with ToolContextFactory(artifact={'domain':domain,'group_type':self.group_type}) as factory:
-                async with self.graphitiService.statusLock.reader:
+                async with self.graphitiService.lock('reader'):
                     contexts:list[KGraphFacts] = []
                     params = ContextSearchParam(query,domain)
                     self._force_non_broad_search()

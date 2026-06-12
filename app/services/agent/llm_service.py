@@ -197,15 +197,13 @@ class LLMMiniService(BaseMiniService):
                                       )
 
 @Service(is_manager=True,links=[LinkDep(ProfileService,to_build=True)])
-class LLMService(BaseMiniServiceManager):
+class LLMService(BaseMiniServiceManager[LLMMiniService]):
     
     def __init__(self,profileService:ProfileService,loggerService:LoggerService,configService:ConfigService):
         super().__init__()
         self.profileService = profileService
         self.configService = configService
         self.loggerService = loggerService
-
-        self.MiniServiceStore = MiniServiceStore[LLMMiniService](self.name)
 
     def build(self, build_state=...):
 

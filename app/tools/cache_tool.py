@@ -1,6 +1,8 @@
 from pydantic import BaseModel, Field
-
+from langchain.agents.middleware import after_agent, before_agent,before_model,Runtime
+from app.definition._agent import NotifyrAgentState, NotifyrContext
 from app.definition._tool import RetrievalTool, ToolRuntime
+from app.models.odm.agents_model import AgentModel
 from app.models.tools_model import CacheToolModel
 from app.services import ConfigService
 from app.services import RedisService
@@ -20,11 +22,13 @@ class CacheArgsSchema(BaseModel):
 
 class CacheTool(RetrievalTool):
     
-    def __init__(self,configService:ConfigService,redisService:RedisService,config:CacheToolModel,qdrantService:QdrantService):
+    def __init__(self,configService:ConfigService,redisService:RedisService,qdrantService:QdrantService,config:CacheToolModel,temperature:int):
         super().__init__(config,)
         self.configService = configService
         self.redisService = redisService
         self.qdrantService = qdrantService
+        self.temperature = temperature
+
 
     async def __call__(self,runtime:ToolRuntime,mode:CacheMode,query:str,response:str=None)->str:
         match mode:
@@ -45,3 +49,16 @@ class CacheTool(RetrievalTool):
     
     async def invalidate(self,query:str):
         ...
+
+
+def DirectCachePromptFactory(agentModel:AgentModel,toolModel:CacheToolModel,redisService:RedisService,qdrantService:QdrantService, as_list=False):
+
+    @before_agent
+    async def before_cache_prompt(state: NotifyrAgentState, runtime: Runtime[NotifyrContext]):
+        ...
+    
+    @after_agent
+    async def after_cache_prompt(state:NotifyrAgentState,runtime:Runtime[NotifyrContext]):
+        ...
+
+    return before_cache_prompt,after_cache_prompt if as_list else [before_cache_prompt,after_cache_prompt]

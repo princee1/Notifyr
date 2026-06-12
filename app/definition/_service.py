@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 import functools
 import traceback
-from typing import Any, List, Literal, Self, Set, overload, Callable, Type, TypeVar, Dict
+from typing import Any, AsyncGenerator, Generator, List, Literal, Self, Set, overload, Callable, Type, TypeVar, Dict
 from app.utils.prettyprint import PrettyPrinter, PrettyPrinter_
 from app.utils.constant import DependencyConstant
 from app.utils.helper import generateId, issubclass_of
@@ -113,6 +113,7 @@ class VariableProtocol(TypedDict):
     variables:dict[str,Any] = None
     variables_function:str = None
 
+ServiceLockType = Literal['reader', 'writer'] 
 
 #################################            #####################################
 
@@ -225,6 +226,19 @@ class BaseService():
     def log(self):
         pass
 
+    @asynccontextmanager
+    async def lock(self,mode:ServiceLockType):
+        match mode:
+            case 'reader':
+                _lock = self.statusLock.reader
+            case 'writer':
+                _lock = self.statusLock.writer
+            case _:
+                raise TypeError(f'{mode} is an invalid mode type')
+        
+        async with _lock:
+            yield self
+        
     def __repr__(self) -> str:
         return super().__repr__()
 
@@ -411,8 +425,6 @@ class BaseMiniService(BaseService,):
 # Define a generic type variable for the model
 TMS = TypeVar("TMS",bound=BaseMiniService)
 
-ServiceLockType = Literal['reader', 'writer'] 
-
 class MiniServiceStore(Generic[TMS]):
     
     def __init__(self,className:str):
@@ -452,15 +464,7 @@ class MiniServiceStore(Generic[TMS]):
     @asynccontextmanager
     async def lock(self,miniService_id: str | Any, mode:ServiceLockType='reader'):
         service = self.get(miniService_id)
-        match mode:
-            case 'reader':
-                lock = service.statusLock.reader
-            case 'writer':
-                lock = service.statusLock.writer
-            case _:
-                raise 
-
-        async with lock as l:
+        async with service.lock(mode) as service:
             yield service
         
     
@@ -489,7 +493,7 @@ class MiniServiceStore(Generic[TMS]):
                 count+=1
         return count
    
-class BaseMiniServiceManager(BaseService):
+class BaseMiniServiceManager(BaseService,Generic[TMS]):
 
     class StatusCounter:
 
@@ -511,7 +515,7 @@ class BaseMiniServiceManager(BaseService):
 
     def __init__(self):
         super().__init__()
-        self.MiniServiceStore = ...
+        self.MiniServiceStore:MiniServiceStore[TMS] = MiniServiceStore[TMS](self.name)
 
     def build(self,counter:StatusCounter, build_state = DEFAULT_BUILD_STATE,no_service_as_ok=False):
         if counter.total_service <1:
@@ -540,6 +544,14 @@ class BaseMiniServiceManager(BaseService):
     
     def __getitem__(self,miniServiceId:str):
         return self.MiniServiceStore.get(miniServiceId)
+    
+    @asynccontextmanager
+    async def lock(self,miniServiceId:str|None,mode:ServiceLockType='reader',miniServiceMode:ServiceLockType='reader'):
+        async with (self.statusLock.reader if mode =='reader' else self.statusLock.writer):
+            if miniServiceId == None:
+                yield self
+            async with self.MiniServiceStore.lock(miniServiceId,miniServiceMode) as service:
+                yield service
 
 S = TypeVar('S', bound=BaseService)
 

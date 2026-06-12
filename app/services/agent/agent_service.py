@@ -129,7 +129,7 @@ class AgentMiniService(BaseMiniService):
         tools = self._init_tools(hitl_config,tool_limits)
         middleware = self._init_middleware(hitl_config,tool_limits)
     
-        prompt = system_prompt.SYSTEM_PROMPT(self.agent_model.system)
+        prompt = system_prompt.SYSTEM_TEMPLATE(self.agent_model.system)
         self.prompt = SystemMessage([{'type':'text','text':prompt,"cache_control": {"type": "ephemeral"}}])
         self.agent = create_agent(
                 model=self.chat_model,
@@ -375,7 +375,7 @@ class AgentMiniService(BaseMiniService):
     LinkDep(LLMService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE),
     LinkDep(MongooseService,to_build=True,build_state=RECREATE_MEMORY_BUILD_STATE),
     ])
-class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
+class AgentService(BaseMiniServiceManager[AgentMiniService],agent_pb2_grpc.AgentServicer):
 
     @staticmethod
     def ErrorHandler(function:Callable):
@@ -390,7 +390,7 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
         @functools.wraps(function)
         async def handler(self:Self,request:Any|list[Any],context):
             try:
-                async with self.statusLock.reader:
+                async with self.lock(None,'reader'):
                     if self.service_status not in acceptable_service:
                         raise AgentNotAvailableError(self.service_status,self.reason,None)
                     return await function(self,request,context)
