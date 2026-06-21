@@ -10,7 +10,7 @@ from app.classes.cost_definition import SimpleTaskCostDefinition
 from app.classes.profiles import ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
 from app.definition._ws import W
 from app.depends.dependencies import get_auth_permission
-from app.services.config_service import MODE, ConfigService
+from app.services.config_service import MODE, ConfigService, WorkerService
 from app.utils.helper import _make_delay_fn, copy_response
 from app.utils.constant import SpecialKeyParameterConstant
 from app.services import CostService
@@ -29,6 +29,7 @@ import warnings
 
 configService: ConfigService = Get(ConfigService)
 costService:CostService = Get(CostService)
+workerService:WorkerService = Get(WorkerService)
 
 RequestLimit = 0
 
@@ -908,7 +909,7 @@ def Throttle(fixed: float | None = None,fn: Callable[[], float] | None = None,un
 
     return decorator    
 
-def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]|None|Dict[ClientTypeLiteral|int]=None,key_func:Callable[[Request],str]|Literal['group','client','public']='client'):
+def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]|None|Dict[ClientTypeLiteral|int]=None,key_func:Callable[[Request],str]|Literal['group','client','public','default','worker']='client'):
     """
     *Description copied from the slowapi library*
 
@@ -964,8 +965,16 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
 
     if isinstance(key_func,str):
         match key_func:
-            case 'public':
+            case 'default':
                 key_func = None # use the global key_func
+            case 'ip':
+                ...
+            case 'none':
+                key_func = lambda: 'none'
+            case 'session':
+                ...
+            case 'worker':
+                key_func = lambda : workerService.INSTANCE_ID
             case 'client':
                 key_func = client_private_key_func
             case 'group':

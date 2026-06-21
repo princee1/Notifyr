@@ -706,10 +706,11 @@ class MiniServiceInjectorPipe(Pipe):
                 self.key:miniService,
                 'profile':miniService.miniService_id
             }
-
-        return {
-            self.key: self.service.MiniServiceStore.get(profile)
-            }
+        else:
+            
+            return {
+                self.key: self.service.MiniServiceStore.get(profile)
+                }
 
 class DataClassToDictPipe(Pipe):
 

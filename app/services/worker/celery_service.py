@@ -1,3 +1,5 @@
+from functools import wraps
+
 from fastapi import Response
 from kombu import Queue
 from typing import Any, Callable, Literal, Self
@@ -5,6 +7,7 @@ from aiorwlock import RWLock
 from celery.result import AsyncResult
 from redbeat import RedBeatSchedulerEntry
 from app.classes.celery import CeleryNotAvailableError, CeleryTask, CeleryTaskNotFoundError, InspectMode, SchedulerModel, TaskExecutionResult, TaskType, add_warnings, due_entry_timedelta
+from app.classes.profiles import ProfileTypeNotAssociatedWithCeleryError
 from app.definition._service import BaseMiniService, BaseMiniServiceManager, BaseService, LinkDep, MiniService, MiniServiceStore, Service, ServiceStatus
 from app.interface.timers import IntervalInterface
 from app.models.odm.communication_model import BaseProfileModel
@@ -43,7 +46,10 @@ class ChannelMiniService(BaseMiniService):
 
         if kwargs.get('__channel_availability__',False) and self.service_status != ServiceStatus.AVAILABLE:
             raise ServiceNotAvailableError()
-        
+    
+        if kwargs.get('__verify_celery__',False) and not self.has_celery:
+            raise ProfileTypeNotAssociatedWithCeleryError(self.depService.model._collection,self.depService.model.id)
+
         scheduler:SchedulerModel = data.get('scheduler',None)
         taskManager = data.get('taskManager',None)
         if self.configService.BROKER_PROVIDER == 'rabbitmq':
@@ -62,7 +68,11 @@ class ChannelMiniService(BaseMiniService):
     @staticmethod
     def celery_guard(func:Callable):     
 
+        @wraps(func)
         async def wrapper(self:Self,*args,response:Response=None,**kwargs):
+            if not self.has_celery:
+                return
+
             if self.celeryService.service_status != ServiceStatus.AVAILABLE:
                 if response != None:
                     ...
@@ -125,7 +135,9 @@ class ChannelMiniService(BaseMiniService):
             return CeleryConstant.REDIS_QUEUE_NAME_RESOLVER(self.depService.queue_name)
         return self.depService.queue_name
 
-
+    @property
+    def has_celery(self)->bool:
+        return self.depService.model._celery
 
 @Service(
     is_manager=True,
@@ -292,7 +304,7 @@ class CeleryService(BaseMiniServiceManager[ChannelMiniService], IntervalInterfac
     async def pingService(self,infinite_wait:bool,data:dict,profile:str=None,as_manager:bool=False,**kwargs):
         if kwargs.get('__celery_availability__',False) and self.service_status != ServiceStatus.AVAILABLE:
             raise ServiceNotAvailableError('Absolutely need celery to be available')
-
+    
         _scheduler:SchedulerModel = data.get('scheduler',None)
         if _scheduler:
             if _scheduler.task_type == TaskType.SOLAR and self.configService.CELERY_WORKERS_EXPECTED < 1:

@@ -1,0 +1,16 @@
+class BaseSpeechProvider:
+    
+    def __init__(self):
+        ...
+    
+    async def connect(self):
+        ...
+    
+    async def disconnect(self):
+        ...
+
+    async def synthesize(self):
+        ...
+    
+    async def transcribe(self):
+        ...

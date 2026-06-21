@@ -6,7 +6,7 @@ from app.classes.nodes import SourceDescription
 from app.definition._service import DEFAULT_BUILD_STATE, BaseService, LinkDep, Service, ServiceStatus
 from app.errors.service_error import BuildError, BuildFailureError, BuildNotImplementedError
 from app.services.agent.llm_service import LLMMiniService, LLMService
-from app.services.config_service import ConfigService, UvicornWorkerService
+from app.services.config_service import ConfigService, WorkerService
 from app.services.custom_service import CustomService
 from app.services.database.base_db_service import TempCredentialsDatabaseService
 from app.services.database.mongoose_service import MongooseService
@@ -61,9 +61,9 @@ GroupType = Literal['domain','contact']
 )
 class GraphitiService(TempCredentialsDatabaseService):
       
-    def __init__(self,configService:ConfigService,redisService:RedisService,uvicornWorkerService:UvicornWorkerService,vaultService:VaultService,mongooseService:MongooseService,llmProviderService:LLMService,customService:CustomService,fileService:FileService):
+    def __init__(self,configService:ConfigService,redisService:RedisService,workerService:WorkerService,vaultService:VaultService,mongooseService:MongooseService,llmProviderService:LLMService,customService:CustomService,fileService:FileService):
         super().__init__(configService,fileService,vaultService,VaultTTLSyncConstant.VAULT_TOKEN_TTL)
-        self.uvicornWorkerService = uvicornWorkerService
+        self.workerService = workerService
         self.mongooseService = mongooseService
         self.llmProviderService = llmProviderService
         self.customService = customService
@@ -91,7 +91,7 @@ class GraphitiService(TempCredentialsDatabaseService):
             self.creds = self.vaultService.database_engine.generate_credentials(role='neo4j')
             if build_state == DEFAULT_BUILD_STATE:
                 self.client = AsyncGraphDatabase().driver(self.uri,auth=(self.db_user,self.db_password))
-                client = GraphDatabase.driver(self.uri,auth=(self.db_user,self.db_password),user_agent=self.uvicornWorkerService.INSTANCE_ID)
+                client = GraphDatabase.driver(self.uri,auth=(self.db_user,self.db_password),user_agent=self.workerService.INSTANCE_ID)
                 client.verify_connectivity()
                 client.verify_authentication()
             

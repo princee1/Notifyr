@@ -13,7 +13,7 @@ from app.services.setting_service import SettingService
 from app.utils.constant import MinioConstant, RedisConstant
 from app.utils.prettyprint import printJSON
 from app.utils.toolbox import RunInThreadPool
-from .config_service import AssetMode, ApplicationMode, ConfigService, UvicornWorkerService
+from .config_service import AssetMode, ApplicationMode, ConfigService, WorkerService
 from app.utils.fileIO import FDFlag, JSONFile
 from app.classes.template import Asset, Extension, HTMLTemplate, MLTemplate, PDFTemplate, SMSTemplate, PhoneTemplate, SkipTemplateCreationError, Template
 from .file.file_service import FileService
@@ -226,7 +226,7 @@ class AssetService(_service.BaseService,SchedulerInterface):
     
     non_obj_template = {'globals.json','README.MD'}
 
-    def __init__(self,hcVaultService:VaultService,redisService :RedisService, fileService: FileService, configService: ConfigService,objectS3Service:ObjectS3Service,settingService:SettingService,processWorkerPeer:UvicornWorkerService) -> None:
+    def __init__(self,hcVaultService:VaultService,redisService :RedisService, fileService: FileService, configService: ConfigService,objectS3Service:ObjectS3Service,settingService:SettingService,processWorkerPeer:WorkerService) -> None:
         super().__init__()
         SchedulerInterface.__init__(self,)
 

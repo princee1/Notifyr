@@ -11,7 +11,7 @@ from app.definition._service import DEFAULT_BUILD_STATE, Service
 from app.errors.async_error import ReactiveSubjectNotFoundError
 from app.errors.db_error import RedisDatabaseDoesNotExistsError, RedisStreamDoesNotExistsError
 from app.errors.service_error import BuildFailureError
-from app.services.config_service import ConfigService, UvicornWorkerService
+from app.services.config_service import ConfigService, WorkerService
 from app.services.database.base_db_service import BrokerService, ResultBackendService, TempCredentialsDatabaseService
 from app.services.file.file_service import FileService
 from app.services.reactive_service import ReactiveService
@@ -35,15 +35,15 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
 
     GROUP = 'NOTIFYR-GROUP'
     
-    def __init__(self,configService:ConfigService,reactiveService:ReactiveService,vaultService:VaultService,uvicornWorkerService:UvicornWorkerService,fileService:FileService):
+    def __init__(self,configService:ConfigService,reactiveService:ReactiveService,vaultService:VaultService,workerService:WorkerService,fileService:FileService):
         super().__init__(configService,fileService,vaultService,60*60*24*29,)
         self.configService = configService
         self.reactiveService = reactiveService
-        self.uvicornWorkerService = uvicornWorkerService
+        self.workerService = workerService
         self.to_shutdown = False
         self.callbacks = CALLBACKS_CONFIG.copy()
 
-        self.consumer_name = f'notifyr-consumer={self.uvicornWorkerService.INSTANCE_ID}'
+        self.consumer_name = f'notifyr-consumer={self.workerService.INSTANCE_ID}'
 
     def dynamic_context(func:Callable):
         

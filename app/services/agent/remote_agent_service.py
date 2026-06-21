@@ -16,7 +16,7 @@ from app.errors.agentic_error import AgenticServerDisconnectedError, AgenticStre
 from app.grpc.agent_interceptor import  AgentClientInterceptor,AgentClientAsyncInterceptor
 from app.models.odm.agents_model import AgentModel, AgentValidationModel
 from app.services.agent.llm_service import LLMMiniService, LLMService
-from app.services.config_service import ConfigService, UvicornWorkerService
+from app.services.config_service import ConfigService, WorkerService
 from app.services.cost_service import CostService
 from app.services.vault_service import VaultService
 from app.services.database.mongoose_service import MongooseService
@@ -151,14 +151,14 @@ class RemoteAgentMiniService(BaseMiniService):
 @Service(is_manager=True,links=[LinkDep(LLMService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)])
 class RemoteAgentService(BaseMiniServiceManager[RemoteAgentMiniService]):
     
-    def __init__(self,configService:ConfigService,mongooseService:MongooseService,vaultService:VaultService,llmProviderService:LLMService,uvicornService:UvicornWorkerService):
+    def __init__(self,configService:ConfigService,mongooseService:MongooseService,vaultService:VaultService,llmProviderService:LLMService,workerService:WorkerService):
         super().__init__()
 
         self.configService = configService
         self.vaultService = vaultService
         self.llmProviderService = llmProviderService
         self.mongooseService = mongooseService
-        self.uvicornService = uvicornService
+        self.workerService = workerService
 
         # HTTP health check state
         self.http_state: AgenticHTTPState = AgenticHTTPState.DISCONNECTED
@@ -418,7 +418,7 @@ class RemoteAgentService(BaseMiniServiceManager[RemoteAgentMiniService]):
     def Headers(self)->dict:
         return {
             'Authorization': f'Bearer {self.AgenticAPIKey}',
-            HTTPHeaderConstant.X_NOTIFYR_APP_INSTANCE_ID:self.uvicornService.INSTANCE_ID
+            HTTPHeaderConstant.X_NOTIFYR_APP_INSTANCE_ID:self.workerService.INSTANCE_ID
         }
     
     @property

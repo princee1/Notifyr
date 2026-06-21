@@ -15,7 +15,7 @@ from app.services.file.file_service import FileService
 from app.services.vault_service import VaultService
 from app.utils.constant import MinioConstant, VaultTTLSyncConstant
 from app.utils.toolbox import RunInThreadPool
-from ..config_service import  ConfigService, UvicornWorkerService
+from ..config_service import  ConfigService, WorkerService
 from typing import List, Dict
 #from aiobotocore import client
 

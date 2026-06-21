@@ -8,7 +8,7 @@ from redis import WatchError
 from app.classes.step import Step
 from app.definition._error import BaseError
 from app.definition._service import BaseService, Service
-from app.services.config_service import ConfigService, UvicornWorkerService
+from app.services.config_service import ConfigService, WorkerService
 from app.services.file.file_service import FileService
 from app.utils.constant import RedisConstant
 from app.services.database.redis_service import RedisService
@@ -80,11 +80,11 @@ class ArqIngestTaskService(BaseService):
             host = self.configService.REDIS_HOST
             self.arq_url = f"redis://{user}:{password}@redis:6379/{RedisConstant.EVENT_DB}"
 
-    def __init__(self,redisService:RedisService,configService:ConfigService,UvicornWorkerService:UvicornWorkerService,fileService:FileService):
+    def __init__(self,redisService:RedisService,configService:ConfigService,workerService:WorkerService,fileService:FileService):
         self.redisService = redisService
         self.configService = configService
         self.fileService = fileService
-        self.uvicornWorkerService = UvicornWorkerService      
+        self.workerService = workerService      
         super().__init__()  
 
     if APP_MODE == ApplicationMode.server or APP_MODE == ApplicationMode.arq:

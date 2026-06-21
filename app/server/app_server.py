@@ -17,7 +17,7 @@ from app.services.database.redis_service import RedisService
 from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.vault_service import VaultService
 from app.services.worker.task_service import TaskService
-from app.services.config_service import ConfigService, UvicornWorkerService
+from app.services.config_service import ConfigService, WorkerService
 from app.utils.prettyprint import PrettyPrinter_
 from fastapi import Request, Response, FastAPI
 from typing import Callable,Literal
@@ -324,7 +324,7 @@ class AppServer(EventInterface):
 
 def initialize_config_service(server_args):
     config_service = Get(ConfigService)
-    workerService = Get(UvicornWorkerService)
+    workerService = Get(WorkerService)
     workerService.set_server_config(server_args)
     return config_service
     

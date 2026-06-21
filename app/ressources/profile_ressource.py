@@ -63,8 +63,8 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @PingService([VaultService])
     @UsePermission(AdminPermission)
     @HTTPStatusCode(status.HTTP_201_CREATED)
-    @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT))
     @LockService(VaultService,lockType='reader')
+    @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT))
     @UseHandler(VaultHandler,MiniServiceHandler,PydanticHandler,CostHandler,CeleryControlHandler,RedisHandler)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
     async def create_profile(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],authPermission:AuthPermission=Depends(get_auth_permission)):
@@ -87,7 +87,8 @@ class BaseProfilModelRessource(BaseHTTPRessource):
                 result = await self.profileService.add_profile(profileModel,session=session)
                 merchant.activate_rollback()
                 profileMiniService = ProfileMiniService(None,None,self.redisService,result)
-                await ChannelMiniService(profileMiniService,self.configService,self.rabbitmqService,self.redisService,self.celeryService).create_queue()
+                channel = ChannelMiniService(profileMiniService,self.configService,self.rabbitmqService,self.redisService,self.celeryService)
+                await channel.create_queue()
             
         merchant.safe_payment(
             rollback,
@@ -156,12 +157,12 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         return profileModel
     
     @PingService([VaultService])
-    @LockService(VaultService,lockType='reader',check_status=False)
-    @LockService(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
-    @UseHandler(VaultHandler,PydanticHandler,CeleryControlHandler)
-    @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
     @UsePermission(AdminPermission)
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
+    @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
+    @UseHandler(VaultHandler,PydanticHandler,CeleryControlHandler)
+    @LockService(VaultService,lockType='reader',check_status=False)
+    @LockService(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PATCH])
     async def set_credentials(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)], authPermission:AuthPermission=Depends(get_auth_permission)):
         
@@ -198,6 +199,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     async def read_profile(self,profile:str,request:Request, response:Response, authPermission:AuthPermission=Depends(get_auth_permission)):
         return await self.mongooseService.get(self.Model,profile,True)
         
+    @Throttle(normal=(400,120))
     @UseRoles([Role.PUBLIC])
     @UseHandler(MiniServiceHandler,CeleryControlHandler)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)

@@ -265,7 +265,7 @@ class ConfigService(_service.BaseService):
         return super().destroy()
         
 @_service.Service()
-class UvicornWorkerService(_service.BaseService):
+class WorkerService(_service.BaseService):
 
     def __init__(self,configService:ConfigService):
         super().__init__()

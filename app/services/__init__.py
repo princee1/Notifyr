@@ -1,6 +1,6 @@
 from app.utils.globals import APP_MODE,ApplicationMode,CAPABILITIES
 
-from app.services.config_service import ConfigService,UvicornWorkerService
+from app.services.config_service import ConfigService,WorkerService
 from app.services.logger_service import LoggerService
 
 if APP_MODE == ApplicationMode.beat or APP_MODE == ApplicationMode.server or APP_MODE == ApplicationMode.worker:

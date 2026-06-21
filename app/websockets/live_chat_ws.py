@@ -21,9 +21,11 @@ class LiveChatWebSocket(BaseWebSocketRessource):
         self.chatService = chatService
     
 
-    @BaseWebSocketRessource.WSEndpoint('/live-chat/')
+    @BaseWebSocketRessource.WSEndpoint('/text/')
     async def websocket_endpoint(self, websocket:WebSocket,message:Any):
         ...
 
     
-
+    @BaseWebSocketRessource.WSEndpoint('/text/')
+    async def live_voice_chat(self,websocket:WebSocket,message:Any):
+        ...

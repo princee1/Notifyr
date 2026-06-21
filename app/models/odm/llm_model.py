@@ -116,7 +116,8 @@ class LLMProfileModel(BaseProfileModel):
     _unique_indexes: ClassVar[list[str]] = ['provider','api_name']
     _collection:ClassVar[Optional[str]] = MongooseDBConstant.LLM_COLLECTION
     _vault:ClassVar[str] = VaultConstant.LLM_SECRETS
-    _queue:ClassVar[str] = 'llm'
+    _celery:ClassVar[bool] = False
+    _queue:ClassVar[str] = ...
 
     _condition:ClassVar[Optional[MongoCondition]] = [
         MongoCondition(

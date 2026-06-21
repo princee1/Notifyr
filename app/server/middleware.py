@@ -6,7 +6,7 @@ from app.depends.orm_cache import AuthPermissionCache, BlacklistORMCache, Challe
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientORM
 from app.services.admin_service import AdminService
 from app.services.monitoring_service import MonitoringService
-from app.services.config_service import ConfigService, UvicornWorkerService
+from app.services.config_service import ConfigService, WorkerService
 from app.services.security_service import SecurityService, JWTAuthService
 from app.container import Get, InjectInMethod
 from fastapi import HTTPException, Request, Response,status
@@ -24,7 +24,7 @@ class MetaDataMiddleWare(MiddleWare):
         super().__init__(app, dispatch)
         self.configService:ConfigService = Get(ConfigService)
         self.monitoringService = Get(MonitoringService)
-        self.uvicornWorkerService= Get(UvicornWorkerService)
+        self.workerService= Get(WorkerService)
 
     @ExcludeOn(['/docs/*','/openapi.json'])
     async def dispatch(self, request: Request, call_next: Callable[..., Response]):
@@ -39,7 +39,7 @@ class MetaDataMiddleWare(MiddleWare):
             process_time = time.time() - start_time
             
             response.headers[HTTPHeaderConstant.X_PROCESS_TIME] = f"{process_time * 1000:.1f} (ms)"
-            response.headers[HTTPHeaderConstant.X_INSTANCE_ID]= self.uvicornWorkerService.INSTANCE_ID
+            response.headers[HTTPHeaderConstant.X_INSTANCE_ID]= self.workerService.INSTANCE_ID
             response.headers[HTTPHeaderConstant.X_REQUEST_ID] = request_id
 
             self.monitoringService.histogram_observe(MonitorConstant.REQUEST_LATENCY,process_time)
@@ -47,7 +47,7 @@ class MetaDataMiddleWare(MiddleWare):
         except HTTPException as e:
             process_time = time.time() - start_time
             self.monitoringService.histogram_observe(MonitorConstant.REQUEST_LATENCY,process_time)
-            return JSONResponse (e.detail,e.status_code,{"X-Error-Time":str(process_time) + ' (s)',HTTPHeaderConstant.X_INSTANCE_ID:self.uvicornWorkerService.INSTANCE_ID})
+            return JSONResponse (e.detail,e.status_code,{"X-Error-Time":str(process_time) + ' (s)',HTTPHeaderConstant.X_INSTANCE_ID:self.workerService.INSTANCE_ID})
         finally:
             self.monitoringService.gauge_dec(MonitorConstant.CONNECTION_COUNT)
 
