@@ -1,6 +1,8 @@
-from typing import Self, TypedDict,Optional,Dict,List,Literal,ClassVar
+from typing import Self,Optional,Dict,List,Literal,ClassVar
+from typing_extensions import TypedDict
 from pydantic import Field, HttpUrl,field_validator,model_validator
 from app.classes.profiles import BaseProfileModel, ProfilModelValues
+from app.utils.constant import MongooseDBConstant, VaultConstant
 
 Method = Literal["POST", "PUT", "PATCH", "DELETE", "GET"] 
 
@@ -25,6 +27,8 @@ class HTTPOutboundModel(BaseProfileModel):
     auth:Optional[AuthConfig] = None
 
     _secret_key:ClassVar[list[str]] = ['auth','secret_headers','url','secret_params']
+    _collection:ClassVar[str] = MongooseDBConstant.OUTBOUND_COLLECTION
+    _vault:ClassVar[str] = VaultConstant.OUTBOUND_SECRETS
 
     @field_validator('url',mode='after')
     def url_validator(cls,url):

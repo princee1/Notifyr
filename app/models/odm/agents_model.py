@@ -1,7 +1,8 @@
 import math
 from typing import Any, ClassVar, Dict, List, Literal, Optional, Self, Tuple
+from typing_extensions import Annotated
 
-from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
+from pydantic import AfterValidator, AllowInfNan, BaseModel, Field, PrivateAttr, field_validator, model_validator
 from app.classes.conversation import Auth, Channel
 from app.classes.embeddings import EmbeddingModel
 from app.classes.profiles import BaseProfileModel,BaseDocument
@@ -9,6 +10,14 @@ from app.classes.prompt import System
 from app.utils.constant import MongooseDBConstant
 from enum import Enum
 from app.utils.helper import subset_model
+
+
+def finite_to_int(v: float) -> float | int:
+    if math.isinf(v):
+        return v
+    return int(v)
+
+LimitValue = Annotated[float,AllowInfNan(),AfterValidator(finite_to_int),]
 
 class GraphitiSearchConfig(str, Enum):
     PERSONALIZED_MEMORY = "personalized_memory"
@@ -81,7 +90,7 @@ class DynamicModelSelectionConfig(BaseModel):
 class ModelCallGuardConfig(BaseModel):
     thread_limit:Optional[int] = Field(default=None,ge=100)
     run_limit:Optional[int] = Field(default=None,ge=5)
-    max_retries=Optional[int] = Field(default=None,ge=2,le=10)
+    max_retries:Optional[int] = Field(default=None,ge=2,le=10)
     max_delay:Optional[int] = Field(default=None,ge=60,le=280)
 
     _limit:bool = PrivateAttr(default=True)
@@ -129,8 +138,8 @@ class MessageLimitConfig(BaseModel):
 
 
 class MessageMarkerLimitConfig(BaseModel):
-    ai:float|int = Field(default=math.inf,allow_inf_nan=True,ge=100)
-    human:int|float = Field(default=math.inf,allow_inf_nan=True,ge=100)
+    ai:LimitValue = Field(default=math.inf,allow_inf_nan=True,ge=100)
+    human:LimitValue = Field(default=math.inf,allow_inf_nan=True,ge=100)
 
 class AuthMarkerFactorConfig(BaseModel):
     guest:int = Field(default=1,ge=1,le=10)
@@ -138,9 +147,9 @@ class AuthMarkerFactorConfig(BaseModel):
     registered:int = Field(default=1,ge=1,le=5)
 
 class ToolMarkerLimitConfig(BaseModel):
-    execution:int = Field(default=40,ge=40,allow_inf_nan=True)
-    error:int = Field(default=30,ge=30,allow_inf_nan=True)
-    manager:int = Field(default=20,ge=20,allow_inf_nan=True)
+    execution:LimitValue = Field(default=40,ge=40,allow_inf_nan=True)
+    error:LimitValue = Field(default=30,ge=30,allow_inf_nan=True)
+    manager:LimitValue = Field(default=20,ge=20,allow_inf_nan=True)
     
 class MarkerConfig(BaseModel):
     tool:ToolMarkerLimitConfig = Field(default_factory=ToolMarkerLimitConfig)

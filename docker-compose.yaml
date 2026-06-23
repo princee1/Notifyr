@@ -270,7 +270,7 @@ services:
       - MONGO_REPLICA_NAME=${MONGO_REPLICA_NAME:-nrp}
       - REDIS_HOST=${REDIS_HOST-redis}
       - BROKER_PROVIDER=${BROKER_PROVIDER:-rabbitmq}
-      - MODE=${MODE:-prod}
+      - MODE=${MODE:-prod}bea
     networks:
       - data_net
       - vault_net

@@ -83,7 +83,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
             return await self.profileService._delete_encrypted_creds(profileModel.profile_id,profileModel._vault)
 
         async def transaction():
-            async with self.mongooseService.transaction() as (session,tr):
+            async with self.mongooseService.transaction(lock='reader') as (session,tr):
                 result = await self.profileService.add_profile(profileModel,session=session)
                 merchant.activate_rollback()
                 profileMiniService = ProfileMiniService(None,None,self.redisService,result)

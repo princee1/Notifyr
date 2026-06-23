@@ -1,25 +1,73 @@
 import asyncio
 from contextlib import asynccontextmanager
-from typing import List, Literal, Type, TypeVar
-from pymongo.errors import ConnectionFailure,ConfigurationError, ServerSelectionTimeoutError
+from typing import List, Literal, Type, TypeVar, Union
+from pymongo.errors import ConnectionFailure,ConfigurationError, PyMongoError, ServerSelectionTimeoutError
 from pymongo import MongoClient
 from app.classes.mongo import BaseDocument, MongoCondition, simple_number_validation, validate_filter
-from app.definition._service import DEFAULT_BUILD_STATE, LinkDep, Service
+from app.definition._service import DEFAULT_BUILD_STATE, LinkDep, Service, ServiceLockType
 from app.errors.service_error import BuildFailureError
 from app.errors.db_error import *
 from beanie import Document, PydanticObjectId, init_beanie
 from app.services.config_service import ConfigService
-from app.services.database.base_db_service import TempCredentialsDatabaseService
+from app.services.database.base_db_service import CredentialName, TempCredentialsDatabaseService
 from app.services.file.file_service import FileService
 from app.services.vault_service import VaultService
-from app.utils.constant import MongooseDBConstant, VaultConstant, VaultTTLSyncConstant
+from app.utils.constant import AgenticConstant, MongooseDBConstant, VaultConstant, VaultTTLSyncConstant
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import ConnectionFailure, OperationFailure
 
 from app.utils.helper import subset_model
 
+AGENTIC_CREDS='agentic'
 
 D = TypeVar('D',bound=BaseDocument)
+
+ClientMode  = Literal['async','sync']
+
+class MongoClientStore:
+
+    def __init__(self,):
+        self.clients:dict[CredentialName,dict[ClientMode,Union[MongoClient,AsyncIOMotorClient]]] = {}
+    
+    def get_client(self,name:CredentialName,mode:ClientMode='async'):
+        if name not in self.clients:
+            raise MongoClientDataDoesNotExistError(name)
+        
+        if mode not in self.clients[name]:
+            raise MongoClientModeDoesNotExistError(name,mode)
+        
+        return self.clients[name][mode]
+    
+    def add_client(self,name:CredentialName,uri:str,mode:ClientMode|None  = None):
+        try:
+            self.get_client(name,mode)
+            raise MongoClientAlreadyExistError(name,mode)
+        except :
+            ...
+        
+        self.clients[name] = {}
+        if mode == None or mode == 'sync':
+            self.clients[name]['sync'] = MongoClient(uri)
+        elif mode == None or mode == 'async':
+            self.clients[name]['async'] = AsyncIOMotorClient(uri)
+        else:
+            ...
+    
+    def get_database(self,name:CredentialName,mode:ClientMode='async',database=MongooseDBConstant.DATABASE_NAME):
+        return self.get_client(name,mode)[database]
+    
+    def get_collection(self,name:CredentialName,collection:str,mode:ClientMode='async',database=MongooseDBConstant.DATABASE_NAME):
+        return self.get_database(name,mode,database)[collection]
+    
+    def iterator(self,mode:ClientMode|None = None):
+        for n,m in self.clients.items():
+            for t,client in m.items():
+                if mode==None or t ==mode:
+                    yield n,client
+
+    def clear(self):
+        self.clients.clear()
+
 
 @Service(links=[LinkDep(VaultService,to_build=True,to_destroy=True)])     
 class MongooseService(TempCredentialsDatabaseService):
@@ -32,7 +80,7 @@ class MongooseService(TempCredentialsDatabaseService):
     ):
         super().__init__(configService, fileService,vaultService,VaultTTLSyncConstant.MONGODB_AUTH_TTL)
 
-        self.client: AsyncIOMotorClient | None = None
+        self.client_store = MongoClientStore()
         self._documents = []
         self.mongoConstant = MongooseDBConstant()
 
@@ -71,9 +119,11 @@ class MongooseService(TempCredentialsDatabaseService):
         filter['_class_id'] = {"$regex": f"{model.__name__}$" }
 
         if collection not in self.mongoConstant.available_collection:
-            raise MongoCollectionDoesNotExists(collection)
+            raise MongoCollectionDoesNotExists(collection,model.__class__.__name__)
 
-        mongo_collection = self.sync_db[collection]
+        segment = self.get_credentials_name(model)
+
+        mongo_collection = self.client_store.get_collection(segment,collection,'sync')
         docs = mongo_collection.find(filter,projection).to_list()
 
         if issubclass(model,BaseDocument) and return_model and as_subset_model:
@@ -95,7 +145,6 @@ class MongooseService(TempCredentialsDatabaseService):
         
         return _docs
                 
-    
     ##################################################
     # Document integrity
     ##################################################
@@ -172,6 +221,9 @@ class MongooseService(TempCredentialsDatabaseService):
     def build(self, build_state=DEFAULT_BUILD_STATE):
         try:
             self.db_connection()
+            for n,client in self.client_store.iterator('sync'):
+                client.admin.command("ping")
+
             if build_state == DEFAULT_BUILD_STATE:
                 super().build(build_state)
                 
@@ -186,6 +238,10 @@ class MongooseService(TempCredentialsDatabaseService):
         except ServerSelectionTimeoutError as e:
             if build_state == DEFAULT_BUILD_STATE:
                 raise BuildFailureError(f"MongoDB server selection timeout: {e}")
+        
+        except PyMongoError as e:
+            if build_state == DEFAULT_BUILD_STATE:
+                raise BuildFailureError(f'MongoDB error: {e._message}')
 
         except Exception as e:
             print(e)
@@ -194,32 +250,39 @@ class MongooseService(TempCredentialsDatabaseService):
 
     def db_connection(self):
         # fetch fresh creds from Vault
-        self.creds = self.vaultService.database_engine.generate_credentials(VaultConstant.MONGO_ROLE)
-        
-        self.sync_client = MongoClient(self.mongo_uri)
-        self.sync_db = self.sync_client[MongooseDBConstant.DATABASE_NAME]
+        self.client_store.clear()
+        self.add_credentials(VaultConstant.MONGO_ROLE,'default')
+        self.add_credentials(VaultConstant.MONGO_ROLE,AGENTIC_CREDS)
 
-        self.client = AsyncIOMotorClient(self.mongo_uri)
-        self.motor_db = self.client[MongooseDBConstant.DATABASE_NAME]
+        self.client_store.add_client('default',self.mongo_uri())
+        self.client_store.add_client(AGENTIC_CREDS,self.mongo_uri(AGENTIC_CREDS))
 
     async def _creds_rotator(self):
         self.close_connection()
         self.db_connection()
         await self.init_connection()
+    
+    def revoke_lease(self):
+        super().revoke_lease()
+        super().revoke_lease(AGENTIC_CREDS)
 
     def close_connection(self):
         try:
-            self.client.close()
-            self.sync_client.close()
+            for n,c in self.client_store.iterator():
+                c.close()
         except Exception as e:
             ...
 
     async def init_connection(self,):
-        await init_beanie(
-                database=self.motor_db,
-                document_models=self._documents,
-            )
+        agentic_doc = [doc for doc in self._documents if doc in AgenticConstant.AGENTIC_COLLECTIONS ]
+        default_doc = [doc for doc in self._documents if doc not in AgenticConstant.AGENTIC_COLLECTIONS ]
         
+        default_db = self.client_store.get_database('default')
+        agentic_db = self.client_store.get_database(AGENTIC_CREDS)
+
+        await init_beanie(database=agentic_db,document_models=agentic_doc,)
+        await init_beanie(database=default_db,document_models=default_doc,)
+
     def register_document(self,*documents):
         temp = set()
         temp.update(self._documents)
@@ -227,28 +290,33 @@ class MongooseService(TempCredentialsDatabaseService):
         self._documents = list(temp)
 
     @asynccontextmanager
-    async def transaction(self,retries=1,timeout=5,wait=1):
-        async with await self.client.start_session() as session:
-            for attempt in range(retries):
-                try:
-                    async with session.start_transaction() as tr:
-                        yield session,tr
-                    break
-                except (ConnectionFailure, OperationFailure):
-                    if attempt == retries - 1:
-                        raise
-                    else:
-                        if wait:
-                            await asyncio.sleep(wait)
+    async def transaction(self,name:CredentialName='default', retries=1,timeout=5,wait=1,lock:ServiceLockType='none'):
+        lock = lock or 'none'
+        async with self.lock(lock):
+            client = self.client_store.get_client(name)
+            async with await client.start_session() as session:
+                for attempt in range(retries):
+                    try:
+                        async with session.start_transaction() as tr:
+                            yield session,tr
+                        break
+                    except (ConnectionFailure, OperationFailure):
+                        if attempt == retries - 1:
+                            raise
+                        else:
+                            if wait:
+                                await asyncio.sleep(wait)
 
     ##################################################
     # Connection string
     ##################################################
-    @property
-    def mongo_uri(self):
+    def mongo_uri(self,name:CredentialName='default'):
         replica = self.configService.getenv('MONGO_REPLICA_NAME','notifyr-0')
-        return f"mongodb://{self.db_user}:{self.db_password}@{self.configService.MONGO_HOST}:27017/{MongooseDBConstant.DATABASE_NAME}?replicaSet={replica}"
-        
+        return f"mongodb://{self.db_user(name)}:{self.db_password(name)}@{self.configService.MONGO_HOST}:27017/{MongooseDBConstant.DATABASE_NAME}?replicaSet={replica}"
+    
+    def get_credentials_name(self,model:Type[D]|D)->CredentialName:
+        return 'default' if model._collection not in AgenticConstant.AGENTIC_COLLECTIONS else AGENTIC_CREDS
+
     ##################################################
     # Healthcheck
     ##################################################

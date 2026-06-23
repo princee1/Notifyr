@@ -17,10 +17,13 @@ class RabbitMQService(TempCredentialsDatabaseService,BrokerService):
         if self.configService.BROKER_PROVIDER == 'redis':
             raise BuildWarningError("Redis is set as the broker; skipping RabbitMQ setup.")
     
+    def generate_credentials(self):
+        self.creds['default']=self.vaultService.rabbitmq_engine.generate_credentials()
+
     def build(self, build_state = ...):
-        self.creds=self.vaultService.rabbitmq_engine.generate_credentials()
+        self.generate_credentials()
         import pika
-        credentials = pika.PlainCredentials(username=self.db_user,password=self.db_password)
+        credentials = pika.PlainCredentials(username=self.db_user(),password=self.db_password())
 
         params = pika.ConnectionParameters(
             host=self.configService.RABBITMQ_HOST,
@@ -47,7 +50,7 @@ class RabbitMQService(TempCredentialsDatabaseService,BrokerService):
     def compute_broker_url(self):
         if self.configService.BROKER_PROVIDER == 'redis':
             return None
-        return f"amqp://{self.db_user}:{self.db_password}@{self.configService.RABBITMQ_HOST}:5672/{RabbitMQConstant.NOTIFYR_VIRTUAL_HOST}"
+        return f"amqp://{self.db_user()}:{self.db_password()}@{self.configService.RABBITMQ_HOST}:5672/{RabbitMQConstant.NOTIFYR_VIRTUAL_HOST}"
     
     async def _creds_rotator(self):
-        self.creds = self.vaultService.rabbitmq_engine.generate_credentials()
+        self.generate_credentials()

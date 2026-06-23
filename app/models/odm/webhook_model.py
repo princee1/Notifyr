@@ -61,7 +61,7 @@ class WebhookProfileModel(BaseProfileModel):
             #######################    HTTPWebhook     #######################
 ################################################################################################
 
-class HTTPWebhookModel(WebhookProfileModel,HTTPOutboundModel):
+class HTTPWebhookModel(HTTPOutboundModel,WebhookProfileModel):
     signature_config: Optional[SignatureConfig]=None
     method: Method = "POST"
     encoding:BodyEncoding = 'json'

@@ -220,7 +220,7 @@ class BaseTwilioCommunication(_service.BaseService,ProfileEventInterface):
             raise _service.BuildFailureError
         
     async def async_verify_dependency(self):
-        async with self.twilioService.lock(None,'reader'):
+        async with self.twilioService.lock('reader',None):
             return self.twilioService.service_status not in _service.ACCEPTABLE_STATES
         
     def set_url(self,status_callback,subject_id=None,twilio_tracking=None):

@@ -45,7 +45,7 @@ async def ProfileErrorStream(entries:list[tuple[str,ProfileErrorProtocol]]):
         try:
             await ErrorProfileModel.insert_many([ErrorProfileModel(**dict(e)) for e in data])
 
-            async with profileService.lock(None,'reader'):
+            async with profileService.lock('reader'):
                 for sid,status in service_ids.items():
                                     
                     if sid not in profileService.MiniServiceStore:

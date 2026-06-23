@@ -17,7 +17,7 @@ from app.services.file.file_service import FileService
 from app.services.reactive_service import ReactiveService
 from app.services.vault_service import VaultService
 from app.utils.constant import RedisConstant, SubConstant, VaultConstant
-from app.utils.globals import APP_MODE, ApplicationMode
+from app.utils.globals import APP_MODE, CAPABILITIES, ApplicationMode
 from app.utils.transformer import none_to_empty_str
 from redis.asyncio import Redis
 from redis import Redis as SyncRedis
@@ -29,6 +29,9 @@ DB_KEY = 'db'
 
 NOTIFYR_HOST = 'redis'
 
+CELERY_BACKEND_CREDS='celery-backend'
+CELERY_BROKER_CREDS='celery-broker'
+AGENTIC_CREDS='agentic'
 
 @Service()
 class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerService):
@@ -42,6 +45,7 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         self.workerService = workerService
         self.to_shutdown = False
         self.callbacks = CALLBACKS_CONFIG.copy()
+        self.db:Dict[Literal['celery','limiter','events','cache','config','agentic',0,1,2,3,4,5],Redis] = {}
 
         self.consumer_name = f'notifyr-consumer={self.workerService.INSTANCE_ID}'
 
@@ -179,12 +183,14 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
                 if self.to_shutdown:
                     return
 
-    async def close_connections(self,):
-        for config in self.callbacks.values():
-            if 'channel_tasks' in config and  config['channel_tasks']:
-                config['channel_tasks'].cancel()
-            if 'stream_tasks' in config and config['stream_tasks']:
-                config['stream_tasks'].cancel()
+    async def close_connections(self,cancel=False):
+
+        if cancel:
+            for config in self.callbacks.values():
+                if 'channel_tasks' in config and  config['channel_tasks']:
+                    config['channel_tasks'].cancel()
+                if 'stream_tasks' in config and config['stream_tasks']:
+                    config['stream_tasks'].cancel()
             
         len_db = len(self.db.keys())//2
         for i in range(len_db):
@@ -207,26 +213,53 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         return wrapper
 
     def build(self,build_state=-1):
-        self.creds = self.vaultService.database_engine.generate_credentials(VaultConstant.REDIS_ROLE)
-        self.backend_creds = self.vaultService.database_engine.generate_credentials(VaultConstant.CELERY_BACKEND_ROLE)
-        
-        if self.configService.BROKER_PROVIDER == 'redis':
-            self.broker_creds = self.vaultService.database_engine.generate_credentials(VaultConstant.CELERY_BACKEND_ROLE)
+        self.generate_credentials()
+        self.create_redis_instance()
 
-        self.redis_celery = Redis(host=self.configService.REDIS_HOST,db=RedisConstant.CELERY_DB,username=self.backend_creds['data']['username'],password=self.backend_creds['data']['password'])
-        self.redis_limiter = Redis(host=NOTIFYR_HOST,db=RedisConstant.LIMITER_DB,username=self.db_user,password=self.db_password)
-        self.redis_cache = Redis(host=NOTIFYR_HOST,db=RedisConstant.CACHE_DB,decode_responses=True,username=self.db_user,password=self.db_password)
-        self.redis_config = Redis(host=NOTIFYR_HOST,db=RedisConstant.CONFIG_DB,decode_responses=True,username=self.db_user,password=self.db_password)
-
-        if APP_MODE == ApplicationMode.beat or APP_MODE == ApplicationMode.worker:
-            self.redis_events = SyncRedis(host=NOTIFYR_HOST,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user,password=self.db_password)
-        else:
-            self.redis_events=Redis(host=NOTIFYR_HOST,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user,password=self.db_password)
-        
         if build_state == DEFAULT_BUILD_STATE:
             super().build(build_state)
 
-        self.db:Dict[Literal['celery','limiter','events','cache','config',0,1,2,3,4],Redis] = {
+        try:
+            temp_redis = [SyncRedis(host=NOTIFYR_HOST,password=self.db_password(),username=self.db_user()),
+                          SyncRedis(host=self.configService.REDIS_HOST,db=RedisConstant.CELERY_DB,username=self.db_user(CELERY_BACKEND_CREDS),password=self.db_password(CELERY_BACKEND_CREDS))]
+            for tr in temp_redis:
+                pong = tr.ping()
+                if not pong:
+                    raise ConnectionError(f"Redis at {tr.get_connection_kwargs().get('host',None)} ping failed")
+                tr.close()
+        except Exception as e:
+            print(e)
+            print(e.args)
+            print(e.__class__)
+            raise BuildFailureError(e.args)
+    
+    def generate_credentials(self):
+        self.add_credentials(VaultConstant.REDIS_ROLE)
+        self.add_credentials(VaultConstant.CELERY_BACKEND_ROLE,CELERY_BACKEND_CREDS)
+
+        if self.configService.BROKER_PROVIDER == 'redis':
+            self.add_credentials(VaultConstant.CELERY_BROKER_ROLE,CELERY_BROKER_CREDS)
+        
+        if CAPABILITIES['agentic']:
+            self.add_credentials(VaultConstant.REDIS_ROLE,AGENTIC_CREDS,suffix='agentic')
+
+    def create_redis_instance(self):
+        
+        self.redis_celery = Redis(host=self.configService.REDIS_HOST,db=RedisConstant.CELERY_DB,username=self.db_user(CELERY_BACKEND_CREDS),password=self.db_password(CELERY_BACKEND_CREDS))
+        self.redis_limiter = Redis(host=NOTIFYR_HOST,db=RedisConstant.LIMITER_DB,username=self.db_user(),password=self.db_password())
+        self.redis_cache = Redis(host=NOTIFYR_HOST,db=RedisConstant.CACHE_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
+        self.redis_config = Redis(host=NOTIFYR_HOST,db=RedisConstant.CONFIG_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
+        
+        if CAPABILITIES['agentic']:
+            self.redis_agentic = Redis(host=NOTIFYR_HOST,db=RedisConstant.AGENTIC_DB,decode_responses=True,username=self.db_user(AGENTIC_CREDS),password=self.db_password(AGENTIC_CREDS))        
+
+        if APP_MODE == ApplicationMode.beat or APP_MODE == ApplicationMode.worker:
+            self.redis_events = SyncRedis(host=NOTIFYR_HOST,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
+        else:
+            self.redis_events=Redis(host=NOTIFYR_HOST,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
+        
+        self.db.clear()
+        self.db.update({
             RedisConstant.CELERY_DB:self.redis_celery,
             RedisConstant.LIMITER_DB:self.redis_limiter,
             RedisConstant.EVENT_DB:self.redis_events,
@@ -236,27 +269,24 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
             'limiter':self.redis_limiter,
             'events': self.redis_events,
             'cache':self.redis_cache,
-            'config':self.redis_config
-        }
+            'config':self.redis_config,
+        })
 
-        try:
-            temp_redis = SyncRedis(host=NOTIFYR_HOST,password=self.db_password,username=self.db_user)
-            pong = temp_redis.ping()
-            if not pong:
-                raise ConnectionError("Redis ping failed")
-            temp_redis.close()
-        except Exception as e:
-            print(e)
-            print(e.args)
-            print(e.__class__)
-            raise BuildFailureError(e.args)
+        if CAPABILITIES['agentic']:
+            self.db['agentic']=self.redis_agentic
+            self.db[RedisConstant.AGENTIC_DB]= self.redis_agentic
 
     def revoke_lease(self):
         if self.configService.BROKER_PROVIDER == 'redis':
-            self.vaultService.revoke_lease(self.broker_creds['lease_id'])
+            super().revoke_lease(CELERY_BROKER_CREDS)
 
-        self.vaultService.revoke_lease(self.backend_creds['lease_id'])
-        return super().revoke_lease()
+        super().revoke_lease(CELERY_BACKEND_CREDS)
+        super().revoke_lease()
+
+    async def _creds_rotator(self):
+        await self.close_connections()
+        self.generate_credentials()
+        self.create_redis_instance()
 
     @check_db
     async def store(self,database:int|str,key:str,value:Any,expiry,nx:bool= False,xx:bool=False,redis:Redis=None):
@@ -355,10 +385,10 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         return await redis.zrem(name,*keys)
     
     def compute_backend_url(self,db=RedisConstant.CELERY_DB)->str:
-        return f"redis://{self.backend_creds['data']['username']}:{self.backend_creds['data']['password']}@{self.configService.REDIS_HOST}:6379/{db}"
+        return f"redis://{self.db_user(CELERY_BACKEND_CREDS)}:{self.db_password(CELERY_BACKEND_CREDS)}@{self.configService.REDIS_HOST}:6379/{db}"
 
     def compute_broker_url(self)->str:
         if self.configService.BROKER_PROVIDER == 'redis':
-            return f"redis://{self.broker_creds['data']['username']}:{self.broker_creds['data']['password']}@{self.configService.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}"
+            return f"redis://{self.db_user(CELERY_BROKER_CREDS)}:{self.db_user(CELERY_BROKER_CREDS)}@{self.configService.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}"
         else:
             return None

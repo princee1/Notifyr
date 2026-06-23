@@ -293,7 +293,7 @@ class CeleryService(BaseMiniServiceManager[ChannelMiniService], IntervalInterfac
 
     async def _check_workers_status(self):
         response = await self.ping(timeout=2)
-        async with self.lock(None,'writer'):
+        async with self.lock('writer',None):
             self._workers = response.copy()
 
     @property

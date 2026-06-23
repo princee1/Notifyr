@@ -229,8 +229,8 @@ class TransitVaultEngine(VaultEngine):
 
 class DatabaseVaultEngine(VaultEngine):
 
-    def generate_credentials(self,role:VaultConstant.NotifyrDynamicSecretsRole)->VaultDatabaseCredentials:
-        role=f"{ROLE_PREFIX}{role}{ROLE_SUFFIX}"        
+    def generate_credentials(self,role:VaultConstant.NotifyrDynamicSecretsRole,suffix:Literal['app','agentic']|None=None)->VaultDatabaseCredentials:
+        role=f"{suffix or ROLE_PREFIX}{role}{ROLE_SUFFIX}"        
         credentials = self.client.secrets.database.generate_credentials(
             name=role,
             mount_point=self.mount_point

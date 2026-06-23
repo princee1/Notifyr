@@ -307,10 +307,10 @@ create_default_token(){
   local balancer_exchange_token="balancer_exchange:$(pwgen -s 80 1)"
   local agentic_api_key="agentic:$(pwgen -s 70 1)"
 
-  vault kv put notifyr-secrets/internal-api/DMZ API_KEY="$dmz_api_key"
-  vault kv put notifyr-secrets/internal-api/BALANCER API_KEY="$balancer_exchange_token"
-  vault kv put notifyr-secrets/internal-api/DASHBOARD API_KEY="$dashboard_api_key"
-  vault kv put notifyr-secrets/internal-api/AGENTIC API_KEY="$agentic_api_key"
+  vault kv put notifyr-secrets/internal/DMZ API_KEY="$dmz_api_key"
+  vault kv put notifyr-secrets/internal/BALANCER API_KEY="$balancer_exchange_token"
+  vault kv put notifyr-secrets/internal/DASHBOARD API_KEY="$dashboard_api_key"
+  vault kv put notifyr-secrets/internal/AGENTIC API_KEY="$agentic_api_key"
 
   echo -n "$dmz_api_key" > "$VAULT_SECRETS_DIR/dmz-api-key.txt"
   echo -n "$dashboard_api_key" > "$VAULT_SECRETS_DIR/dashboard-api-key.txt"
@@ -360,19 +360,26 @@ setup_database_config(){
   # --- MONGO ROLES ---
   if ! setup_config_kv2 "mongo_roles" "check"; then
     echo "Configuring Mongo roles..."
-    vault write notifyr-database/roles/app-mongo-ntfr-role \
+    vault write notifyr-database/roles/agentic-mongo-ntfr-role \
       db_name="mongodb" \
       creation_statements='{ "db": "notifyr", "roles": [
       { "role": "readWrite", "db": "notifyr", "collection":"agent" },
+      { "role": "readWrite", "db": "notifyr", "collection":"chat" },
+      { "role": "readWrite", "db": "notifyr", "collection":"tool" },
+      { "role": "readWrite", "db": "notifyr", "collection":"store" },
+      { "role": "readWrite", "db": "notifyr", "collection":"chat_write" }]}' \
+      default_ttl="12h" \
+      max_ttl="16h"
+
+    vault write notifyr-database/roles/app-mongo-ntfr-role \
+      db_name="mongodb" \
+      creation_statements='{ "db": "notifyr", "roles": [
       { "role": "readWrite", "db": "notifyr", "collection":"communication" },
       { "role": "readWrite", "db": "notifyr", "collection":"webhook" },
       { "role": "readWrite", "db": "notifyr", "collection":"tasks" },
+      { "role": "readWrite", "db": "notifyr", "collection":"outbound" },
       { "role": "readWrite", "db": "notifyr", "collection":"errorProfile" },
-      { "role": "readWrite", "db": "notifyr", "collection":"workflow" },
-      { "role": "readWrite", "db": "notifyr", "collection":"chat" },
-      { "role": "readWrite", "db": "notifyr", "collection":"tool" },
-      { "role": "readWrite", "db": "notifyr", "collection":"chat_write" }]}' \
-
+      { "role": "readWrite", "db": "notifyr", "collection":"workflow" }]}' \
       default_ttl="12h" \
       max_ttl="16h"
 
@@ -402,13 +409,11 @@ setup_database_config(){
       creation_statements='["~notifyr/celery/backend/*","&notifyr/celery/backend/*", "+@string","+@transaction", "+@hash", "+@list", "+@set", "+@sortedset", "+@stream","+@keyspace", "+@pubsub", "-@admin", "-@dangerous", "-@connection", "+PING","+SELECT","+SCAN","+EXEC","+EVALSHA","+script|load", "+script|exists","+MULTI"]'
       #creation_statements='["~notifyr/celery/backend/*", "+PING","+SELECT","+SET","+SETEX","+GET","+DEL","+EXPIRE","+PEXPIRE","+TTL","+PTTL","+SCAN","+@hash","+@sortedset","+@read","+SMEMBERS","+PUBLISH","+SUBSCRIBE","+EXISTS","+EVAL", "+EVALSHA","+script|load", "+script|exists","+MULTI"]'
 
-
-    # vault write notifyr-database/roles/agentic-rol \
-    #   db_name="redis" \
-    #   default_ttl="12h" \
-    #   max_ttl="24h" \
-    #   creation_statements='["~notifyr/agentic/"]'
-
+    vault write notifyr-database/roles/agentic-redis-ntfr-role \
+      db_name="redis" \
+      default_ttl="12h" \
+      max_ttl="24h" \
+      creation_statements='["~notifyr/agentic/*","&notifyr/agentic/*"]'
 
     vault write notifyr-database/roles/admin-redis-celery-ntfr-role \
       db_name="redis" \

@@ -207,7 +207,7 @@ class RemoteAgentService(BaseMiniServiceManager[RemoteAgentMiniService]):
             raise BuildSkipError("Running in Agentic mode; RemoteAgentService not required.")
                 
         if build_state == DEFAULT_BUILD_STATE:
-            auth_key = self.vaultService.secrets_engine.read('internal-api','AGENTIC')['API_KEY']
+            auth_key = self.vaultService.secrets_engine.read('internal','AGENTIC')['API_KEY']
             self._agentic_api_key = ChaCha20SecretsWrapper(auth_key)
             
         if build_state == DEFAULT_BUILD_STATE or build_state == PING_AGENTIC_SERVER_BUILD_STATE:

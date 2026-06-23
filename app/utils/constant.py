@@ -176,16 +176,19 @@ class MongooseDBConstant:
     TOOL_COLLECTION = 'tool'
     STORE_COLLECTION = 'store'
 
+    OUTBOUND_COLLECTION = 'outbound'
     DATABASE_NAME = 'notifyr'
 
 
     def __init__(self):
-        self.available_collection = []
+        available_collection = []
 
         for x in dir(self.__class__):
             if x.endswith('_COLLECTION'):
                 x = getattr(self.__class__,x)
-                self.available_collection.append(x)
+                available_collection.append(x)
+        
+        self.available_collection = set(available_collection)
             
 ########################                     ########################################
 
@@ -246,15 +249,16 @@ class VaultConstant:
         return f'/vault/shared/{file}'
 
 
-    NotifyrSecretType = Literal['tokens','webhook','messages','generation-id','communication','setting','internal-api']
+    NotifyrSecretType = Literal['tokens','webhook','messages','generation-id','communication','setting','internal']
     TOKENS_SECRETS = 'tokens'
     MESSAGES_SECRETS = 'messages'
     GENERATION_ID = 'generation-id'
     COMMUNICATION_SECRETS = 'communication'
     LLM_SECRETS = 'llm'
+    OUTBOUND_SECRETS='outbound'
     WEBHOOK_SECRETS = 'webhook'
     SETTINGS_SECRETS='setting'
-    INTERNAL_API_SECRETS='internal-api'
+    INTERNAL_API_SECRETS='internal'
 
 
     NotifyrTransitKeyType = Literal['profiles-key','messages-key','chat-key','s3-rest-key']
@@ -332,6 +336,7 @@ class RedisConstant:
     LIMITER_DB=1
     CACHE_DB=3
     CONFIG_DB=4
+    AGENTIC_DB=5
 
 ########################                     ########################################
 
@@ -565,6 +570,8 @@ class AgenticConstant:
     VECTOR_ROUTER = lambda p:f'/vector{p}'
     K_GRAPH_ROUTER = lambda p:f'/k-graph{p}'
     CONVERSATION_ROUTER = lambda p:f'/conversation{p}'
+
+    AGENTIC_COLLECTIONS = {MongooseDBConstant.LLM_COLLECTION,MongooseDBConstant.TOOL_COLLECTION,MongooseDBConstant.STORE_COLLECTION,MongooseDBConstant.CHAT_COLLECTION,MongooseDBConstant.CHAT_WRITE_COLLECTION}
 
 class Crawl4AIConstant:
     INGEST_PARENT_DIR ='crawl4ai'

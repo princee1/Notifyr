@@ -21,8 +21,8 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
             self.generate_creds()
             conn = psycopg2.connect(
                 dbname=self.DATABASE_NAME,
-                user=self.db_user,
-                password=self.db_password,
+                user=self.db_user(),
+                password=self.db_password(),
                 host=self.configService.POSTGRES_HOST,
                 port=5432
             )
@@ -40,11 +40,11 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
                 ...
 
     def generate_creds(self):
-        self.creds = self.vaultService.database_engine.generate_credentials(VaultConstant.POSTGRES_ROLE)
+        self.add_credentials(VaultConstant.POSTGRES_ROLE)
         
     @property
     def postgres_uri(self):
-        return f"postgres://{self.db_user}:{self.db_password}@{self.configService.POSTGRES_HOST}:5432/{self.DATABASE_NAME}"
+        return f"postgres://{self.db_user()}:{self.db_password()}@{self.configService.POSTGRES_HOST}:5432/{self.DATABASE_NAME}"
         
     async def init_connection(self,close=False):
         if close:

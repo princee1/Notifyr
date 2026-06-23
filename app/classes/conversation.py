@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
-from typing import List, Literal, NamedTuple, Optional, TypedDict, Union, get_args
+from typing import List, Literal, NamedTuple, Optional, Union, get_args
 from time import time
+from typing_extensions import TypedDict
 from pydantic import BaseModel, Field
 from app.utils.helper import generateId
 

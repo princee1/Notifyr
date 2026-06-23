@@ -11,7 +11,7 @@ from app.definition._service import BaseService, Service
 from app.services.config_service import ConfigService, WorkerService
 from app.services.file.file_service import FileService
 from app.utils.constant import RedisConstant
-from app.services.database.redis_service import RedisService
+from app.services.database.redis_service import RedisService,AGENTIC_CREDS
 from app.utils.globals import APP_MODE,ApplicationMode
 from app.utils.helper import SliceMode, slice_dict
 
@@ -76,9 +76,9 @@ class ArqIngestTaskService(BaseService):
     def build(self, build_state = ...):
         if APP_MODE == ApplicationMode.server or APP_MODE == ApplicationMode.arq:
             #self.arq_url = self.redisService.compute_backend_url(RedisConstant.EVENT_DB)
-            user,password = self.redisService.db_user,self.redisService.db_password
+            user,password = self.redisService.db_user(AGENTIC_CREDS),self.redisService.db_password(AGENTIC_CREDS)
             host = self.configService.REDIS_HOST
-            self.arq_url = f"redis://{user}:{password}@redis:6379/{RedisConstant.EVENT_DB}"
+            self.arq_url = f"redis://{user}:{password}@redis:6379/{RedisConstant.AGENTIC_DB}"
 
     def __init__(self,redisService:RedisService,configService:ConfigService,workerService:WorkerService,fileService:FileService):
         self.redisService = redisService
@@ -116,7 +116,6 @@ class ArqIngestTaskService(BaseService):
             for r in results:
                 if r.success == success:
                     temp.append(r)
-            
             return temp
         
         async def fetch(self,job_id:str,queue_name:str=INGESTION_QUEUE_NAME):

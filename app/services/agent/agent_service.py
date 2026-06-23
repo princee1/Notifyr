@@ -390,7 +390,7 @@ class AgentService(BaseMiniServiceManager[AgentMiniService],agent_pb2_grpc.Agent
         @functools.wraps(function)
         async def handler(self:Self,request:Any|list[Any],context):
             try:
-                async with self.lock(None,'reader'):
+                async with self.lock('reader',None):
                     if self.service_status not in acceptable_service:
                         raise AgentNotAvailableError(self.service_status,self.reason,None)
                     return await function(self,request,context)
@@ -544,7 +544,7 @@ class AgentService(BaseMiniServiceManager[AgentMiniService],agent_pb2_grpc.Agent
 
     def build(self, build_state=DEFAULT_BUILD_STATE):
         if build_state == DEFAULT_BUILD_STATE:
-            secrets = self.vaultService.secrets_engine.read('internal-api','AGENTIC')
+            secrets = self.vaultService.secrets_engine.read('internal','AGENTIC')
 
             if API_SECRET_KEY not in secrets:
                 raise BuildFailureError(f'No Internal {API_SECRET_KEY} between the agentic server and the worker process found, cannot connect')
@@ -553,7 +553,7 @@ class AgentService(BaseMiniServiceManager[AgentMiniService],agent_pb2_grpc.Agent
             self.reactive_subject = self.reactiveService.create_subject(REACTIVE_TOKEN_COST,'Normal',REACTIVE_TOKEN_COST,'message')
 
         if build_state == DEFAULT_BUILD_STATE or build_state == RECREATE_MEMORY_BUILD_STATE:
-            self.checkpointer = MongoDBSaver(self.mongooseService.sync_client,
+            self.checkpointer = MongoDBSaver(self.mongooseService.client_store.get_client(AGENTIC_CREDS,'sync'),
                                         MongooseDBConstant.DATABASE_NAME,
                                         MongooseDBConstant.CHAT_COLLECTION,
                                         MongooseDBConstant.CHAT_WRITE_COLLECTION,

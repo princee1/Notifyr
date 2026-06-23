@@ -62,8 +62,8 @@ class ObjectS3Service(TempCredentialsDatabaseService):
 
         self.client = Minio(
             endpoint=self.configService.S3_ENDPOINT,
-            access_key=self.db_user,
-            secret_key=self.db_password,
+            access_key=self.db_user(),
+            secret_key=self.db_password(),
             secure=self.configService.MINIO_SSL,
             region=self.configService.S3_REGION
         )
@@ -77,13 +77,15 @@ class ObjectS3Service(TempCredentialsDatabaseService):
         else:
             creds = self.vaultService.minio_engine.generate_sts_credentials(ttl_seconds=VaultTTLSyncConstant.MINIO_TTL)
 
-        self.creds = VaultDatabaseCredentials(request_id=creds['request_id'], lease_id=creds["lease_id"], lease_duration=creds["lease_duration"],
+        creds = VaultDatabaseCredentials(request_id=creds['request_id'], lease_id=creds["lease_id"], lease_duration=creds["lease_duration"],
             renewable=creds["renewable"], wrap_info=creds.get("wrap_info", None), data=VaultDatabaseCredentialsData(
                 username=creds['data']['accessKeyId'],
                 password=creds['data']['secretAccessKey']
             ), 
             auth=creds.get('auth', None), warnings=creds.get('warnings', None)
         )
+
+        self.creds['default'] = creds
 
     @RunInThreadPool
     async def delete_object(self,object_name: str,version_id: str = None,buckets=MinioConstant.ASSETS_BUCKET):

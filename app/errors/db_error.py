@@ -1,8 +1,25 @@
-
 from typing import Any, Optional
-
 from aiohttp_retry import Any
 from app.definition._error import BaseError
+
+
+###############################################################################################################################
+#############################################                                                      ############################
+###############################################################################################################################
+
+class VaultCredentialAlreadyExistError(BaseError):
+    def __init__(self,name):
+        super().__init__(name)
+        self.name = name
+
+class VaultCredentialNameDoesNotExistError(BaseError):
+    def __init__(self,name):
+        super().__init__(name)
+        self.name = name
+
+###############################################################################################################################
+#############################################                                                      ############################
+###############################################################################################################################
 
 
 class RedisStreamDoesNotExistsError(BaseError):
@@ -10,6 +27,11 @@ class RedisStreamDoesNotExistsError(BaseError):
 
 class RedisDatabaseDoesNotExistsError(BaseError):
     ...
+
+###############################################################################################################################
+#############################################                                                      ############################
+###############################################################################################################################
+
 
 class DocumentPrimaryKeyConflictError(BaseError):
     def __init__(self, *args, pk_value=None, model=None,pk_field=None):
@@ -62,8 +84,32 @@ class DocumentAlreadyDeletedError(BaseError):
     ...
 
 class MongoCollectionDoesNotExists(BaseError):
-    ...
+    def __init__(self, collection:str,model:str=None):
+        super().__init__(collection,model)
+        self.collection = collection
+        self.model = model
 
+
+class MongoClientDataDoesNotExistError(BaseError):
+    def __init__(self,name):
+        super().__init__(name)
+        self.name = name
+
+class MongoClientAlreadyExistError(BaseError):
+    def __init__(self,name,mode):
+        super().__init__(name,mode)
+        self.name = name
+        self.mode =mode
+
+class MongoClientModeDoesNotExistError(BaseError):
+    def __init__(self,name,mode):
+        super().__init__(name,mode)
+        self.name = name
+        self.mode = mode
+
+###############################################################################################################################
+#############################################                                                      ############################
+###############################################################################################################################
 
 class MemCachedTypeValueError(BaseError):
     ...

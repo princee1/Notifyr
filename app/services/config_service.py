@@ -288,5 +288,6 @@ class WorkerService(_service.BaseService):
             return True
      
     def build(self, build_state = ...):
-        self.INSTANCE_ID = f"notiry://{PROCESS_PID}:{PROCESS_PID}@{socket.gethostname()}:{APP_MODE.value}/"        
+        self.HOSTNAME = socket.gethostname()
+        self.INSTANCE_ID = f"notiry://{PROCESS_PID}:{PROCESS_PID}@{self.HOSTNAME}:{APP_MODE.value}/"        
         raise BuildOkError()

@@ -113,7 +113,8 @@ class VariableProtocol(TypedDict):
     variables:dict[str,Any] = None
     variables_function:str = None
 
-ServiceLockType = Literal['reader', 'writer'] 
+ServiceLockType = Literal['reader', 'writer','none'] 
+NONE_LOCK_TYPE = '__none_lock__'
 
 #################################            #####################################
 
@@ -233,9 +234,14 @@ class BaseService():
                 _lock = self.statusLock.reader
             case 'writer':
                 _lock = self.statusLock.writer
+            case 'none':
+                _lock = NONE_LOCK_TYPE
             case _:
                 raise TypeError(f'{mode} is an invalid mode type')
-        
+            
+        if _lock == NONE_LOCK_TYPE:
+            yield self
+
         async with _lock:
             yield self
         
@@ -546,7 +552,7 @@ class BaseMiniServiceManager(BaseService,Generic[TMS]):
         return self.MiniServiceStore.get(miniServiceId)
     
     @asynccontextmanager
-    async def lock(self,miniServiceId:str|None,mode:ServiceLockType='reader',miniServiceMode:ServiceLockType='reader'):
+    async def lock(self,mode:ServiceLockType,miniServiceId:str|None=None,miniServiceMode:ServiceLockType='reader'):
         async with (self.statusLock.reader if mode =='reader' else self.statusLock.writer):
             if miniServiceId == None:
                 yield self

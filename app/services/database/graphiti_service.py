@@ -88,24 +88,14 @@ class GraphitiService(TempCredentialsDatabaseService):
     def build(self, build_state = DEFAULT_BUILD_STATE):
         try:
             client = None
-            self.creds = self.vaultService.database_engine.generate_credentials(role='neo4j')
+            self.add_credentials('neo4j')
             if build_state == DEFAULT_BUILD_STATE:
-                self.client = AsyncGraphDatabase().driver(self.uri,auth=(self.db_user,self.db_password))
-                client = GraphDatabase.driver(self.uri,auth=(self.db_user,self.db_password),user_agent=self.workerService.INSTANCE_ID)
+                client = GraphDatabase.driver(self.uri,auth=(self.db_user(),self.db_password()),user_agent=self.workerService.INSTANCE_ID)
                 client.verify_connectivity()
                 client.verify_authentication()
             
             if build_state == DEFAULT_BUILD_STATE and APP_MODE == ApplicationMode.agentic:
                 super().build(build_state)
-
-            providers = self._setup_llm_provider()
-            llm_client,embedding,cross_encoder = self._initialize_graphiti_llm(*providers)
-            self.graphiti = Graphiti(graph_driver=Neo4jDriver(
-                self.uri,
-                self.db_user,
-                self.db_password,
-                GraphitiConstant.DATABASE_NAME
-            ),llm_client=llm_client,embedder=embedding,cross_encoder=cross_encoder,max_coroutines=self.configService.GRAPHITI_MAX_COROUTINES)
 
         except BuildError as e:
             raise e
@@ -115,9 +105,30 @@ class GraphitiService(TempCredentialsDatabaseService):
             if client != None:
                 client.close()
 
+    def init_client(self):    
+        providers = self._setup_llm_provider()
+        llm_client,embedding,cross_encoder = self._initialize_graphiti_llm(*providers)
+        self.client = AsyncGraphDatabase().driver(self.uri,auth=(self.db_user(),self.db_password()))
+        self.graphiti = Graphiti(graph_driver=Neo4jDriver(
+            self.uri,
+            self.db_user(),
+            self.db_password(),
+            GraphitiConstant.DATABASE_NAME
+        ),llm_client=llm_client,embedder=embedding,cross_encoder=cross_encoder,max_coroutines=self.configService.GRAPHITI_MAX_COROUTINES)
+
+    async def _creds_rotator(self):
+        await self.close()
+        self.add_credentials('neo4j')
+        self.init_client()
+        
     async def close(self):
         await self.graphiti.close()
         await self.client.close()
+
+    ##########################################################################
+    #######################                             ######################
+    #######################                             ######################
+    ##########################################################################
 
     async def search(self,query:str,group_type:GroupType,groups_ids:list[str]=[],center_node:str=None,edges:list[str]=[],entities:list[str]=[],config:SearchConfig=None):
         edges = self.customService.to_edge(edges).keys() or None
