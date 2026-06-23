@@ -192,8 +192,10 @@ class AppServer(EventInterface):
         # FastAPICache.init(InMemoryBackend(),prefix="fastapi-cache")
         if CAPABILITIES['agentic']:
             remoteAgentService = Get(RemoteAgentService)
-            await remoteAgentService.init_http_session()
-            await remoteAgentService.start_agentic_healthcheck()
+            if remoteAgentService.service_status == ServiceStatus.NOT_AVAILABLE:
+                return
+            remoteAgentService.init_http_session()
+            remoteAgentService.start_agentic_healthcheck()
             await remoteAgentService.connect_channel()
         
     @register_hook('shutdown',active=True)
@@ -204,6 +206,8 @@ class AppServer(EventInterface):
 
         if CAPABILITIES['agentic']:
             remoteAgentService = Get(RemoteAgentService)
+            if remoteAgentService.service_status == ServiceStatus.NOT_AVAILABLE:
+                return
             await remoteAgentService.close_http_session()
             await remoteAgentService.cancel_agentic_health_task()
             await remoteAgentService.disconnect_channel()

@@ -12,12 +12,13 @@ from app.errors.async_error import ReactiveSubjectNotFoundError
 from app.errors.db_error import RedisDatabaseDoesNotExistsError, RedisStreamDoesNotExistsError
 from app.errors.service_error import BuildFailureError
 from app.services.config_service import ConfigService, WorkerService
-from app.services.database.base_db_service import BrokerService, ResultBackendService, TempCredentialsDatabaseService
+from app.services.database.base_db_service import BrokerService, CredentialName, ResultBackendService, TempCredentialsDatabaseService
 from app.services.file.file_service import FileService
 from app.services.reactive_service import ReactiveService
 from app.services.vault_service import VaultService
 from app.utils.constant import RedisConstant, SubConstant, VaultConstant
 from app.utils.globals import APP_MODE, CAPABILITIES, ApplicationMode
+from app.utils.toolbox import RunInThreadPool
 from app.utils.transformer import none_to_empty_str
 from redis.asyncio import Redis
 from redis import Redis as SyncRedis
@@ -32,6 +33,8 @@ NOTIFYR_HOST = 'redis'
 CELERY_BACKEND_CREDS='celery-backend'
 CELERY_BROKER_CREDS='celery-broker'
 AGENTIC_CREDS='agentic'
+
+AGENTIC_APP_MODE_CRED = {ApplicationMode.arq,ApplicationMode.agentic,ApplicationMode.server}
 
 @Service()
 class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerService):
@@ -240,7 +243,7 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         if self.configService.BROKER_PROVIDER == 'redis':
             self.add_credentials(VaultConstant.CELERY_BROKER_ROLE,CELERY_BROKER_CREDS)
         
-        if CAPABILITIES['agentic']:
+        if CAPABILITIES['agentic'] and APP_MODE in AGENTIC_APP_MODE_CRED:
             self.add_credentials(VaultConstant.REDIS_ROLE,AGENTIC_CREDS,suffix='agentic')
 
     def create_redis_instance(self):
@@ -250,7 +253,7 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         self.redis_cache = Redis(host=NOTIFYR_HOST,db=RedisConstant.CACHE_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
         self.redis_config = Redis(host=NOTIFYR_HOST,db=RedisConstant.CONFIG_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
         
-        if CAPABILITIES['agentic']:
+        if CAPABILITIES['agentic'] and APP_MODE in AGENTIC_APP_MODE_CRED:
             self.redis_agentic = Redis(host=NOTIFYR_HOST,db=RedisConstant.AGENTIC_DB,decode_responses=True,username=self.db_user(AGENTIC_CREDS),password=self.db_password(AGENTIC_CREDS))        
 
         if APP_MODE == ApplicationMode.beat or APP_MODE == ApplicationMode.worker:
@@ -272,20 +275,24 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
             'config':self.redis_config,
         })
 
-        if CAPABILITIES['agentic']:
+        if CAPABILITIES['agentic'] and APP_MODE in AGENTIC_APP_MODE_CRED:
             self.db['agentic']=self.redis_agentic
             self.db[RedisConstant.AGENTIC_DB]= self.redis_agentic
 
-    def revoke_lease(self):
+    def revoke_lease(self,name:CredentialName=None):
         if self.configService.BROKER_PROVIDER == 'redis':
-            super().revoke_lease(CELERY_BROKER_CREDS)
+            if name == None or name == CELERY_BROKER_CREDS:
+                super().revoke_lease(CELERY_BROKER_CREDS)
 
-        super().revoke_lease(CELERY_BACKEND_CREDS)
-        super().revoke_lease()
+        if name == None or name == CELERY_BACKEND_CREDS:
+            super().revoke_lease(CELERY_BACKEND_CREDS)
+        
+        if name == None or name == 'default':
+            super().revoke_lease()
 
     async def _creds_rotator(self):
         await self.close_connections()
-        self.generate_credentials()
+        await RunInThreadPool(self.generate_credentials)()
         self.create_redis_instance()
 
     @check_db

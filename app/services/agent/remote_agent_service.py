@@ -290,7 +290,7 @@ class RemoteAgentService(BaseMiniServiceManager[RemoteAgentMiniService]):
         async with self.lock(None,'writer'):
            self.grpc_state = state
                 
-    async def init_http_session(self, timeout: int = 30):
+    def init_http_session(self, timeout: int = 30):
         """Initialize a shared aiohttp.ClientSession for HTTP requests to agentic."""
         if self._http_session and not self._http_session.closed:
             return

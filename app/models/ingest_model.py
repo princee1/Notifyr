@@ -245,7 +245,7 @@ class ResearchIngestDataResponse(BaseIngestModelResponse):
 	vector:bool = False
 	graph:bool = True
 	metadata: Optional[ResearchIngestUriMetadata] = None
-	task = ArqDataTaskConstant.RESEARCH_DATA_TASK
+	task:ArqDataTaskConstant._DATA_TASK_TYPE = ArqDataTaskConstant.RESEARCH_DATA_TASK
 
 
 ###################################################################################################

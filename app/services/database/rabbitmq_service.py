@@ -5,6 +5,7 @@ from app.services.database.base_db_service import BrokerService, TempCredentials
 from app.services.file.file_service import FileService
 from app.services.vault_service import VaultService
 from app.utils.constant import RabbitMQConstant
+from app.utils.toolbox import RunInThreadPool
 
 
 @Service(links=[LinkDep(VaultService,to_build=True,to_destroy=True)]) 
@@ -18,6 +19,8 @@ class RabbitMQService(TempCredentialsDatabaseService,BrokerService):
             raise BuildWarningError("Redis is set as the broker; skipping RabbitMQ setup.")
     
     def generate_credentials(self):
+        if 'default' in self.creds:
+            self.revoke_lease()
         self.creds['default']=self.vaultService.rabbitmq_engine.generate_credentials()
 
     def build(self, build_state = ...):
@@ -53,4 +56,4 @@ class RabbitMQService(TempCredentialsDatabaseService,BrokerService):
         return f"amqp://{self.db_user()}:{self.db_password()}@{self.configService.RABBITMQ_HOST}:5672/{RabbitMQConstant.NOTIFYR_VIRTUAL_HOST}"
     
     async def _creds_rotator(self):
-        self.generate_credentials()
+        await RunInThreadPool(self.generate_credentials)()

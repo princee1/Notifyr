@@ -54,7 +54,7 @@ class ChaCha20SecretsWrapper(SecretsWrapper):
     @Time
     def _decrypt(self):
         
-        if isinstance(self.cipher_data, str):
+        if isinstance(self.cipher_data, bytes):
             cipher = self._new_cipher()
             decryptor = cipher.decryptor()
             return decryptor.update(self.cipher_data).decode()

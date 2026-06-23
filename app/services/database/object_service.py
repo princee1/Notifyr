@@ -37,6 +37,7 @@ class ObjectS3Service(TempCredentialsDatabaseService):
     
     def build(self, build_state = DEFAULT_BUILD_STATE):
         try:
+            self.generate_credentials()
             self.client_init()
             if build_state == DEFAULT_BUILD_STATE:
                 super().build(build_state)
@@ -49,17 +50,21 @@ class ObjectS3Service(TempCredentialsDatabaseService):
             raise BuildFailureError(f'Failed to build objectS3Service: {str(e)}') from e
         except MinioAdminException as e:
             raise BuildFailureError(f'Failed to build objectS3Service due to Minio Admin error: {str(e)}') from e
-        
-        
+         
     async def _creds_rotator(self):
-        self.client_init()        
+        await RunInThreadPool(self.generate_credentials)()
+        self.client_init()    
+
+    def generate_credentials(self):
+        if 'default' in self.creds:
+            self.revoke_lease()
+
+        if self.configService.S3_CRED_TYPE == 'MINIO':
+            self._generate_minio_creds()
+        else:
+            self._generate_aws_creds() 
 
     def client_init(self,):
-        if self.configService.S3_CRED_TYPE == 'MINIO':
-            self.generate_minio_creds()
-        else:
-            self.generate_aws_creds()
-
         self.client = Minio(
             endpoint=self.configService.S3_ENDPOINT,
             access_key=self.db_user(),
@@ -68,10 +73,10 @@ class ObjectS3Service(TempCredentialsDatabaseService):
             region=self.configService.S3_REGION
         )
         
-    def generate_aws_creds(self):
+    def _generate_aws_creds(self):
         ...  # Implementation for generating AWS credentials
 
-    def generate_minio_creds(self):
+    def _generate_minio_creds(self):
         if not self.configService.MINIO_STS_ENABLE:
             creds = self.vaultService.minio_engine.generate_static_credentials()
         else:

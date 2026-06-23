@@ -92,7 +92,6 @@ class ProfileService(BaseMiniServiceManager[ProfileMiniService[BaseProfileModel]
         self.MiniServiceStore.clear()
         self.Singleton.clear()
         for v in ProfilModelValues.values():
-            print(v)
             for m in self.mongooseService.sync_find(v._collection,v):
                 p = ProfileMiniService[v](
                     self.vaultService,

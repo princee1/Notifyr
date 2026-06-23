@@ -7,6 +7,7 @@ from app.services.database.base_db_service import TempCredentialsDatabaseService
 from app.services.file.file_service import FileService
 from app.services.vault_service import VaultService
 from app.utils.constant import VaultConstant, VaultTTLSyncConstant
+from app.utils.toolbox import RunInThreadPool
 
 
 @Service(links=[LinkDep(VaultService,to_build=True,to_destroy=True)])
@@ -18,7 +19,7 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
 
     def build(self,build_state=-1):
         try:
-            self.generate_creds()
+            self.generate_credentials()
             conn = psycopg2.connect(
                 dbname=self.DATABASE_NAME,
                 user=self.db_user(),
@@ -28,7 +29,6 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
             )
             if build_state == DEFAULT_BUILD_STATE:
                 super().build(build_state)
-            self.generate_creds()
         except Exception as e:
             raise BuildFailureError(f"Error during Tortoise ORM connection: {e}")
 
@@ -39,7 +39,7 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
             except:
                 ...
 
-    def generate_creds(self):
+    def generate_credentials(self):
         self.add_credentials(VaultConstant.POSTGRES_ROLE)
         
     @property
@@ -51,13 +51,14 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
             await self.close_connections()
         await Tortoise.init(
             db_url=self.postgres_uri,
-            modules={"models": ["app.models.contacts_model","app.models.security_model","app.models.email_model","app.models.link_model","app.models.twilio_model"]},
+            modules={"models": ["app.models.orm.contacts_model","app.models.security_model","app.models.email_model","app.models.orm.link_model","app.models.orm.twilio_model"]},
         )
 
     async def close_connections(self):
         await Tortoise.close_connections()    
 
     async def _creds_rotator(self):
-        self.generate_creds()
+        await self.close_connections()
+        await RunInThreadPool(self.generate_credentials)()
         await self.init_connection(True)
 

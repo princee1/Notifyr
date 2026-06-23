@@ -32,7 +32,7 @@ WORKDIR /build/neo4j-vault-database-plugin/
 
 RUN make build
 
-FROM hashicorp/vault:latest
+FROM hashicorp/vault:1.21
 
 USER root
 
@@ -227,6 +227,10 @@ path "notifyr-rabbitmq/creds/celery-ntfr-role" {
 # ---- DATABASE ENGINE ----
 
 path "notifyr-database/creds/app*" {
+  capabilities = ["read"]
+}
+
+path "notifyr-database/creds/agentic*" {
   capabilities = ["read"]
 }
 

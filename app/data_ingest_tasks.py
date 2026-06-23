@@ -338,7 +338,7 @@ async def process_research_task(ctx:dict[str,Any],vector_config:VectorConfig|Non
     markdownResearch: MarkdownCostDefinition = ctx[RESEARCH_MARKDOWN_KEY]
 
     researcher =  ResearchIngestion(
-        researchTask=ResearchDataIngestModel(lang=lang,vector_config=vector_config,graph_config=graph_config,lang=lang,name=uri,**slice_dict(kwargs,['subject'],'exclude')),
+        researchTask=ResearchDataIngestModel(lang=lang,vector_config=vector_config,graph_config=graph_config,name=uri,**slice_dict(kwargs,['subject'],'exclude')),
         research_llm_config=researchLLMProvider.crawl_llm,
         crawl_llm_config=crawlLLMProvider.crawl_llm,
         base_dir=f"{configService.DATA_INGESTION_DIR}crawl4ai/",

@@ -90,7 +90,7 @@ class MongoCollectionDoesNotExists(BaseError):
         self.model = model
 
 
-class MongoClientDataDoesNotExistError(BaseError):
+class MongoClientNameDoesNotExistError(BaseError):
     def __init__(self,name):
         super().__init__(name)
         self.name = name

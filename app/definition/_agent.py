@@ -1,7 +1,7 @@
 import asyncio
 from dataclasses import dataclass, field
 import math
-from typing import Callable, Dict, List, Literal, NamedTuple, Optional, Type, TypedDict,Any, override
+from typing import Callable, Dict, List, Literal, NamedTuple, Optional, Type, TypedDict,Any, overload
 from langchain.agents.middleware.types import AgentState, ContextT, dynamic_prompt
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
@@ -253,7 +253,7 @@ class SummarizationMiddleware(BaseSummarizationMiddleware):
                                     "tool_message_count":tool_message_count,
                                     },)]
     
-    @override
+    @overload
     async def abefore_model(self, state: AgentState[Any], runtime: Runtime[ContextT]) -> dict[str, Any] | None:
         """Process messages before model invocation, potentially triggering summarization.
         Args:

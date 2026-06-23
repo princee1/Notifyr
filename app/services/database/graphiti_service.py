@@ -41,6 +41,7 @@ from app.utils.helper import uuid_v1_mc
 from app.utils.constant import GraphitiConstant, LLMProviderConstant, RedisConstant, VaultConstant, VaultTTLSyncConstant
 import app.prompt.graphiti_prompt as graphiti_prompt
 from app.utils.globals import APP_MODE, ApplicationMode
+from app.utils.toolbox import RunInThreadPool
 
 
 CLIENT_MAP:Dict[LLMProviderConstant.LLMProvider,Type[LLMClient]] = {
@@ -88,7 +89,7 @@ class GraphitiService(TempCredentialsDatabaseService):
     def build(self, build_state = DEFAULT_BUILD_STATE):
         try:
             client = None
-            self.add_credentials('neo4j')
+            self.add_credentials(VaultConstant.NEO4J_ROLE)
             if build_state == DEFAULT_BUILD_STATE:
                 client = GraphDatabase.driver(self.uri,auth=(self.db_user(),self.db_password()),user_agent=self.workerService.INSTANCE_ID)
                 client.verify_connectivity()
@@ -96,6 +97,8 @@ class GraphitiService(TempCredentialsDatabaseService):
             
             if build_state == DEFAULT_BUILD_STATE and APP_MODE == ApplicationMode.agentic:
                 super().build(build_state)
+            
+            self.init_client()
 
         except BuildError as e:
             raise e
@@ -118,7 +121,7 @@ class GraphitiService(TempCredentialsDatabaseService):
 
     async def _creds_rotator(self):
         await self.close()
-        self.add_credentials('neo4j')
+        await RunInThreadPool(self.add_credentials)(VaultConstant.NEO4J_ROLE)
         self.init_client()
         
     async def close(self):

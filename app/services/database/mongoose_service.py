@@ -17,6 +17,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import ConnectionFailure, OperationFailure
 
 from app.utils.helper import subset_model
+from app.utils.toolbox import RunInThreadPool
 
 AGENTIC_CREDS='agentic'
 
@@ -31,7 +32,7 @@ class MongoClientStore:
     
     def get_client(self,name:CredentialName,mode:ClientMode='async'):
         if name not in self.clients:
-            raise MongoClientDataDoesNotExistError(name)
+            raise MongoClientNameDoesNotExistError(name)
         
         if mode not in self.clients[name]:
             raise MongoClientModeDoesNotExistError(name,mode)
@@ -44,14 +45,12 @@ class MongoClientStore:
             raise MongoClientAlreadyExistError(name,mode)
         except :
             ...
-        
+
         self.clients[name] = {}
         if mode == None or mode == 'sync':
             self.clients[name]['sync'] = MongoClient(uri)
-        elif mode == None or mode == 'async':
+        if mode == None or mode == 'async':
             self.clients[name]['async'] = AsyncIOMotorClient(uri)
-        else:
-            ...
     
     def get_database(self,name:CredentialName,mode:ClientMode='async',database=MongooseDBConstant.DATABASE_NAME):
         return self.get_client(name,mode)[database]
@@ -220,6 +219,7 @@ class MongooseService(TempCredentialsDatabaseService):
 
     def build(self, build_state=DEFAULT_BUILD_STATE):
         try:
+            self.generate_credentials()
             self.db_connection()
             for n,client in self.client_store.iterator('sync'):
                 client.admin.command("ping")
@@ -251,20 +251,24 @@ class MongooseService(TempCredentialsDatabaseService):
     def db_connection(self):
         # fetch fresh creds from Vault
         self.client_store.clear()
+        self.client_store.add_client('default',self.mongo_uri())
+        self.client_store.add_client(AGENTIC_CREDS,self.mongo_uri(AGENTIC_CREDS))
+    
+    def generate_credentials(self):
         self.add_credentials(VaultConstant.MONGO_ROLE,'default')
         self.add_credentials(VaultConstant.MONGO_ROLE,AGENTIC_CREDS)
 
-        self.client_store.add_client('default',self.mongo_uri())
-        self.client_store.add_client(AGENTIC_CREDS,self.mongo_uri(AGENTIC_CREDS))
-
     async def _creds_rotator(self):
         self.close_connection()
+        await RunInThreadPool(self.generate_credentials)()
         self.db_connection()
         await self.init_connection()
     
-    def revoke_lease(self):
-        super().revoke_lease()
-        super().revoke_lease(AGENTIC_CREDS)
+    def revoke_lease(self,name:CredentialName=None):
+        if name == None or name == 'default':
+            super().revoke_lease()
+        if name == None or name == AGENTIC_CREDS:
+            super().revoke_lease(AGENTIC_CREDS)
 
     def close_connection(self):
         try:
@@ -277,6 +281,8 @@ class MongooseService(TempCredentialsDatabaseService):
         agentic_doc = [doc for doc in self._documents if doc in AgenticConstant.AGENTIC_COLLECTIONS ]
         default_doc = [doc for doc in self._documents if doc not in AgenticConstant.AGENTIC_COLLECTIONS ]
         
+
+
         default_db = self.client_store.get_database('default')
         agentic_db = self.client_store.get_database(AGENTIC_CREDS)
 

@@ -80,7 +80,7 @@ class TaskService(BaseService,SchedulerInterface):
         
         redis_client = self.redisService.db[RedisConstant.CELERY_DB]
         self.redis_client = self.redisService.db[RedisConstant.EVENT_DB]
-        self.mongo_client = self.mongooseService.sync_client
+        self.mongo_client = self.mongooseService.client_store.get_client('default','sync')
         jobstores = {
             "redis": RedisJobStore(
                 host=redis_client.connection_pool.connection_kwargs.get("host", "localhost"),

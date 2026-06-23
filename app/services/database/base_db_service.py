@@ -54,8 +54,10 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
         
 
     def add_credentials(self,role:VaultConstant.NotifyrDynamicSecretsRole,name:CredentialName='default',suffix=None,strict=False):
-        if name in self.creds and strict:
-            raise VaultCredentialAlreadyExistError(name)
+        if name in self.creds:
+            self.revoke_lease(name)
+            if strict:
+                raise VaultCredentialAlreadyExistError(name)
 
         cred = self.vaultService.database_engine.generate_credentials(role,suffix)
         self.creds[name] = cred
@@ -98,7 +100,10 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
         return creds.get('lease_id',None)
     
     def revoke_lease(self,name:CredentialName='default'):
-        return self.vaultService.revoke_lease(self.lease_id(name))
+        try:
+            return self.vaultService.revoke_lease(self.lease_id(name))
+        except Exception as e:
+            print(e)
 
     async def _check_vault_status(self):
         async with self.vaultService.lock('reader'):
@@ -111,7 +116,6 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
             while retry<self.max_retry:
                 try:
                     if temp_service == ServiceStatus.AVAILABLE:
-                        await RunInThreadPool(self.revoke_lease)()
                         await self._creds_rotator()
                         self.last_rotated=time.time()
                     else:

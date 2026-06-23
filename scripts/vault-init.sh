@@ -409,12 +409,6 @@ setup_database_config(){
       creation_statements='["~notifyr/celery/backend/*","&notifyr/celery/backend/*", "+@string","+@transaction", "+@hash", "+@list", "+@set", "+@sortedset", "+@stream","+@keyspace", "+@pubsub", "-@admin", "-@dangerous", "-@connection", "+PING","+SELECT","+SCAN","+EXEC","+EVALSHA","+script|load", "+script|exists","+MULTI"]'
       #creation_statements='["~notifyr/celery/backend/*", "+PING","+SELECT","+SET","+SETEX","+GET","+DEL","+EXPIRE","+PEXPIRE","+TTL","+PTTL","+SCAN","+@hash","+@sortedset","+@read","+SMEMBERS","+PUBLISH","+SUBSCRIBE","+EXISTS","+EVAL", "+EVALSHA","+script|load", "+script|exists","+MULTI"]'
 
-    vault write notifyr-database/roles/agentic-redis-ntfr-role \
-      db_name="redis" \
-      default_ttl="12h" \
-      max_ttl="24h" \
-      creation_statements='["~notifyr/agentic/*","&notifyr/agentic/*"]'
-
     vault write notifyr-database/roles/admin-redis-celery-ntfr-role \
       db_name="redis" \
       default_ttl="2h" \
@@ -427,6 +421,12 @@ setup_database_config(){
       max_ttl="35d" \
       creation_statements='["~*","&*", "+@string", "+@hash", "+@list", "+@set", "+@sortedset","+@transaction", "+@stream","+@keyspace", "+@pubsub", "-@admin", "-@dangerous", "-@connection", "+PING","+SELECT","+SCAN","+INFO","+KEYS"]'
 
+    vault write notifyr-database/roles/agentic-redis-ntfr-role \
+      db_name="redis-notifyr" \
+      default_ttl="12h" \
+      max_ttl="24h" \
+      creation_statements='["~notifyr/agentic/*","&notifyr/agentic/*","+@all"]'
+    
     vault write notifyr-database/roles/admin-redis-ntfr-role \
       db_name="redis-notifyr" \
       default_ttl="2h" \
@@ -543,7 +543,7 @@ create_database_config(){
     echo "Configuring MongoDB connection..."
     vault write notifyr-database/config/mongodb \
       plugin_name="mongodb-database-plugin" \
-      allowed_roles="admin-mongo-ntfr-role, app-mongo-ntfr-role" \
+      allowed_roles="admin-mongo-ntfr-role, app-mongo-ntfr-role, agentic-mongo-ntfr-role" \
       connection_url="mongodb://{{username}}:{{password}}@$MONGO_HOST:27017/admin?replicaSet=$MONGO_REPLICA_NAME" \
       username="$MONGO_INITDB_ROOT_USERNAME" \
       password="$MONGO_INITDB_ROOT_PASSWORD"
@@ -561,7 +561,7 @@ create_database_config(){
         port=6379 \
         username="vaultadmin-redis" \
         password="$REDIS_NOTIFYR_PASSWORD" \
-        allowed_roles="admin-redis-ntfr-role, app-redis-ntfr-role, credit-redis-ntfr-role"
+        allowed_roles="admin-redis-ntfr-role, app-redis-ntfr-role, credit-redis-ntfr-role, agentic-redis-ntfr-role"
     vault write -f notifyr-database/rotate-root/redis-notifyr
     
 

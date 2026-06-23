@@ -17,7 +17,7 @@ from app.prompt import system_prompt
 from app.services.config_service import ConfigService
 from app.services.cost_service import CostService
 from app.services.custom_service import CustomService
-from app.services.database.mongoose_service import MongooseService
+from app.services.database.mongoose_service import AGENTIC_CREDS, MongooseService
 from app.services.database.qdrant_service import QdrantService
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, LinkDep, MiniService, MiniServiceStore, Service, BaseMiniServiceManager, ServiceStatus
 from app.services.database.redis_service import RedisService
