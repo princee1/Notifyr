@@ -32,7 +32,8 @@ def VECTOR_RAG_TEMPLATE(chunks:list[ChunkContext])->str:
                 f'</chunk>'
             )
         )
-    return f"<context>{'\n'.join(contexts)}</context>"
+    contexts = "\n".join(contexts)
+    return f"<context>{contexts}</context>"
 
 def GRAPH_RAG_TEMPLATE(facts: list[KGraphFacts]) -> str:
     """

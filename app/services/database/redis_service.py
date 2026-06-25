@@ -129,11 +129,10 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
                     print(e)
                     print(e.__class__)
                     
-
         await pubsub.subscribe(**{channels:handler_wrapper}) # TODO Maybe add the function as await
 
         while True:
-            await pubsub.get_message(ignore_subscribe_messages=True, timeout=1)
+            await pubsub.get_message(ignore_subscribe_messages=True, timeout=3)
             await asyncio.sleep(0.01)
             if self.to_shutdown:
                 return
@@ -221,7 +220,6 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
 
         if build_state == DEFAULT_BUILD_STATE:
             super().build(build_state)
-
         try:
             temp_redis = [SyncRedis(host=NOTIFYR_HOST,password=self.db_password(),username=self.db_user()),
                           SyncRedis(host=self.configService.REDIS_HOST,db=RedisConstant.CELERY_DB,username=self.db_user(CELERY_BACKEND_CREDS),password=self.db_password(CELERY_BACKEND_CREDS))]

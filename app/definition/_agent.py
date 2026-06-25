@@ -156,7 +156,7 @@ class NotifyrContext:
     auth: Auth
     save:bool=True
     user: Optional[dict]  = field(default=None,init=False)
-    retry_count = field(default=0,init=False)
+    retry_count:int = field(default=0,init=False)
 
     def __post_init__(self):
         ...

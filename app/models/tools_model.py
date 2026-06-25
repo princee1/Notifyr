@@ -9,8 +9,8 @@ from mongoquery import Query
 from app.utils.constant import MongooseDBConstant
 
 class ContextCondition(BaseModel):
-    auth:List[Auth] = Field(default_factory=list,le=len(get_args(Auth)))
-    channel:List[Channel] = Field(default_factory=list,le=len(get_args(Channel)))
+    auth:List[Auth] = Field(default_factory=list,max_length=len(get_args(Auth)))
+    channel:List[Channel] = Field(default_factory=list,max_length=len(get_args(Channel)))
 
     user_rule:Dict[str,Any] = Field(default=None,max_length=1) # More granular mapping
 

@@ -25,6 +25,7 @@ from app.models.vector_model import QdrantEmbedRequestModel
 from app.services  import MongooseService
 from app.services.agent.llm_service import LLMService
 from app.services.agent.remote_agent_service import RemoteAgentMiniService
+from app.services.chat_service import ChatService
 from app.services.custom_service import CustomService
 from app.utils.constant import AgenticConstant, CostConstant, LLMProviderConstant
 from app.utils.helper import subset_model
@@ -186,7 +187,7 @@ class AgentsRessource(BaseHTTPRessource):
     @LockService(LLMService,lockType='reader',as_manager=False)
     @BaseHTTPRessource.HTTPRoute('/prompt/{agent}/',methods=[HTTPMethod.POST],mount=False)
     async def prompt_playground(self,request:Request,agent:Annotated[RemoteAgentMiniService,Depends(get_agent)], response:Response,profile:str=Depends(get_agent), authPermission:AuthPermission= Depends(get_auth_permission)):
-        return await agent.Prompt()
+        await agent.Prompt()
     
     @UsePermission(AgentPermission)
     @UseHandler(LLMHandler,AgenticHandler,GrpcHandler)

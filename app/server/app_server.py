@@ -7,6 +7,9 @@ from app.definition._error import ServerFileError
 from app.callback import Callbacks_Stream,Callbacks_Sub
 from app.definition._service import ACCEPTABLE_STATES, BaseService, ServiceStatus
 from app.interface.timers import  SchedulerInterface
+from app.models.odm.agents_model import AgentModel
+from app.models.odm.custom_model import CustomModel
+from app.models.tools_model import ToolModel
 from app.ressources import *
 from app.services.agent.remote_agent_service import RemoteAgentService
 from app.services.cost_service import CostService
@@ -51,7 +54,7 @@ HTTPMode = Literal['HTTPS', 'HTTP']
 
 BUILTIN_ERROR = [AttributeError,NameError,TypeError,TimeoutError,BufferError,MemoryError,KeyError,NameError,IndexError,RuntimeError,OSError,Exception]
 
-DOCUMENTS = [*ProfilModelValues.values(),CommunicationProfileModel,WebhookProfileModel]
+DOCUMENTS = [*ProfilModelValues.values(),CommunicationProfileModel,WebhookProfileModel,ToolModel,AgentModel,CustomModel]
 
 _shutdown_hooks=[]
 _startup_hooks=[]
@@ -202,7 +205,7 @@ class AppServer(EventInterface):
     async def on_shutdown(self):
         redisService:RedisService = Get(RedisService)
         redisService.to_shutdown = True
-        await redisService.close_connections()
+        await redisService.close_connections(True)
 
         if CAPABILITIES['agentic']:
             remoteAgentService = Get(RemoteAgentService)

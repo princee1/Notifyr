@@ -63,24 +63,22 @@ if APP_MODE == ApplicationMode.server:
 
 
 if APP_MODE == ApplicationMode.agentic and CAPABILITIES['agentic']:
+    from app.services.monitoring_service import MonitoringService
     from app.services.database.redis_service import RedisService
     from app.services.cost_service import CostService
-    from app.services.monitoring_service import MonitoringService
     from app.services.database.memcached_service import MemCachedService
     from app.services.vault_service import VaultService
     from app.services.database.mongoose_service import MongooseService
     from app.services.agent.llm_service import LLMService
-    from app.services.agent.remote_agent_service import RemoteAgentService
-    from app.services.agent.agent_service import AgentService
     from app.services.database.qdrant_service import QdrantService
-    from app.services.database.graphiti_service import GraphitiService
-    from app.services.file.file_service import FileService
     from app.services.profile_service import ProfileService
-    from app.services.worker.arq_service import ArqIngestTaskService
-    from app.services.reactive_service import ReactiveService
     from app.services.custom_service import CustomService
     from app.services.system_service import SystemService
-
+    from app.services.database.graphiti_service import GraphitiService
+    from app.services.file.file_service import FileService
+    from app.services.worker.arq_service import ArqIngestTaskService
+    from app.services.reactive_service import ReactiveService
+    from app.services.agent.agent_service import AgentService
 
 
 if APP_MODE == ApplicationMode.arq and CAPABILITIES['agentic']:

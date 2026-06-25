@@ -954,14 +954,21 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
     cost_callback = cost_decorator()
 
     def client_private_key_func(request:Request):
+        if not configService.SECURITY_FLAG:
+            return workerService.INSTANCE_ID
         authPermission:AuthPermission =  get_auth_permission(request)
         return authPermission['client_id']
 
     def group_private_key_func(request:Request):
+        if not configService.SECURITY_FLAG:
+            return workerService.HOSTNAME
         authPermission:AuthPermission = get_auth_permission(request)
         if not (group_id:=authPermission.get('group_id',None)):
             return client_private_key_func(request)
         return group_id
+    
+    def session_key_func(request:Request):
+        return ...
 
     if isinstance(key_func,str):
         match key_func:
@@ -972,7 +979,7 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
             case 'none':
                 key_func = lambda: 'none'
             case 'session':
-                ...
+                key_func = session_key_func
             case 'worker':
                 key_func = lambda : workerService.INSTANCE_ID
             case 'client':

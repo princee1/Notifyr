@@ -281,8 +281,6 @@ class MongooseService(TempCredentialsDatabaseService):
         agentic_doc = [doc for doc in self._documents if doc in AgenticConstant.AGENTIC_COLLECTIONS ]
         default_doc = [doc for doc in self._documents if doc not in AgenticConstant.AGENTIC_COLLECTIONS ]
         
-
-
         default_db = self.client_store.get_database('default')
         agentic_db = self.client_store.get_database(AGENTIC_CREDS)
 

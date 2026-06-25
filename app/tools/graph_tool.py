@@ -163,7 +163,7 @@ class KnowledgeGraphTool(RetrievalTool):
 
 class MemoryTool(KnowledgeGraphTool):
     
-    condition: ContextCondition =ContextCondition(auth=['registered'])
+    condition: ContextCondition = ContextCondition(auth=['registered'])
     group_type:GroupType = 'contact' 
     
     def __init__(self,graphitiService:GraphitiService,configService:ConfigService,config:MemoryToolModel):

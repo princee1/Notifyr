@@ -559,7 +559,10 @@ class AgentService(BaseMiniServiceManager[AgentMiniService],agent_pb2_grpc.Agent
                                         MongooseDBConstant.CHAT_WRITE_COLLECTION,
                                         )
 
-            self.store = MongoDBStore(...) #TODO Create the store
+            self.store = MongoDBStore(self.mongooseService.client_store.get_collection(
+                AGENTIC_CREDS,
+                MongooseDBConstant.STORE_COLLECTION,
+                'sync'))
 
         if build_state == DEFAULT_BUILD_STATE or build_state == TOOL_RECREATE_BUILD_STATE:
             self.tools_config.clear()

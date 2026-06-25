@@ -78,24 +78,22 @@ class TaskService(BaseService,SchedulerInterface):
         if self._builded:
             self.shutdown(False)
         
-        redis_client = self.redisService.db[RedisConstant.CELERY_DB]
         self.redis_client = self.redisService.db[RedisConstant.EVENT_DB]
-        self.mongo_client = self.mongooseService.client_store.get_client('default','sync')
         jobstores = {
             "redis": RedisJobStore(
-                host=redis_client.connection_pool.connection_kwargs.get("host", "localhost"),
-                port=redis_client.connection_pool.connection_kwargs.get("port", 6379),
+                host=self.redisService.redis_celery.connection_pool.connection_kwargs.get("host", "localhost"),
+                port=self.redisService.redis_celery.connection_pool.connection_kwargs.get("port", 6379),
                 db=RedisConstant.CELERY_DB,
                 jobs_key=f"{SCHEDULER_JOBSTORE_PREFIX}/jobs@",
                 run_times_key=f"{SCHEDULER_JOBSTORE_PREFIX}:run_times",
-                username=redis_client.connection_pool.connection_kwargs.get('username'),
-                password=redis_client.connection_pool.connection_kwargs.get('password')
+                username=self.redisService.redis_celery.connection_pool.connection_kwargs.get('username'),
+                password=self.redisService.redis_celery.connection_pool.connection_kwargs.get('password')
                 ),
             'memory':MemoryJobStore(),
             'mongodb':MongoDBJobStore(
                 MongooseDBConstant.DATABASE_NAME,
                 collection=MongooseDBConstant.TASKS_COLLECTION,
-                client=self.mongo_client
+                client=self.mongooseService.client_store.get_client('default','sync')
                 )
         }
         jobstore = self.configService.APS_JOBSTORE if not self.fallback_to_memory else 'memory'

@@ -380,9 +380,10 @@ class RemoteAgentService(BaseMiniServiceManager[RemoteAgentMiniService]):
         if self.service_status != ServiceStatus.AVAILABLE:
             return
         
-        health_url = f"wss://{self.agentic_http_host}/health/"
+        health_url = f"ws://{self.agentic_http_host}/health/"
         async def _http_health_check():
             async for websocket in connect(health_url,additional_headers=self.Headers,max_size=100,):
+                print('Websocket id: ',websocket.id)
                 try:
                     async with self.lock(None,'writer'):
                         self.http_state = AgenticHTTPState.CONNECTED

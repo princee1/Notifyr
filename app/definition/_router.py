@@ -37,7 +37,7 @@ def lock_service_wrapper(service:Type[BaseService]):
 
 class HandlerDetails:
     
-    def __init__(self,status_code:int,detail:Callable[[Exception],str|None|dict]|None|str):
+    def __init__(self,status_code:int,detail:Callable[[Exception],str|None|dict]|None|str=lambda e:str(e)):
         self.status_code = status_code
         self.detail = detail
     
@@ -76,6 +76,6 @@ def exception_handler(error:Dict[Type[Exception],HandlerDetails]):
 
 
 def get_instance_id(request:Request)->str:
-    if not (instance_id:=request.headers.get(HTTPHeaderConstant,None)):
+    if not (instance_id:=request.headers.get(HTTPHeaderConstant.X_NOTIFYR_APP_INSTANCE_ID,None)):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED,'Missing instance_id')
     return instance_id

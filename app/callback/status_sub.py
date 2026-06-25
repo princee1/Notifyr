@@ -156,7 +156,7 @@ async def SetMiniProfilStatus(message:MiniStateProtocol):
         service:BaseMiniServiceManager = Get(service)
         if not isinstance(service,BaseMiniServiceManager):
             return 
-        async with service.statusLock.reader:
+        async with service.lock('reader'):
             miniService = service.MiniServiceStore.get(message.get('id',None))
             return await SetServiceStatus(message,miniService)
     except Exception:

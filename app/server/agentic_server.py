@@ -74,7 +74,7 @@ def bootstrap_agent_app()->FastAPI:
         mongooseService.shutdown()
 
         redisService.to_shutdown = True
-        await redisService.close_connections()
+        await redisService.close_connections(True)
         await RunInThreadPool(redisService.revoke_lease)()
         await RunInThreadPool(mongooseService.revoke_lease)()
 
@@ -115,7 +115,7 @@ def bootstrap_agent_app()->FastAPI:
     
     @app.post('/ping/',status_code=status.HTTP_200_OK)
     async def ping(request:Request,instance_id:str=Depends(get_instance_id)):
-        ...
+        return None
 
     for r in Routers:
         app.include_router(r)
