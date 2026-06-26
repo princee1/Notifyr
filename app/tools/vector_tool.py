@@ -4,7 +4,7 @@ from app.classes.embeddings import EmbeddingWrapper
 from app.classes.qdrant import QdrantCollectionDoesNotExistError
 from app.definition._tool import ToolContextFactory, RetrievalTool, ToolRuntime, ToolStatus
 from app.definition._agent import BaseToolArtifact, ToolMetadata
-from app.models.tools_model import VectorToolModel
+from app.models.odm.tools_model import VectorToolModel
 from app.services.config_service import ConfigService
 from app.services.custom_service import CustomService
 from app.services.database.qdrant_service import QdrantService

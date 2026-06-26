@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response,status
 from app.container import Get
-from app.definition._router import get_instance_id, lock_service_wrapper
+from app.definition._router import auth_depends, get_instance_id, lock_service_wrapper
 from app.models.graphiti_model import GraphitiSearchModel
 from app.services.database.memcached_service import MemCachedService
 from app.services.database.graphiti_service import GraphitiService
@@ -24,7 +24,7 @@ def KnowledgeGraphDBRouter(depends:list=None):
     async def on_shutdown():
         await graphitiService.close()
     
-    router = APIRouter(prefix=prefix,on_startup=[on_startup],on_shutdown=[on_shutdown])
+    router = APIRouter(prefix=prefix,on_startup=[on_startup],on_shutdown=[on_shutdown],dependencies=[Depends(auth_depends)])
 
 
     ########################         #######################

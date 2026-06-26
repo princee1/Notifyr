@@ -556,8 +556,9 @@ class BaseMiniServiceManager(BaseService,Generic[TMS]):
         async with (self.statusLock.reader if mode =='reader' else self.statusLock.writer):
             if miniServiceId == None:
                 yield self
-            async with self.MiniServiceStore.lock(miniServiceId,miniServiceMode) as service:
-                yield service
+            else:
+                async with self.MiniServiceStore.lock(miniServiceId,miniServiceMode) as service:
+                    yield service
 
 S = TypeVar('S', bound=BaseService)
 

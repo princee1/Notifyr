@@ -4,7 +4,7 @@ from app.classes.chunk import ChunkSource
 from app.classes.nodes import KGraphFacts, SourceDescription
 from app.definition._agent import BaseToolArtifact
 from app.definition._tool import RetrievalTool, ToolContextFactory, ToolRuntime
-from app.models.tools_model import BroadRerankerSearchConfig, ContextCondition, KnowledgeGraphToolModel, MemoryToolModel
+from app.models.odm.tools_model import BroadRerankerSearchConfig, ContextCondition, KnowledgeGraphToolModel, MemoryToolModel
 from app.services.config_service import ConfigService
 from app.services.custom_service import CustomService
 from app.services.database.graphiti_service import GraphitiService, GroupType,SearchResults,EntityNode,EpisodicNode,EntityEdge

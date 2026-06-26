@@ -1,7 +1,7 @@
 import asyncio
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, WebSocketException,status
 from app.classes.prompt import PromptToken
-from app.definition._router import get_instance_id
+from app.definition._router import auth_depends, get_instance_id
 from app.utils.constant import CostConstant, HTTPHeaderConstant
 from app.utils.toolbox import RunInThreadPool
 from app.container import Get,Register
@@ -57,14 +57,10 @@ def bootstrap_agent_app()->FastAPI:
 
     grpcTask = GrpcTask()    
 
-    def auth_depends(token: str = Depends(get_bearer_token)):
-        if agentService.AgenticAPIKey != token:
-            raise HTTPException(status_code=401,detail="Unauthorized")
-
     async def on_startup():
         mongooseService.start()
         redisService.register_consumer(callbacks_stream=Callbacks_Stream,callbacks_sub=Callbacks_Sub)
-        grpcTask.set_task(asyncio.create_task(agentService.serve()))
+        await agentService.serve()
         agentService.subscribe_token(
             on_next=lambda t: asyncio.create_task(on_purchase_token_next(t)),
             on_complete=on_purchase_token_complete
@@ -80,17 +76,15 @@ def bootstrap_agent_app()->FastAPI:
 
         await RunInThreadPool(vaultService.revoke_auth_token)()
         await agentService.stop_grpc()
-        grpcTask.cancel_task()
 
         agentService.complete_purchase()
 
     app = FastAPI(on_shutdown=[on_shutdown],
                   on_startup=[on_startup],
-                  dependencies=[Depends(auth_depends)]
                   )
     
     @app.websocket("/health/")
-    async def health(ws: WebSocket):
+    async def health(ws:WebSocket):
         if not (instance_id:=ws.headers.get(HTTPHeaderConstant.X_NOTIFYR_APP_INSTANCE_ID,None)):
             raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION,reason="Missing instance id")
         
@@ -105,7 +99,7 @@ def bootstrap_agent_app()->FastAPI:
         try:
             while True:
                 await ws.send_text("pong")
-                await asyncio.sleep(5)
+                await asyncio.sleep(60)
 
         except WebSocketDisconnect as e:
             print(f"client:{instance_id} disconnected")
@@ -113,7 +107,7 @@ def bootstrap_agent_app()->FastAPI:
         except Exception as e:
             print("websocket error:", e)
     
-    @app.post('/ping/',status_code=status.HTTP_200_OK)
+    @app.post('/ping/',status_code=status.HTTP_200_OK, dependencies=[Depends(auth_depends)])
     async def ping(request:Request,instance_id:str=Depends(get_instance_id)):
         return None
 

@@ -3,7 +3,7 @@ from typing import Any, ClassVar, Dict, List, Literal, Optional, Self, Tuple
 from typing_extensions import Annotated
 
 from pydantic import AfterValidator, AllowInfNan, BaseModel, Field, PrivateAttr, field_validator, model_validator
-from app.classes.conversation import Auth, Channel
+from app.classes.conversation import Auth, Channel, ContentBlock
 from app.classes.embeddings import EmbeddingModel
 from app.classes.profiles import BaseProfileModel,BaseDocument
 from app.classes.prompt import System
@@ -256,3 +256,6 @@ class AgentModel(BaseDocument):
         name = MongooseDBConstant.AGENT_COLLECTION
 
 AgentValidationModel = subset_model(AgentModel,f'Validation{AgentModel.__class__.__name__}')
+
+class PromptPlaygroundModel(BaseModel):
+    prompt:str = Field(min_length=10,max_length=2000)

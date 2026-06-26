@@ -4,7 +4,7 @@ from app.classes.cost_definition import InsufficientCreditsError, InvalidPurchas
 from app.classes.embeddings import EmbeddingUsage
 from app.container import Get
 from app.cost.token_cost import TokenCost
-from app.definition._router import HandlerDetails, exception_handler, get_instance_id, lock_service_wrapper
+from app.definition._router import HandlerDetails, auth_depends, exception_handler, get_instance_id, lock_service_wrapper
 from app.models.vector_model import QdrantEmbedRequestModel
 from app.services.cost_service import CostService
 from app.services.database.memcached_service import MemCachedService
@@ -33,7 +33,7 @@ def VectorDBRouter(depends:list=None):
     async def on_shutdown():
         await qdrantService.close()
     
-    router = APIRouter(prefix=prefix,on_startup=[on_startup],on_shutdown=[on_shutdown])
+    router = APIRouter(prefix=prefix,on_startup=[on_startup],on_shutdown=[on_shutdown],dependencies=[Depends(auth_depends)])
 
     @router.post('/',status_code=status.HTTP_201_CREATED)
     @lock_service_wrapper(QdrantService)

@@ -25,7 +25,7 @@ from app.services.profile_service import  ProfileMiniService, ProfileService
 from app.services.database.graphiti_service import GraphitiService
 from app.services.reactive_service import ReactiveService
 from app.services.vault_service import VaultService
-from app.models.tools_model import *
+from app.models.odm.tools_model import *
 from app.tools.api_tool import APIControlTool, APIFetchTool
 from app.tools.cache_tool import CacheTool
 from app.tools.conversation_tool import ConversationTool
@@ -592,9 +592,6 @@ class AgentService(BaseMiniServiceManager[AgentMiniService],agent_pb2_grpc.Agent
     #########################################################################################################
 
     async def serve(self):
-        if self.service_status != ServiceStatus.AVAILABLE:
-            return
-
         interceptor = AgentServerInterceptor(self.AgenticAPIKey, {
             '/agent.Agent/Prompt': HandlerType.ONE_ONE,
             '/agent.Agent/PromptStream': HandlerType.ONE_MANY,
@@ -605,12 +602,12 @@ class AgentService(BaseMiniServiceManager[AgentMiniService],agent_pb2_grpc.Agent
         })
         self.server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=25),interceptors=(interceptor,))
         agent_pb2_grpc.add_AgentServicer_to_server(self,self.server)
-        self.server.add_insecure_port('0.0.0.0:50051')
+        port = self.server.add_insecure_port('0.0.0.0:50051')
         await self.server.start()
-        await self.server.wait_for_termination()
     
     async def stop_grpc(self):
         await self.server.stop()
+        await self.server.wait_for_termination()
     
     #########################################################################################################
     ############################                                          ###################################

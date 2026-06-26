@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from time import time
 from pydantic import BaseModel, Field
 from app.models.odm.agents_model import AgentModel, StoreMemoryPolicy
-from app.models.tools_model import ContextCondition, ToolModel
+from app.models.odm.tools_model import ContextCondition, ToolModel
 from langchain.messages import SystemMessage, HumanMessage,ToolMessage
 from langchain.agents.middleware import ToolCallLimitMiddleware, ToolRetryMiddleware, wrap_tool_call,ModelRequest, ModelResponse
 from typing import Any, Callable, Dict, Literal, Optional, Set, Type, TypedDict

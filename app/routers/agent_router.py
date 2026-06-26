@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
 from app.container import Get
+from app.definition._router import auth_depends
 from app.services.agent.agent_service import AgentService
 from app.services.database.mongoose_service import MongooseService
 
@@ -15,4 +16,4 @@ def AgentRouter():
     async def on_shutdown():
         ...
 
-    router = APIRouter(prefix=prefix,on_startup=[on_startup],on_shutdown=[on_shutdown])
+    router = APIRouter(prefix=prefix,on_startup=[on_startup],on_shutdown=[on_shutdown],dependencies=[Depends(auth_depends)])

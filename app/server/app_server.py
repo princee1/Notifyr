@@ -9,7 +9,7 @@ from app.definition._service import ACCEPTABLE_STATES, BaseService, ServiceStatu
 from app.interface.timers import  SchedulerInterface
 from app.models.odm.agents_model import AgentModel
 from app.models.odm.custom_model import CustomModel
-from app.models.tools_model import ToolModel
+from app.models.odm.tools_model import ToolModel
 from app.ressources import *
 from app.services.agent.remote_agent_service import RemoteAgentService
 from app.services.cost_service import CostService

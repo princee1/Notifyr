@@ -87,10 +87,9 @@ class Reasoning(TypedDict):
 class Message(BaseModel):
     agent:str
     thread:str
-    user:str
     prompt:str
     content_block:List[ContentBlock] = Field(default_factory=list)
-    mess_id:str = Field(default_factory=lambda :generateId(0))
+    mess_id:str = Field(default_factory=lambda :generateId(10))
     send_at:float = Field(default_factory=time)
 
 #########################################################################################################

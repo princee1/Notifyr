@@ -3,7 +3,7 @@ from langchain.agents.middleware import after_agent, before_agent,before_model,R
 from app.definition._agent import NotifyrAgentState, NotifyrContext
 from app.definition._tool import RetrievalTool, ToolRuntime
 from app.models.odm.agents_model import AgentModel
-from app.models.tools_model import CacheToolModel
+from app.models.odm.tools_model import CacheToolModel
 from app.services import ConfigService
 from app.services import RedisService
 from app.services import QdrantService

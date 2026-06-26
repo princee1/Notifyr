@@ -215,6 +215,9 @@ class RemoteAgentService(BaseMiniServiceManager[RemoteAgentMiniService]):
                 response = post(f'http://{self.agentic_http_host}/ping/',headers=self.Headers,timeout=12)
                 if response.status_code != 200:
                     raise BuildFailureError('Cannot ping the server')
+                
+                if build_state == DEFAULT_BUILD_STATE:
+                    ...
 
             except (TimeoutError,ConnectTimeout)  as e:
                 raise BuildWarningError('Ping Request Timeout')
@@ -268,10 +271,10 @@ class RemoteAgentService(BaseMiniServiceManager[RemoteAgentMiniService]):
                 self.grpc_state = state
 
         async def connect_channel(self):
-
             clientInterceptor = AgentClientAsyncInterceptor(self.AgenticAPIKey)
             self.channel = grpc.aio.insecure_channel(self.agentic_grpc_host,interceptors=[clientInterceptor],options=_GRPC_RECONNECT_OPTIONS)
             self.stub = agent_pb2_grpc.AgentStub(self.channel)
+            await self.channel.channel_ready()
             # try:
             #     grpc.channel_ready_future(self.channel).result(timeout=5)
             #     self.channel.subscribe(self.grpc_state_callback,True)
@@ -376,42 +379,46 @@ class RemoteAgentService(BaseMiniServiceManager[RemoteAgentMiniService]):
         """Create and start the HTTP health check task."""
         if self.http_health_task and not self.http_health_task.done():
             return 
-
-        if self.service_status != ServiceStatus.AVAILABLE:
-            return
         
         health_url = f"ws://{self.agentic_http_host}/health/"
         async def _http_health_check():
             async for websocket in connect(health_url,additional_headers=self.Headers,max_size=100,):
-                print('Websocket id: ',websocket.id)
                 try:
-                    async with self.lock(None,'writer'):
+                    async with self.lock('writer'):
                         self.http_state = AgenticHTTPState.CONNECTED
                         self.http_message = 'Connected'
+
                     async for message in websocket:
-                        print("received:", message)
-                    state = AgenticHTTPState.STREAM_DONE
-                    self.http_message = 'Reconnecting'
+                        # print("received:", message)
+                        ...
+
+                    async with self.lock('writer'):
+                        self.http_state = AgenticHTTPState.STREAM_DONE
+                        self.http_message = 'Reconnecting'
+                    
                     continue
                 except ConnectionClosed as e:
                     match e.code:
                         case CloseCode.ABNORMAL_CLOSURE:
-                            state = AgenticHTTPState.DISCONNECTED
+                            async with self.lock('writer'):
+                                self.http_state = AgenticHTTPState.DISCONNECTED
+                                self.http_message = e.reason
                             continue
                         case CloseCode.POLICY_VIOLATION:
-                            state = AgenticHTTPState.CONNECTION_REFUSED
+                            async with self.lock('writer'):
+                                self.http_state = AgenticHTTPState.CONNECTION_REFUSED
+                                self.http_message = e.reason
                             break
                 except InvalidHandshake as e:
-                    state = AgenticHTTPState.CONNECTION_REFUSED    
+                    async with self.lock('writer'):
+                        self.http_state = AgenticHTTPState.CONNECTION_REFUSED
+                        self.http_message = str(e.args)
                     continue
                 except ConnectionClosedOK as e:
-                    state = AgenticHTTPState.GRACEFUL_DISCONNECTION
-                    break
-                finally:
                     async with self.lock('writer'):
-                        self.http_state = state
+                        self.http_state = AgenticHTTPState.GRACEFUL_DISCONNECTION
                         self.http_message = e.reason
-
+                    break
                 
         self.http_health_task = asyncio.create_task(_http_health_check())
     

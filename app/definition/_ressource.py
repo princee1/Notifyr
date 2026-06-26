@@ -5,6 +5,7 @@ instance imported from `container`.
 from typing import Any, Callable, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, TypeVar, Type, TypedDict, get_args
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.datastructures import Default
 from pydantic import BaseModel
 from app.classes.cost_definition import SimpleTaskCostDefinition
 from app.classes.profiles import ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
@@ -275,7 +276,7 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
     @staticmethod
     def HTTPRoute(path: str, methods: Iterable[HTTPMethod] | HTTPMethod = [HTTPMethod.POST],cost_definition:str=None, operation_id: str = None, dependencies: Sequence[Depends]|List[Depends] = None, response_model: Any = None, response_description: str = "Successful Response",
                   responses: Dict[int | str, Dict[str, Any]] | None = None,
-                  deprecated: bool | None = None, mount: bool = True):
+                  deprecated: bool | None = None, mount: bool = True,response_class:type[Response] =None):
         def decorator(func: Callable):
             computed_operation_id = BaseHTTPRessource._build_operation_id(
                 path, None, methods, operation_id)
@@ -307,6 +308,7 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
                 'response_model': response_model,
                 'methods': HTTPMethod.to_strs(methods),
                 'response_description': response_description,
+                'response_class': response_class or  Default(JSONResponse),
                 'responses': responses,
                 'deprecated': deprecated,
             }
@@ -909,7 +911,7 @@ def Throttle(fixed: float | None = None,fn: Callable[[], float] | None = None,un
 
     return decorator    
 
-def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]|None|Dict[ClientTypeLiteral,int]=None,key_func:Callable[[Request],str]|Literal['group','client','public','default','worker']='client'):
+def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]|None|Dict[ClientTypeLiteral,int]=None,key_func:Callable[[Request],str]|Literal['group','client','public','private','default','worker','none','session','ip']='client'):
     """
     *Description copied from the slowapi library*
 
@@ -966,9 +968,14 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
         if not (group_id:=authPermission.get('group_id',None)):
             return client_private_key_func(request)
         return group_id
-    
-    def session_key_func(request:Request):
+
+    def session_key_func(request:Request)->str:
         return ...
+    
+    def private_key_func(request:Request)->str:
+        authPermission:AuthPermission = get_auth_permission(request)
+        return 'private'
+
 
     if isinstance(key_func,str):
         match key_func:
@@ -976,12 +983,16 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
                 key_func = None # use the global key_func
             case 'ip':
                 ...
+            case 'public':
+                key_func = lambda r: 'public'
+            case 'private':
+                key_func = private_key_func
             case 'none':
-                key_func = lambda: 'none'
+                key_func = lambda r: 'none'
             case 'session':
                 key_func = session_key_func
             case 'worker':
-                key_func = lambda : workerService.INSTANCE_ID
+                key_func = lambda r: workerService.INSTANCE_ID
             case 'client':
                 key_func = client_private_key_func
             case 'group':

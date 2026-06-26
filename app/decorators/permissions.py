@@ -17,7 +17,7 @@ from app.services.security_service import SecurityService,JWTAuthService
 from app.classes.auth_permission import AuthPermission, AuthType, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission,FuncMetaData, TokensModel, filter_asset_permission
 from app.utils.constant import HTTPHeaderConstant
 from app.utils.globals import CAPABILITIES
-from app.utils.helper import flatten_dict
+from app.utils.helper import SliceMode, flatten_dict
 
  
 class JWTRouteHTTPPermission(Permission):
@@ -245,6 +245,21 @@ class UserPermission(AbstractClientTypePermission):
             return self.accept_none_auth
         return await super().permission(authPermission)
 
+class ClientTypesPermission(Permission):
+
+    def __init__(self,client_types:list[ClientType],slice:SliceMode='include'):
+        super().__init__()
+        self.client_types=set([ c.value for c in set(client_types)])
+        self.slice = slice
+
+    async def permission(self,authPermission:AuthPermission):
+        if self.slice == 'include' and authPermission['client_type'] not in self.client_types:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Client is not in those client_types {self.client_types}")
+
+        if self.slice == 'exclude' and authPermission['auth_type'] in self.client_types:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Client is in those forbidden client_types {self.client_types}")
+        
+        return True
 
 async def same_client_authPermission(authPermission:AuthPermission, client:ClientORM):
     if not authPermission['client_id'] == str(client.client_id):

@@ -193,18 +193,18 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UseRoles([Role.PUBLIC])
     @UseHandler(MiniServiceHandler)
     @UsePermission(ProfilePermission)
-    @LockService(ProfileService,lockType='reader',as_manager=True,motor_fallback=True)
     @UsePipe(DocumentFriendlyPipe,before=False)
+    @LockService(ProfileService,lockType='reader',as_manager=True,motor_fallback=True)
     @BaseHTTPRessource.HTTPRoute('/s/{profile}/',methods=[HTTPMethod.GET])
     async def read_profile(self,profile:str,request:Request, response:Response, authPermission:AuthPermission=Depends(get_auth_permission)):
         return await self.mongooseService.get(self.Model,profile,True)
         
-    @Throttle(normal=(400,120))
     @UseRoles([Role.PUBLIC])
-    @UseHandler(MiniServiceHandler,CeleryControlHandler)
-    @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
+    @Throttle(normal=(400,120))
     @UsePermission(ProfilePermission)
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
+    @UseHandler(MiniServiceHandler,CeleryControlHandler)
+    @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
     @LockService(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
     @BaseHTTPRessource.HTTPRoute('/refresh/{profile}/',methods=[HTTPMethod.PATCH])
     async def refresh_memory_state(self,profile:str,request:Request,channel:Annotated[ChannelMiniService,Depends(get_profile)],broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):

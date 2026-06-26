@@ -9,7 +9,7 @@ from app.models.odm.outbound_model import HTTPOutboundModel, OutboundCredentials
 from app.prompt import context_prompt
 from app.services.config_service import ConfigService
 from app.services.custom_service import CustomService
-from app.models.tools_model import APIToolModel
+from app.models.odm.tools_model import APIToolModel
 from app.services.profile_service import ProfileMiniService
 from langchain.messages import HumanMessage,ToolMessage
 

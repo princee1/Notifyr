@@ -1,14 +1,17 @@
-from typing import Annotated, Type
-from fastapi import Body, Depends, Request, Response,status
+import asyncio
+from typing import Annotated, AsyncIterable, Type
+from fastapi import Body, Depends, Header, Request, Response,status
 from fastapi.responses import StreamingResponse
+from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import ConfigDict
-from app.classes.auth_permission import AuthPermission, Role
+from app.classes.auth_permission import AuthPermission, ClientType, Role
+from app.classes.conversation import Message, Reply, Session, User
 from app.classes.embeddings import EmbeddingModel, EmbeddingWrapper
 from app.container import InjectInMethod
 from app.decorators.guards import LLMProviderGuard
 from app.decorators.handlers import AgentHandler, AgenticHandler, LLMHandler, AsyncIOHandler, CostHandler, GrpcHandler, MotorErrorHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler
 from app.decorators.interceptors import DataCostInterceptor
-from app.decorators.permissions import AdminPermission, AgentPermission, JWTRouteHTTPPermission
+from app.decorators.permissions import AdminPermission, AgentPermission, ClientTypesPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe
 from app.definition._cost import DataCost
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles, LockService
@@ -19,13 +22,13 @@ from app.errors.agent_error import AgentToolDoesNotExistError, SemanticAgentAlre
 from app.manager.broker_manager import Broker
 from app.depends.dependencies import get_auth_permission, get_request_id
 from app.manager.merchant_manager import Merchant
-from app.models.odm.agents_model import AgentModel
-from app.models.tools_model import ToolModel
+from app.models.odm.agents_model import AgentModel, PromptPlaygroundModel
+from app.models.odm.tools_model import ToolModel
 from app.models.vector_model import QdrantEmbedRequestModel
 from app.services  import MongooseService
 from app.services.agent.llm_service import LLMService
 from app.services.agent.remote_agent_service import RemoteAgentMiniService
-from app.services.chat_service import ChatService
+from app.services.chat_service import ChatService, answer_to_reply, message_to_request
 from app.services.custom_service import CustomService
 from app.utils.constant import AgenticConstant, CostConstant, LLMProviderConstant
 from app.utils.helper import subset_model
@@ -177,33 +180,49 @@ class AgentsRessource(BaseHTTPRessource):
         ...
 
     @UseRoles([Role.PUBLIC])        
-    @UseLimiter('100/hour')
     @Throttle(uniform=(30,60))
     @UsePermission(AgentPermission)
     @UseHandler(LLMHandler,AgenticHandler,GrpcHandler)
-    @UsePipe(MiniServiceInjectorPipe(RemoteAgentService,'agent'))
-    @PingService([{'cls':RemoteAgentService,'kwargs':{'grpc':True}}],is_manager=True,infinite_wait=True)
-    @LockService(RemoteAgentService,lockType='reader',as_manager=True,miniLockType='reader')
     @LockService(LLMService,lockType='reader',as_manager=False)
-    @BaseHTTPRessource.HTTPRoute('/prompt/{agent}/',methods=[HTTPMethod.POST],mount=False)
-    async def prompt_playground(self,request:Request,agent:Annotated[RemoteAgentMiniService,Depends(get_agent)], response:Response,profile:str=Depends(get_agent), authPermission:AuthPermission= Depends(get_auth_permission)):
-        await agent.Prompt()
+    @UsePipe(MiniServiceInjectorPipe(RemoteAgentService,'agent'))
+    @UseLimiter('100/hour',cost={'Admin':1,'User':3},key_func='private')
+    @LockService(RemoteAgentService,lockType='reader',as_manager=True,miniLockType='reader')
+    @PingService([{'cls':RemoteAgentService,'kwargs':{'grpc':True}}],is_manager=True,infinite_wait=True)
+    @BaseHTTPRessource.HTTPRoute('/prompt/{agent}/',methods=[HTTPMethod.POST],mount=False,response_model=Reply)
+    async def prompt_playground(self,request:Request,agent:Annotated[RemoteAgentMiniService,Depends(get_agent)],prompt:PromptPlaygroundModel, response:Response,profile:str=Depends(get_agent),request_id:str = Depends(get_request_id),authPermission:AuthPermission= Depends(get_auth_permission)):
+        message = Message(agent=agent,thread=authPermission['client_id'],**prompt.model_dump(exclude_none=True))
+        user = User(authPermission['client_id'],'guest',None)
+        session = Session(request_id,...,'live-chat',[])
+        prompt_request = message_to_request(message,session,user)
+        answer = await agent.Prompt(prompt_request)
+        reply = answer_to_reply(answer)
+        return reply
     
-    @UsePermission(AgentPermission)
+    @UseRoles([Role.PUBLIC])
+    @Throttle(uniform=(30,60))
     @UseHandler(LLMHandler,AgenticHandler,GrpcHandler)
-    @BaseHTTPRessource.HTTPRoute('/stream/prompt/{agent}/',methods=[HTTPMethod.POST],mount=False)
-    async def stream_prompt_playground(self,request:Request,response:Response,agent:Annotated[RemoteAgentMiniService,Depends(get_agent)]):
-        async def response_stream():
-            replies = await agent.PromptStream()
-            async for reply in replies:
-                ...
-                yield reply
+    @UsePipe(MiniServiceInjectorPipe(RemoteAgentService,'agent'))
+    @UseLimiter('100/hour',cost={'Admin':1,'User':3},key_func='private')
+    @UsePermission(ClientTypesPermission([ClientType.User,ClientType.Admin]),AgentPermission)
+    @LockService(RemoteAgentService,lockType='reader',as_manager=True,miniLockType='reader')
+    @PingService([{'cls':RemoteAgentService,'kwargs':{'grpc':True}}],is_manager=True,infinite_wait=True)
+    @BaseHTTPRessource.HTTPRoute('/stream/prompt/{agent}/',methods=[HTTPMethod.POST],mount=False,response_class=EventSourceResponse)
+    async def stream_prompt_playground(self,request:Request,response:Response,prompt:PromptPlaygroundModel,agent:Annotated[RemoteAgentMiniService,Depends(get_agent)],profile:str=Depends(get_agent),request_id:str = Depends(get_request_id),last_event_id: Annotated[int | None, Header()] = None,authPermission:AuthPermission= Depends(get_auth_permission))->AsyncIterable[ServerSentEvent]:
+        
+        message = Message(agent=agent,thread=authPermission['client_id'],**prompt.model_dump(exclude_none=True))
+        user = User(authPermission['client_id'],'guest',None)
+        session = Session(request_id,...,'live-chat',[])
+        prompt_request = message_to_request(message,session,user)
+
+        answers = await agent.PromptStream(prompt_request)
+        async for i,answer in enumerate(answers):
+            if i == 0:
+                yield ServerSentEvent(raw_data=None,event='[OK]',comment="chat request ok")
+                asyncio.sleep(0.05)
+
+            reply = answer_to_reply(answer)
+            yield ServerSentEvent(data=reply,event='[STREAM]')
+        
+        yield ServerSentEvent(raw_data=None,event='[DONE]',comment='streaming done')
             
-        return StreamingResponse(
-            content=response_stream(),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive"
-                }
-        )
+        
