@@ -289,8 +289,7 @@ class RemoteAgentService(BaseMiniServiceManager[RemoteAgentMiniService]):
             self.stub = None
         
     async def grpc_state_callback(self,state:grpc.ChannelConnectivity):
-        print('State:',state)
-        async with self.lock(None,'writer'):
+        async with self.lock('writer',None):
            self.grpc_state = state
                 
     def init_http_session(self, timeout: int = 30):
@@ -372,7 +371,7 @@ class RemoteAgentService(BaseMiniServiceManager[RemoteAgentMiniService]):
                 pass
             self.http_health_task = None
 
-        async with self.lock(None,'writer'):
+        async with self.lock('writer'):
             self.http_state = AgenticHTTPState.DISCONNECTED
 
     def start_agentic_healthcheck(self):
@@ -388,15 +387,18 @@ class RemoteAgentService(BaseMiniServiceManager[RemoteAgentMiniService]):
                         self.http_state = AgenticHTTPState.CONNECTED
                         self.http_message = 'Connected'
 
+                    i=0
                     async for message in websocket:
-                        # print("received:", message)
-                        ...
+                        if APP_MODE == ApplicationMode.server and  i % 4 == 0:
+                            state = self.channel.get_state(False)
+                            await self.grpc_state_callback(state)
+                        i+=1
 
                     async with self.lock('writer'):
                         self.http_state = AgenticHTTPState.STREAM_DONE
                         self.http_message = 'Reconnecting'
-                    
                     continue
+                
                 except ConnectionClosed as e:
                     match e.code:
                         case CloseCode.ABNORMAL_CLOSURE:
