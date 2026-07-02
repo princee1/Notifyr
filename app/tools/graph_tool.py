@@ -48,7 +48,6 @@ class KnowledgeGraphTool(RetrievalTool):
         return await self.search(query,self.config.domain,runtime.tool_call_id)
         
     async def search(self,query:str,domain:str,tool_call_id)->SearchResults:
-
         try:
             async with ToolContextFactory(artifact={'domain':domain,'group_type':self.group_type}) as factory:
                 async with self.graphitiService.lock('reader'):
@@ -128,8 +127,8 @@ class KnowledgeGraphTool(RetrievalTool):
 
     def _force_non_broad_search(self):
         if self.reranker_config == None:
-            self.reranker_config = BroadRerankerSearchConfig()
-            self.reranker_config._skip = True
+            self.config.broad_search = BroadRerankerSearchConfig()
+            self.config.broad_search._s = True
     
     def to_artifact(self,contexts:list[KGraphFacts])->RagKGArtifact:
         facts:list[Facts] = []
@@ -155,7 +154,7 @@ class KnowledgeGraphTool(RetrievalTool):
 
     @property
     def reranker_config(self)->BroadRerankerSearchConfig:
-        return self.reranker_config
+        return self.config.broad_search
     
     @classmethod
     def to_metadata(cls):
