@@ -6,24 +6,13 @@ from typing import Callable
 import aiohttp
 from amqp import AccessRefused
 from fastapi.exceptions import ResponseValidationError
+import grpc
 import hvac
 from minio import S3Error, ServerError
 import requests
+from app.errors.agent_error import *
 from app.errors.ingest_error import AgenticDatabaseNotAllowedError, IngestConfigNotPresentError, TaskIngestNameNotValidError
-from app.errors.agentic_error import (
-    AgenticServerDisconnectedError,
-    AgenticStreamDoneError,
-    AgenticBadResponseError,
-    AgenticGrpcIdleError,
-    AgenticGrpcShutdownError,
-    AgenticClientError,
-    AgenticUnauthorizedError,
-    AgenticNotFoundError,
-    AgenticGatewayError,
-    AgenticTimeoutError,
-    AgenticConnectionError,
-    AgenticResponseValidationError,
-)
+from app.errors.agentic_error import *
 from app.errors.llm_error import LLMProviderDoesNotExistError, LLMModelNotPermittedError, LLMModelMaxTokenExceededError, LLMRateLimiterError, LLMConfigNotConfiguredError
 from app.services.worker.arq_service import DataTaskNotFoundError, JobAlreadyExistsError, JobDequeueError, JobDoesNotExistsError, JobInProgressError, JobStatusNotValidError,ResultNotFound, UnexpectedJobStatusError
 from app.classes.auth_permission import WSPathNotFoundError
@@ -56,17 +45,11 @@ from redis import WatchError
 
 from app.services.logger_service import LoggerService
 from pydantic import BaseModel, ValidationError as PydanticValidationError
-from app.errors.db_error import DocumentAddConditionError, DocumentConditionWrongMethodError, DocumentDoesNotExistsError, DocumentExistsUniqueConstraintError, DocumentPrimaryKeyConflictError,MemCacheNoValidKeysDefinedError, MemCachedTypeValueError
+from app.errors.db_error import DocumentAddConditionError, DocumentConditionWrongMethodError, DocumentDoesNotExistsError, DocumentExistsUniqueConstraintError, DocumentPrimaryKeyConflictError, DocumentSingletonLimitReachedError,MemCacheNoValidKeysDefinedError, MemCachedTypeValueError
 from app.utils.fileIO import ExtensionNotAllowedError, MultipleExtensionError
 from aiomcache.exceptions import ClientException, ValidationException 
 from pymemcache import MemcacheClientError,MemcacheServerError,MemcacheUnexpectedCloseError
-from app.errors.upload_error import (
-    MaxFileLimitError,
-    FileTooLargeError,
-    TotalFilesSizeExceededError,
-    DuplicateFileNameError,
-    InvalidExtensionError,
-)
+from app.errors.upload_error import *
 from app.classes.embeddings import (
     EmbeddingException,
     EmptyVectorError,
@@ -486,6 +469,12 @@ class MotorErrorHandler(Handler):
                     "message":f"The document with the values entered {'already exists' if e.exists  else 'does not exists'}"
                 }
             )
+
+        except DocumentSingletonLimitReachedError as e:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                                detail={'message':'The document already have a singleton entry',
+                                        'document_id':e.document_id,
+                                        'alias':e.alias})
         
         except DocumentAddConditionError as e:
             raise HTTPException(
@@ -1192,6 +1181,12 @@ class AgenticHandler(Handler):
                 }
             )
         
+        except AgenticServerConnectionRefusedError as e:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={'We cant connect to agentic node...'}
+            )
+
         except AgenticStreamDoneError as e:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -1230,7 +1225,14 @@ class AgenticHandler(Handler):
 
 class GrpcHandler(Handler):
     async def handle(self, function, *args, **kwargs):
-        return await super().handle(function, *args, **kwargs)
+        try:
+            return await super().handle(function, *args, **kwargs)
+        except grpc.aio.AioRpcError as e:
+            e.code()
+            e.details()
+            e.initial_metadata()
+            
+            raise HTTPException()
 
 class GraphitiHandler(Handler):
     ...
@@ -1318,3 +1320,21 @@ class EmbeddingHandler(Handler):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="An embedding operation failed"
             ) from e
+        
+
+class AgentHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args,**kwargs)
+        except AgentToolDoesNotExistError as e:
+            ...
+        
+        except SemanticAgentAlreadyExistError as e:
+            ...
+        
+        except SemanticToolAlreadyExistError as e:
+            ...
+        
+        except DependencyAgentError as e:
+            ...

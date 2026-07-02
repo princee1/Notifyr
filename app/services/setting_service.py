@@ -26,14 +26,13 @@ class SettingService(BaseService):
     
     async def async_verify_dependency(self):
         await super().async_verify_dependency()
-        async with self.vaultService.statusLock.reader:
+        async with self.vaultService.lock('reader'):
             return self.verify_dependency()
         
     def verify_dependency(self):
         if self.vaultService.service_status != ServiceStatus.AVAILABLE and self.configService.MODE == MODE.PROD_MODE:
             raise BuildOkError
         
-
     def build(self,build_state:int=SETTING_SERVICE_SYNC_BUILD_STATE):
         if self.configService.MODE == MODE.DEV_MODE and self.use_settings_file:
             self._read_setting_json_file()
@@ -53,7 +52,7 @@ class SettingService(BaseService):
 
     def get_setting(self):
         try:
-            data= self.vaultService.secrets_engine.read(VaultConstant.SETTINGS_SECRETS)
+            data = self.vaultService.secrets_engine.read(VaultConstant.SETTINGS_SECRETS)
             SettingsModel(**data) # Validate the data
             return data
         except Exception as e:
@@ -87,7 +86,6 @@ class SettingService(BaseService):
     def API_EXPIRATION(self):
         return self._data.get(SettingDBConstant.API_EXPIRATION_SETTING,DEFAULT_SETTING[SettingDBConstant.API_EXPIRATION_SETTING])
         
-
     @property
     def ALL_ACCESS_EXPIRATION(self):
         return self._data.get(SettingDBConstant.ALL_ACCESS_EXPIRATION_SETTING,DEFAULT_SETTING[SettingDBConstant.ALL_ACCESS_EXPIRATION_SETTING])

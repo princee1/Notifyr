@@ -1,9 +1,10 @@
 import asyncio
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from enum import Enum
 import functools
 import traceback
-from typing import Any, List, Literal, Self, Set, overload, Callable, Type, TypeVar, Dict
+from typing import Any, AsyncGenerator, Generator, List, Literal, Self, Set, overload, Callable, Type, TypeVar, Dict
 from app.utils.prettyprint import PrettyPrinter, PrettyPrinter_
 from app.utils.constant import DependencyConstant
 from app.utils.helper import generateId, issubclass_of
@@ -14,7 +15,7 @@ from aiorwlock import RWLock
 from app.errors.service_error import *
 from typing import Generic, TypeVar
 
-from app.utils.tools import Mock, RunInThreadPool
+from app.utils.toolbox import Mock, RunInThreadPool
 
 MiniServiceMeta: list[tuple[Type,Any]] = []
 LiaisonDependency: Dict[str,dict] = {}
@@ -112,6 +113,8 @@ class VariableProtocol(TypedDict):
     variables:dict[str,Any] = None
     variables_function:str = None
 
+ServiceLockType = Literal['reader', 'writer','none'] 
+NONE_LOCK_TYPE = '__none_lock__'
 
 #################################            #####################################
 
@@ -224,6 +227,24 @@ class BaseService():
     def log(self):
         pass
 
+    @asynccontextmanager
+    async def lock(self,mode:ServiceLockType):
+        match mode:
+            case 'reader':
+                _lock = self.statusLock.reader
+            case 'writer':
+                _lock = self.statusLock.writer
+            case 'none':
+                _lock = NONE_LOCK_TYPE
+            case _:
+                raise TypeError(f'{mode} is an invalid mode type')
+            
+        if _lock == NONE_LOCK_TYPE:
+            yield self
+
+        async with _lock:
+            yield self
+        
     def __repr__(self) -> str:
         return super().__repr__()
 
@@ -256,7 +277,7 @@ class BaseService():
     def _builder(self,quiet:bool=False,build_state:int = -1,force_sync_verify:bool=False):
         
         is_mini_service =f' Mini service ID: ({self.miniService_id})- ' if isinstance(self,BaseMiniService) else ''
-        reason = 'Service Built'
+        self.reason = 'Service Built'
         try:
             now = dt.datetime.now()
             
@@ -279,12 +300,12 @@ class BaseService():
             if not quiet:
                 self.prettyPrinter.error(f'{is_mini_service}[{now}] {self.__class__.__name__}: {e} ', saveable=True)
             self.service_status = ServiceStatus.NOT_AVAILABLE
-            reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
+            self.reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
         except BuildAbortError as e:
             if not quiet:
                 self.prettyPrinter.error(f'{is_mini_service}[{now}] {self.__class__.__name__}. Aborting the process', saveable=True)
             print(e)
-            reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
+            self.reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
             self.service_status = ServiceStatus.MAJOR_SYSTEM_FAILURE
             if self.CONTAINER_LIFECYCLE_SCOPE:
                 exit(-1)
@@ -293,7 +314,7 @@ class BaseService():
             if not quiet:
                 self.prettyPrinter.message(f'{is_mini_service}[{now}] {self.__class__.__name__}: {e}',saveable=True)
             
-            reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
+            self.reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
             self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
 
         except BuildWarningError as e:
@@ -302,13 +323,13 @@ class BaseService():
                 self.prettyPrinter.warning(f'{is_mini_service}[{now}] {self.__class__.__name__}: {e}', saveable=True)
                 
             self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
-            reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
+            self.reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
         
         except BuildSkipError as e: # TODO change color
             if not quiet:
                 self.prettyPrinter.info(f'{is_mini_service}[{now}] {self.__class__.__name__}: {e}', saveable=True)
             self.service_status = ServiceStatus.WORKS_ALMOST_ATT
-            reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
+            self.reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
             pass
 
         except BuildNotImplementedError as e:
@@ -316,20 +337,18 @@ class BaseService():
                 self.prettyPrinter.warning(f'{is_mini_service}[{now}] {self.__class__.__name__}: Service Not Implemented Yet', saveable=True)
                 
             self.service_status = ServiceStatus.NOT_AVAILABLE
-            reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
+            self.reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
 
         except Exception as e:
             print(e)
             print(e.__class__)
             if not quiet:
                 self.prettyPrinter.error(f'{is_mini_service}[{now}] {self.__class__.__name__}. Aborting the process', saveable=True)
-            reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
+            self.reason = 'Service not Built' if len(e.args) == 0 else e.args[0]
             self.service_status = ServiceStatus.MAJOR_SYSTEM_FAILURE
             traceback.print_exc()
             if self.CONTAINER_LIFECYCLE_SCOPE:
                 exit(-1)
-        finally:
-            self.report(reason=reason,state_value=build_state)
 
     def _destroyer(self,quiet:bool=False,destroy_state:int = DEFAULT_DESTROY_STATE):
         try:
@@ -448,6 +467,13 @@ class MiniServiceStore(Generic[TMS]):
                 raise False
         return True
     
+    @asynccontextmanager
+    async def lock(self,miniService_id: str | Any, mode:ServiceLockType='reader'):
+        service = self.get(miniService_id)
+        async with service.lock(mode) as service:
+            yield service
+        
+    
     @property
     def ids(self):
         return self._store_.keys()
@@ -473,7 +499,7 @@ class MiniServiceStore(Generic[TMS]):
                 count+=1
         return count
    
-class BaseMiniServiceManager(BaseService):
+class BaseMiniServiceManager(BaseService,Generic[TMS]):
 
     class StatusCounter:
 
@@ -495,7 +521,7 @@ class BaseMiniServiceManager(BaseService):
 
     def __init__(self):
         super().__init__()
-        self.MiniServiceStore = ...
+        self.MiniServiceStore:MiniServiceStore[TMS] = MiniServiceStore[TMS](self.name)
 
     def build(self,counter:StatusCounter, build_state = DEFAULT_BUILD_STATE,no_service_as_ok=False):
         if counter.total_service <1:
@@ -524,18 +550,30 @@ class BaseMiniServiceManager(BaseService):
     
     def __getitem__(self,miniServiceId:str):
         return self.MiniServiceStore.get(miniServiceId)
+    
+    @asynccontextmanager
+    async def lock(self,mode:ServiceLockType,miniServiceId:str|None=None,miniServiceMode:ServiceLockType='reader'):
+        async with (self.statusLock.reader if mode =='reader' else self.statusLock.writer):
+            if miniServiceId == None:
+                yield self
+            else:
+                async with self.MiniServiceStore.lock(miniServiceId,miniServiceMode) as service:
+                    yield service
 
 S = TypeVar('S', bound=BaseService)
 
 class LinkParams(TypedDict):
-    build_follow_dep:bool
     to_build:bool
     to_destroy:bool
-    to_async_verify:bool
-    destroy_follow_dep:bool
-    rebuild:bool
+
     build_state:int = DEFAULT_BUILD_STATE
     destroy_state:int = DEFAULT_DESTROY_STATE
+
+    build_follow_dep:bool
+    destroy_follow_dep:bool
+
+    to_async_verify:bool
+    rebuild:bool
 
 
 @dataclass
@@ -568,7 +606,7 @@ class LinkDep:
         )
     
     @staticmethod
-    def dep_liaison(cls,links:Self):
+    def dep_liaison(cls,links:list['LinkDep']):
             liaison = {}
             LiaisonDependency[cls.__name__] = liaison
             for l in links:

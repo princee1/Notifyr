@@ -18,7 +18,7 @@ from app.manager.broker_manager import Broker
 from app.manager.task_manager import TaskManager
 from app.models.otp_model import OTPModel
 from app.models.sms_model import  SMSCustomSchedulerModel, SMSStatusModel, SMSTemplateSchedulerModel
-from app.models.twilio_model import SMSEventORM
+from app.models.orm.twilio_model import SMSEventORM
 from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileService
 from app.services.setting_service import SettingService

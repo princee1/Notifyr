@@ -116,7 +116,7 @@ class KeepAliveManager:
 
         if self.rx_subject !=None:
             self.subscription[self.rx_subject.subject_id].dispose()
-            self.reactiveService.delete_subject(self.rx_subject.subject_id)
+            self.reactiveService.complete_subject(self.rx_subject.subject_id)
             
     async def wait_for(self, result_to_return: Any = None, coerce: str = None,subject_id=None):
         if self.keep_alive:

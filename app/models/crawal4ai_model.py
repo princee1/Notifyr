@@ -233,8 +233,8 @@ class DigestConfigModel(BaseModel):
 class BaseExtractionConfig(BaseModel):
 	"""Common fields shared across all extraction configurations."""
 	strategy: str
-	persona:str
-	focus: str
+	persona:str = Field( description="LLM instruction for extraction",min_length=20,max_length=150)
+	focus: str = Field( description="LLM instruction for extraction",min_length=20,max_length=1200)
 	instruction: Optional[str] = Field( description="LLM instruction for extraction",min_length=20,max_length=400)
 
 	@property

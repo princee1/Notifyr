@@ -1,3 +1,5 @@
+from functools import wraps
+
 from fastapi import Response
 from kombu import Queue
 from typing import Any, Callable, Literal, Self
@@ -5,9 +7,9 @@ from aiorwlock import RWLock
 from celery.result import AsyncResult
 from redbeat import RedBeatSchedulerEntry
 from app.classes.celery import CeleryNotAvailableError, CeleryTask, CeleryTaskNotFoundError, InspectMode, SchedulerModel, TaskExecutionResult, TaskType, add_warnings, due_entry_timedelta
+from app.classes.profiles import BaseProfileModel, ProfileTypeNotAssociatedWithCeleryError
 from app.definition._service import BaseMiniService, BaseMiniServiceManager, BaseService, LinkDep, MiniService, MiniServiceStore, Service, ServiceStatus
 from app.interface.timers import IntervalInterface
-from app.models.communication_model import BaseProfileModel
 from app.services.config_service import ConfigService
 from app.services.cost_service import CostService
 from app.services.database.rabbitmq_service import RabbitMQService
@@ -19,17 +21,128 @@ from app.utils.constant import CeleryConstant, RedisConstant, SpecialKeyParamete
 import datetime as dt
 from humanize import naturaldelta,naturaltime
 from uuid import uuid4
-from app.utils.tools import RunInThreadPool
+from app.utils.toolbox import RunInThreadPool
 from app.classes.scheduler import schedule
 
 CHANNEL_BUILD_STATE=0
 
 
+@MiniService()
+class ChannelMiniService(BaseMiniService):
+
+    def __init__(self, depService:ProfileMiniService[BaseProfileModel],configService:ConfigService,rabbitmqService:RabbitMQService,redisService:RedisService,celeryService:'CeleryService'):
+        self.depService = depService
+        super().__init__(depService,None)
+        self.redisService = redisService
+        self.celeryService = celeryService
+        self.configService = configService
+        self.rabbitmqService = rabbitmqService
+    
+    async def pingService(self,infinite_wait:bool,data:dict,profile:str=None,as_manager:bool=False,**kwargs):
+        """
+        the worker can take care of the request
+        """
+
+        if kwargs.get('__channel_availability__',False) and self.service_status != ServiceStatus.AVAILABLE:
+            raise ServiceNotAvailableError()
+    
+        if kwargs.get('__verify_celery__',False) and not self.has_celery:
+            raise ProfileTypeNotAssociatedWithCeleryError(self.depService.model._collection,self.depService.model.id)
+
+        scheduler:SchedulerModel = data.get('scheduler',None)
+        taskManager = data.get('taskManager',None)
+        if self.configService.BROKER_PROVIDER == 'rabbitmq':
+            add_warnings(scheduler,{'test':'rabbitmq'})
+        else:
+            add_warnings(scheduler,{'test':'redis'})
+        # add warning if queue is <<congestionné>> and later change algorithm
+        #add_warning(scheduler,None)
+        ...
+
+    def build(self, build_state = ...):
+        self._builded = True
+        if self.celeryService.service_status != ServiceStatus.AVAILABLE:
+            raise BuildOkError
+        
+    @staticmethod
+    def celery_guard(func:Callable):     
+
+        @wraps(func)
+        async def wrapper(self:Self,*args,response:Response=None,**kwargs):
+            if not self.has_celery:
+                return
+
+            if self.celeryService.service_status != ServiceStatus.AVAILABLE:
+                if response != None:
+                    ...
+                return
+            return await func(self,*args,**kwargs)
+        
+        return wrapper
+
+    @celery_guard
+    @RunInThreadPool
+    async def refresh_worker_state(self):
+        await self.pause_worker()
+        reply = celery_app.control.broadcast(CeleryConstant.REFRESH_PROFILE_WORKER_STATE_COMMAND,arguments={'p':self.queue},reply=True)
+        return reply
+
+    @celery_guard
+    @RunInThreadPool
+    async def purge_queue(self):
+        """
+        Purge the Celery queue.
+        If queue_name is provided, it will purge that specific queue.
+        If not, it will purge all queues.
+        """
+        await self.pause_worker()
+        with celery_app.connection_or_acquire() as conn:
+            queue = Queue(self.queue, exchange=None, routing_key=self.queue)
+            val = queue(conn).purge()
+            print(val)
+            return val
+
+    @celery_guard
+    @RunInThreadPool
+    def pause_worker(self,destination:list[str]=None,timeout=1.5):
+        return celery_app.control.cancel_consumer(self.queue, reply=True,destination=destination,timeout=timeout)
+
+    @celery_guard
+    @RunInThreadPool
+    def resume_worker(self,destination:list[str]=None,timeout=1.5):
+        return celery_app.control.add_consumer(self.queue, reply=True,timeout=timeout,destination=destination)
+
+    @celery_guard
+    @RunInThreadPool
+    async def delete_queue(self):
+        await self.pause_worker()
+        if self.configService.BROKER_PROVIDER == 'redis':
+            return await self.redisService.delete_all(RedisConstant.CELERY_DB,self.queue)
+        else:
+            with celery_app.connection_or_acquire() as conn:
+                queue = Queue(self.queue, exchange=None, routing_key=self.queue)
+                queue(conn).delete()
+
+    @celery_guard
+    @RunInThreadPool
+    def create_queue(self):
+        return celery_app.control.add_consumer(self.queue, reply=True)
+
+    @property
+    def queue(self):
+        if self.configService.BROKER_PROVIDER == 'redis':
+            return CeleryConstant.REDIS_QUEUE_NAME_RESOLVER(self.depService.queue_name)
+        return self.depService.queue_name
+
+    @property
+    def has_celery(self)->bool:
+        return self.depService.model._celery
+
 @Service(
     is_manager=True,
     links=[LinkDep(ProfileService,to_build=True,build_state=CHANNEL_BUILD_STATE)]
 )
-class CeleryService(BaseMiniServiceManager, IntervalInterface):
+class CeleryService(BaseMiniServiceManager[ChannelMiniService], IntervalInterface):
     _non_redbeat_task_type = {TaskType.NOW,TaskType.DATETIME,TaskType.TIMEDELTA}
 
     def __init__(self, configService: ConfigService,redisService:RedisService,profileService:ProfileService,rabbitmqService:RabbitMQService,costService:CostService):
@@ -46,7 +159,6 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
 
         self.timeout_count = 0
         self.task_lock = RWLock()
-        self.MiniServiceStore = MiniServiceStore[ChannelMiniService](self.__class__.__name__)
     
     @RunInThreadPool
     def trigger_task_from_scheduler(self, scheduler: SchedulerModel,index:int|None,weight:float=-1.0, *args, **kwargs):
@@ -180,7 +292,7 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
 
     async def _check_workers_status(self):
         response = await self.ping(timeout=2)
-        async with self.statusLock.writer:
+        async with self.lock('writer',None):
             self._workers = response.copy()
 
     @property
@@ -191,7 +303,7 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
     async def pingService(self,infinite_wait:bool,data:dict,profile:str=None,as_manager:bool=False,**kwargs):
         if kwargs.get('__celery_availability__',False) and self.service_status != ServiceStatus.AVAILABLE:
             raise ServiceNotAvailableError('Absolutely need celery to be available')
-
+    
         _scheduler:SchedulerModel = data.get('scheduler',None)
         if _scheduler:
             if _scheduler.task_type == TaskType.SOLAR and self.configService.CELERY_WORKERS_EXPECTED < 1:
@@ -245,104 +357,3 @@ class CeleryService(BaseMiniServiceManager, IntervalInterface):
     @RunInThreadPool
     def _broadcast(self,command:str,destination:list[str]=None,reply=True,timeout=None):
         return celery_app.control.broadcast(command,destination=destination,reply=reply,timeout=timeout)
-    
-
-@MiniService()
-class ChannelMiniService(BaseMiniService):
-
-    def __init__(self, depService:ProfileMiniService[BaseProfileModel],configService:ConfigService,rabbitmqService:RabbitMQService,redisService:RedisService,celeryService:CeleryService):
-        self.depService = depService
-        super().__init__(depService,None)
-        self.redisService = redisService
-        self.celeryService = celeryService
-        self.configService = configService
-        self.rabbitmqService = rabbitmqService
-    
-    async def pingService(self,infinite_wait:bool,data:dict,profile:str=None,as_manager:bool=False,**kwargs):
-        """
-        the worker can take care of the request
-        """
-
-        if kwargs.get('__channel_availability__',False) and self.service_status != ServiceStatus.AVAILABLE:
-            raise ServiceNotAvailableError()
-        
-        scheduler:SchedulerModel = data.get('scheduler',None)
-        taskManager = data.get('taskManager',None)
-        if self.configService.BROKER_PROVIDER == 'rabbitmq':
-            add_warnings(scheduler,{'test':'rabbitmq'})
-        else:
-            add_warnings(scheduler,{'test':'redis'})
-        # add warning if queue is <<congestionné>> and later change algorithm
-        #add_warning(scheduler,None)
-        ...
-
-    def build(self, build_state = ...):
-        self._builded = True
-        if self.celeryService.service_status != ServiceStatus.AVAILABLE:
-            raise BuildOkError
-        
-    @staticmethod
-    def celery_guard(func:Callable):     
-
-        async def wrapper(self:Self,*args,response:Response=None,**kwargs):
-            if self.celeryService.service_status != ServiceStatus.AVAILABLE:
-                if response != None:
-                    ...
-                return
-            return await func(self,*args,**kwargs)
-        
-        return wrapper
-
-    @celery_guard
-    @RunInThreadPool
-    async def refresh_worker_state(self):
-        await self.pause_worker()
-        reply = celery_app.control.broadcast(CeleryConstant.REFRESH_PROFILE_WORKER_STATE_COMMAND,arguments={'p':self.queue},reply=True)
-        return reply
-
-    @celery_guard
-    @RunInThreadPool
-    async def purge_queue(self):
-        """
-        Purge the Celery queue.
-        If queue_name is provided, it will purge that specific queue.
-        If not, it will purge all queues.
-        """
-        await self.pause_worker()
-        with celery_app.connection_or_acquire() as conn:
-            queue = Queue(self.queue, exchange=None, routing_key=self.queue)
-            val = queue(conn).purge()
-            print(val)
-            return val
-
-    @celery_guard
-    @RunInThreadPool
-    def pause_worker(self,destination:list[str]=None,timeout=1.5):
-        return celery_app.control.cancel_consumer(self.queue, reply=True,destination=destination,timeout=timeout)
-
-    @celery_guard
-    @RunInThreadPool
-    def resume_worker(self,destination:list[str]=None,timeout=1.5):
-        return celery_app.control.add_consumer(self.queue, reply=True,timeout=timeout,destination=destination)
-
-    @celery_guard
-    @RunInThreadPool
-    async def delete_queue(self):
-        await self.pause_worker()
-        if self.configService.BROKER_PROVIDER == 'redis':
-            return await self.redisService.delete_all(RedisConstant.CELERY_DB,self.queue)
-        else:
-            with celery_app.connection_or_acquire() as conn:
-                queue = Queue(self.queue, exchange=None, routing_key=self.queue)
-                queue(conn).delete()
-
-    @celery_guard
-    @RunInThreadPool
-    def create_queue(self):
-        return celery_app.control.add_consumer(self.queue, reply=True)
-
-    @property
-    def queue(self):
-        if self.configService.BROKER_PROVIDER == 'redis':
-            return CeleryConstant.REDIS_QUEUE_NAME_RESOLVER(self.depService.queue_name)
-        return self.depService.queue_name

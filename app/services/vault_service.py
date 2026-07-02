@@ -7,7 +7,7 @@ from app.classes.vault_engine import DatabaseVaultEngine, KV1VaultEngine, KV2Vau
 from app.definition._service import DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, GUNICORN_BUILD_STATE, BaseService, BuildAbortError, Service, ServiceNotAvailableError, ServiceStatus, ServiceTemporaryNotAvailableError
 from app.errors.service_error import BuildOkError
 from app.interface.timers import IntervalInterface, IntervalParams, SchedulerInterface
-from app.services.config_service import MODE, ConfigService, UvicornWorkerService
+from app.services.config_service import MODE, ConfigService, WorkerService
 import hvac
 from app.services.file.file_service import FileService
 from app.utils.constant import VaultConstant, VaultTTLSyncConstant
@@ -49,10 +49,10 @@ class VaultService(BaseService,SchedulerInterface):
     _secret_id_crontab='0 0 * * *'
     _ping_available_state = {ServiceStatus.AVAILABLE,ServiceStatus.PARTIALLY_AVAILABLE}
     
-    def __init__(self,configService:ConfigService,fileService:FileService,uvicornWorkerService:UvicornWorkerService):
+    def __init__(self,configService:ConfigService,fileService:FileService,workerService:WorkerService):
         super().__init__()
         self.configService = configService
-        self.uvicornWorkerService = uvicornWorkerService
+        self.workerService = workerService
         self.fileService = fileService
         SchedulerInterface.__init__(self,replace_existing=True,thread_pool_count=1)
         self._jwt_algorithm = self.configService.getenv("JWT_ALGORITHM",DEFAULT_JWT_ALGORITHM)
@@ -90,7 +90,7 @@ class VaultService(BaseService,SchedulerInterface):
     def _create_client(self,build_state:int):
         self.client = hvac.Client(self.configService.VAULT_ADDR)
         self.client.session.headers.update({
-            "X-Vault-Node-Name": self.uvicornWorkerService.INSTANCE_ID,
+            "X-Vault-Node-Name": self.workerService.INSTANCE_ID,
         })
         _raise = build_state==DEFAULT_BUILD_STATE or build_state == GUNICORN_BUILD_STATE
 
@@ -116,7 +116,7 @@ class VaultService(BaseService,SchedulerInterface):
 
     async def refresh_token(self):
 
-        async with self.statusLock.writer as locK:            
+        async with self.lock('writer'):            
             creation_state = DEFAULT_BUILD_STATE if  time.time() > self.next_tick else 0
             self.compute_next_tick_time()
             try:

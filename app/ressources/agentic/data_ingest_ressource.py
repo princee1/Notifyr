@@ -2,7 +2,7 @@ from typing import Annotated, List
 from fastapi import Depends, File, HTTPException, Request, Response, UploadFile,status
 from validators.uri import uri
 from app.classes.auth_permission import AuthPermission, Role
-from app.classes.embeddings import EmbeddingWrapper, EmbeddingModel
+from app.classes.embeddings import ComparableEmbeddings, EmbeddingWrapper, EmbeddingModel
 from app.container import Get, InjectInMethod
 from app.cost.ingest_cost import DeleteDocumentIngestCost, FileIngestCost, CrawlMarkdownIngestCost, ResearchMarkdownIngestCost
 from app.decorators.guards import ArqDataTaskGuard, DataIngestDatabaseGuard, UploadFilesGuard
@@ -10,14 +10,14 @@ from app.decorators.handlers import CustomSchemaHandler, GatewayHandler, LLMHand
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.pipes import  DataClassToDictPipe, GraphRelationshipPipe, MerchantPipe, MiniServiceInjectorPipe, QueryToModelPipe, update_status_upon_no_metadata_pipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, LockService
-from app.depends.class_dep import FileDataIngestQuery
+from app.depends.class_dep import EmbeddingSimilarity, FileDataIngestQuery
 from app.depends.dependencies import get_auth_permission, get_request_id
 from app.depends.funcs_dep import get_profile
 from app.manager.broker_manager import Broker
 from app.manager.merchant_manager import Merchant
 from app.models.crawal4ai_model import SchemaExtractionConfig, SeedingURLModel, URLGeneratorModel
 from app.models.vector_model import QdrantEmbedRequestModel
-from app.services.agent.llm_provider_service import LLMProviderService, VerifyLLMConfig
+from app.services.agent.llm_service import LLMService, VerifyLLMConfig
 from app.services.agent.remote_agent_service import RemoteAgentService
 from app.services.config_service import ConfigService
 from app.services.custom_service import CustomService
@@ -29,25 +29,12 @@ from app.services.vault_service import VaultService
 from app.decorators.permissions import JWTRouteHTTPPermission, ProfilePermission
 from app.definition._ressource import UseLimiter
 from app.services.worker.arq_service import ArqIngestTaskService, JobAlreadyExistsError, JobInProgressError,JobStatus, UnexpectedJobStatusError
-from app.models.ingest_model import (
-    AbortedJobResponse,
-    ComparableEmbeddings,
-    CrawlingComparableURL,
-    DeleteIngestUriMetadata,
-    ResearchDataIngestModel,
-    ResearchIngestDataResponse,
-    ResearchIngestUriMetadata,
-    WebCrawlingIngestDataResponse,
-    WebCrawlingUriMetadata,
-    WebCrawlingDataIngestModel,
-    FileIngestUriMetadata,
-    FileUploadIngestEnqueueResponse,
-    FileUploadDataIngestModel,
-)
+from app.models.ingest_model import AbortedJobResponse,CrawlingComparableURL,DeleteIngestUriMetadata,ResearchDataIngestModel,ResearchIngestDataResponse
+from app.models.ingest_model import ResearchIngestUriMetadata,WebCrawlingIngestDataResponse,WebCrawlingUriMetadata,WebCrawlingDataIngestModel,FileIngestUriMetadata,FileUploadIngestEnqueueResponse,FileUploadDataIngestModel
 from app.models.file_model import  FileResponseUploadModel, UploadError
 from app.data_ingest_tasks import DATA_TASK_REGISTRY_NAME
 from app.utils.constant import AgenticConstant, ArqDataTaskConstant, CostConstant
-from app.utils.tools import RunInThreadPool
+from app.utils.toolbox import RunInThreadPool
 from app.depends.variables import DeleteMode, force_update_query, delete_mode_query
 
 
@@ -114,7 +101,7 @@ class JobArqRessource(BaseHTTPRessource):
             case JobStatus.queued | JobStatus.deferred:
                 info = await self.arqService.info(job)
                 size,uri,task = info.kwargs.get('size',0),info.kwargs.get('uri',None),info.kwargs.get('_nickname',None)
-                await self.arqService.dequeue_task(job_id)
+                await self.arqService.dequeue_job(job_id)
 
                 if  task == ArqDataTaskConstant.FILE_DATA_TASK:
                     file_path = self.arqService.compute_data_file_upload_path(uri)
@@ -181,8 +168,8 @@ class DataIngestRessource(BaseHTTPRessource):
     @UsePipe(QueryToModelPipe('ingestTask'),MerchantPipe)
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
-    @PingService([RedisService,{'cls':LLMProviderService,'kwargs':VerifyLLMConfig()}])
-    @LockService(RedisService,ArqIngestTaskService,LLMProviderService,lockType='reader')
+    @PingService([RedisService,{'cls':LLMService,'kwargs':VerifyLLMConfig()}])
+    @LockService(RedisService,ArqIngestTaskService,LLMService,lockType='reader')
     @UseHandler(UploadFileHandler,ArqHandler,AsyncIOHandler,PydanticHandler,LLMHandler,RedisHandler)
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.FILE_DATA_TASK),UploadFilesGuard(),docling_guard)
     @BaseHTTPRessource.HTTPRoute('/file/',methods=[HTTPMethod.POST],response_model=FileUploadIngestEnqueueResponse)
@@ -213,7 +200,7 @@ class DataIngestRessource(BaseHTTPRessource):
                 merchant.safe_payment(
                     None,
                     (FileResponseUploadModel(metadata=[meta]),db_config),
-                    self.arqService.enqueue_task,ArqDataTaskConstant.FILE_DATA_TASK,
+                    self.arqService.enqueue_job,ArqDataTaskConstant.FILE_DATA_TASK,
                     job_id=uri,
                     expires=ingestTask.expires,
                     defer_by=ingestTask.defer_by,
@@ -240,10 +227,10 @@ class DataIngestRessource(BaseHTTPRessource):
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.CRAWL_DATA_TASK),crawl4ai_guard)
     @UseHandler(ArqHandler,AsyncIOHandler,LLMHandler,RedisHandler,MiniServiceHandler,VaultHandler,GatewayHandler)
-    @PingService([RemoteAgentService,RedisService,{'cls':LLMProviderService,'kwargs':VerifyLLMConfig(crawl=True)}])
-    @LockService(RemoteAgentService,RedisService,ArqIngestTaskService,CustomService,LLMProviderService,lockType='reader')
+    @PingService([RemoteAgentService,RedisService,{'cls':LLMService,'kwargs':VerifyLLMConfig(crawl=True)}])
+    @LockService(RemoteAgentService,RedisService,ArqIngestTaskService,CustomService,LLMService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/web/',methods=[HTTPMethod.POST],response_model=WebCrawlingUriMetadata,mount=False)
-    async def ingest_web_crawling(self,request:Request,response:Response,ingestTask:WebCrawlingDataIngestModel, broker:Annotated[Broker,Depends(Broker)],cost:Annotated[CrawlMarkdownIngestCost,Depends(CrawlMarkdownIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],mode:DeleteMode = Depends(delete_mode_query),request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission)):
+    async def ingest_web_crawling(self,request:Request,response:Response,ingestTask:WebCrawlingDataIngestModel, broker:Annotated[Broker,Depends(Broker)],cost:Annotated[CrawlMarkdownIngestCost,Depends(CrawlMarkdownIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],similarity:Annotated[EmbeddingSimilarity,Depends(EmbeddingSimilarity)],request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission)):
         """
         Web crawl the web and extract meaningful information
         """
@@ -262,9 +249,9 @@ class DataIngestRessource(BaseHTTPRessource):
         embedding:dict = await self.remoteAgentService.request('POST',AgenticConstant.VECTOR_ROUTER('/embed/'),json=embedBody.model_dump())
         embedding['vector_id'] = uri
 
-        subject_embedding = EmbeddingWrapper(embedding)
+        subject_embedding = EmbeddingWrapper(embedding,threshold=similarity.threshold)
 
-        if mode == 'soft':
+        if similarity.mode == 'soft':
             comparable_urls = CrawlingComparableURL(ingestTask=ingestTask)
             comparable_embeddings = ComparableEmbeddings(subject_embedding,'filter','include')
             await self.arqService.search(ArqDataTaskConstant.CRAWL_DATA_TASK,{'subject':comparable_embeddings},None,'match')
@@ -281,7 +268,7 @@ class DataIngestRessource(BaseHTTPRessource):
         merchant.safe_payment(
             None,
             (metadata,db_config),
-            self.arqService.enqueue_task,ArqDataTaskConstant.CRAWL_DATA_TASK,
+            self.arqService.enqueue_job,ArqDataTaskConstant.CRAWL_DATA_TASK,
             job_id=uri,
             expires=ingestTask.expires,
             defer_by=ingestTask.defer_by,
@@ -303,11 +290,11 @@ class DataIngestRessource(BaseHTTPRessource):
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @UseHandler(ArqHandler,AsyncIOHandler,RedisHandler,LLMHandler,RedisHandler,GatewayHandler)
-    @LockService(RemoteAgentService,RedisService,ArqIngestTaskService,LLMProviderService,lockType='reader')
+    @LockService(RemoteAgentService,RedisService,ArqIngestTaskService,LLMService,lockType='reader')
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.RESEARCH_DATA_TASK),crawl4ai_guard,DataIngestDatabaseGuard(False))
-    @PingService([RemoteAgentService,ArqIngestTaskService,RedisService,{'cls':LLMProviderService,'kwargs':VerifyLLMConfig(research=True)}])
+    @PingService([RemoteAgentService,ArqIngestTaskService,RedisService,{'cls':LLMService,'kwargs':VerifyLLMConfig(research=True)}])
     @BaseHTTPRessource.HTTPRoute('/research/',methods=[HTTPMethod.POST],response_model=ResearchIngestDataResponse,mount=False)
-    async def ingest_research(self,request:Request,response:Response,ingestTask:ResearchDataIngestModel, broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[ResearchMarkdownIngestCost,Depends(ResearchMarkdownIngestCost)],mode:DeleteMode = Depends(delete_mode_query), request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def ingest_research(self,request:Request,response:Response,ingestTask:ResearchDataIngestModel, broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[ResearchMarkdownIngestCost,Depends(ResearchMarkdownIngestCost)],similarity:Annotated[EmbeddingSimilarity,Depends(EmbeddingSimilarity)], request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
         """
         Engage a broad research by fetching url concept and crawling those pages
         """
@@ -319,8 +306,8 @@ class DataIngestRessource(BaseHTTPRessource):
         embedding:dict = await self.remoteAgentService.request('POST',AgenticConstant.VECTOR_ROUTER('/embed/'),json=embedBody.model_dump())
         embedding['vector_id'] = uri
 
-        query_embedding = EmbeddingWrapper(embedding)
-        if mode == 'soft':
+        query_embedding = EmbeddingWrapper(embedding,threshold=similarity.threshold)
+        if similarity.mode == 'soft':
             comparable_embeddings = ComparableEmbeddings(query_embedding,'filter','include')
             await self.arqService.search(ArqDataTaskConstant.RESEARCH_DATA_TASK,{'query':comparable_embeddings},True,'single')
 
@@ -330,7 +317,7 @@ class DataIngestRessource(BaseHTTPRessource):
         merchant.safe_payment(
             None,
             metadata,
-            self.arqService.enqueue_task,ArqDataTaskConstant.RESEARCH_DATA_TASK,
+            self.arqService.enqueue_job,ArqDataTaskConstant.RESEARCH_DATA_TASK,
             job_id=uri,
             expires=ingestTask.expires,
             defer_by=ingestTask.defer_by,
@@ -363,8 +350,8 @@ class DataIngestRessource(BaseHTTPRessource):
         @UsePipe(update_status_upon_no_metadata_pipe,before=False)
         @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
         @UseHandler(ArqHandler,AsyncIOHandler,MiniServiceHandler,VaultHandler,LLMHandler,RedisHandler)
-        @PingService([RedisService,{'cls':LLMProviderService,'kwargs':VerifyLLMConfig(vector=False)}])
-        @LockService(RedisService,ArqIngestTaskService,ProfileService,LLMProviderService,lockType='reader',as_manager=True)
+        @PingService([RedisService,{'cls':LLMService,'kwargs':VerifyLLMConfig(vector=False)}])
+        @LockService(RedisService,ArqIngestTaskService,ProfileService,LLMService,lockType='reader',as_manager=True)
         @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.API_DATA_TASK),DataIngestDatabaseGuard(False))
         @BaseHTTPRessource.HTTPRoute('/api/{profile}/',methods=[HTTPMethod.POST],response_model=APIIngestDataResponse,mount=False)
         async def ingest_api_data(self,profile:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[CrawlMarkdownIngestCost,Depends(CrawlMarkdownIngestCost)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):

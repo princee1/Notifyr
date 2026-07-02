@@ -1,9 +1,9 @@
 import asyncio
-
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, WebSocketException,status
 from app.classes.prompt import PromptToken
-from app.utils.constant import CostConstant
-from app.utils.tools import RunInThreadPool
+from app.definition._router import auth_depends, get_instance_id
+from app.utils.constant import CostConstant, HTTPHeaderConstant
+from app.utils.toolbox import RunInThreadPool
 from app.container import Get,Register
 from app.callback import Callbacks_Stream,Callbacks_Sub
 from app.services import RedisService
@@ -14,7 +14,7 @@ from app.services import QdrantService
 from app.services import CostService
 from app.services import ReactiveService
 from app.depends.dependencies import get_bearer_token
-from fastapi import FastAPI,Depends, Request
+from fastapi import FastAPI,Depends, HTTPException, Request
 from app.routers import Routers
 from app.cost.token_cost import TokenCost
 
@@ -57,13 +57,10 @@ def bootstrap_agent_app()->FastAPI:
 
     grpcTask = GrpcTask()    
 
-    def auth_depends(token: str = Depends(get_bearer_token)):
-        agentService.verify_auth(token)
-
     async def on_startup():
         mongooseService.start()
         redisService.register_consumer(callbacks_stream=Callbacks_Stream,callbacks_sub=Callbacks_Sub)
-        grpcTask.set_task(asyncio.create_task(agentService.serve()))
+        await agentService.serve()
         agentService.subscribe_token(
             on_next=lambda t: asyncio.create_task(on_purchase_token_next(t)),
             on_complete=on_purchase_token_complete
@@ -73,39 +70,46 @@ def bootstrap_agent_app()->FastAPI:
         mongooseService.shutdown()
 
         redisService.to_shutdown = True
-        await redisService.close_connections()
+        await redisService.close_connections(True)
         await RunInThreadPool(redisService.revoke_lease)()
         await RunInThreadPool(mongooseService.revoke_lease)()
 
         await RunInThreadPool(vaultService.revoke_auth_token)()
         await agentService.stop_grpc()
-        grpcTask.cancel_task()
 
         agentService.complete_purchase()
 
     app = FastAPI(on_shutdown=[on_shutdown],
                   on_startup=[on_startup],
-                  dependencies=[Depends(auth_depends)]
                   )
     
-    @app.get('/health/',dependencies=[Depends(auth_depends)],)
-    async def health(response:StreamingResponse,request:Request):
+    @app.websocket("/health/")
+    async def health(ws:WebSocket):
+        if not (instance_id:=ws.headers.get(HTTPHeaderConstant.X_NOTIFYR_APP_INSTANCE_ID,None)):
+            raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION,reason="Missing instance id")
         
-        async def health_stream():
+        if not (auth:=ws.headers.get('Authorization',None)):
+            raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION,reason="Missing authorization header")
+
+        if auth != f"Bearer {agentService.AgenticAPIKey}":
+            raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION,reason="Unauthorized")
+
+        await ws.accept()
+
+        try:
             while True:
-                if await request.is_disconnected():
-                    break
-                yield 'pong'
-                asyncio.sleep(2)
- 
-        return StreamingResponse(
-            content=health_stream(),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive"
-                }
-        )
+                await ws.send_text("pong")
+                await asyncio.sleep(60)
+
+        except WebSocketDisconnect as e:
+            print(f"client:{instance_id} disconnected")
+
+        except Exception as e:
+            print("websocket error:", e)
+    
+    @app.post('/ping/',status_code=status.HTTP_200_OK, dependencies=[Depends(auth_depends)])
+    async def ping(request:Request,instance_id:str=Depends(get_instance_id)):
+        return None
 
     for r in Routers:
         app.include_router(r)

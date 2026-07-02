@@ -59,6 +59,13 @@ class ProfileModelRequestBodyError(BaseError):
         self.message = message
     
 
+class ProfileTypeNotAssociatedWithCeleryError(BaseError):
+
+    def __init__(self,collection:str,sid:str|None=None):
+        super().__init__(collection,sid)
+        self.collection=collection
+        self.sid = sid
+
 ####################################                 #####################################333
 
 class ProfileState(Enum):
@@ -94,7 +101,7 @@ class ProfileModelException(BaseException):
 ######################################################
 
 
-MAX_LEN =600
+MAX_LEN = 600
 
 class BaseProfileModel(BaseDocument):
 
@@ -103,8 +110,11 @@ class BaseProfileModel(BaseDocument):
 
     _secrets_keys: ClassVar[list[str]] = []
     _vault:ClassVar[Optional[str]]  = None
+    _celery:ClassVar[bool] = True
     _queue:ClassVar[str] = ...
     _capability:ClassVar[str] = ...
+    _singleton:ClassVar[bool] = False
+
 
     @field_validator("*", mode="before")
     def limit_all_strings(cls, v):

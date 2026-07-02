@@ -5,7 +5,7 @@ from app.container import Get
 from app.definition._service import _CLASS_DEPENDENCY, DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, BaseMiniServiceManager, BaseService, LinkParams, MiniStateProtocol, ServiceStatus,StateProtocol, VariableProtocol, LiaisonDependency,MirrorDependency
 from app.interface.timers import SchedulerInterface
 from app.utils.constant import SubConstant
-from app.utils.tools import RunInThreadPool
+from app.utils.toolbox import RunInThreadPool
 
 
 async def recursive(s:BaseService,message:StateProtocol,cache=None):
@@ -156,7 +156,7 @@ async def SetMiniProfilStatus(message:MiniStateProtocol):
         service:BaseMiniServiceManager = Get(service)
         if not isinstance(service,BaseMiniServiceManager):
             return 
-        async with service.statusLock.reader:
+        async with service.lock('reader'):
             miniService = service.MiniServiceStore.get(message.get('id',None))
             return await SetServiceStatus(message,miniService)
     except Exception:

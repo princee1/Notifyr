@@ -12,7 +12,7 @@ from app.definition._service import StateProtocol, ServiceStatus
 from app.depends.dependencies import get_auth_permission, get_query_params
 from app.errors.properties_error import GlobalKeyDoesNotExistsError
 from app.manager.broker_manager import Broker
-from app.models.custom_model import CustomModel, UpdateCustomModel
+from app.models.odm.custom_model import CustomModel, UpdateCustomModel
 from app.models.properties_model import GlobalVarModel, SettingsModel
 from app.services import CustomService
 from app.services.database.mongoose_service import MongooseService
@@ -43,7 +43,6 @@ PROPERTIES_PREFIX = 'properties'
 @UseHandler(ServiceAvailabilityHandler, AsyncIOHandler)
 @HTTPRessource(SETTINGS_ROUTE)
 class SettingsRessource(BaseHTTPRessource):
-    
     
     def __init__(self):
         super().__init__()
@@ -151,7 +150,7 @@ if CAPABILITIES['object']:
                         PARAMS_KEY_SEPARATOR, globalIter.var)
 
                 ptr.del_val()
-                self.assetService.save_globals()
+                await self.assetService.save_globals()
             self.propagate_asset_state(broker)
             return {"value": val}
 
@@ -183,7 +182,7 @@ if CAPABILITIES['object']:
                         continue
                     ptr[k] = v
 
-            self.assetService.save_globals()
+            await self.assetService.save_globals()
             self.propagate_asset_state(broker)
 
         def propagate_asset_state(self, broker: Broker):

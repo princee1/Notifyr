@@ -19,7 +19,7 @@ async def ProfileErrorStream(entries:list[tuple[str,ProfileErrorProtocol]]):
     service_ids:dict[str,list] = {}
     
 
-    async with mongooseService.statusLock.reader:
+    async with mongooseService.lock('reader'):
         
         for id,message in entries:
             error= {
@@ -45,15 +45,13 @@ async def ProfileErrorStream(entries:list[tuple[str,ProfileErrorProtocol]]):
         try:
             await ErrorProfileModel.insert_many([ErrorProfileModel(**dict(e)) for e in data])
 
-            async with profileService.statusLock.reader:
+            async with profileService.lock('reader'):
                 for sid,status in service_ids.items():
                                     
                     if sid not in profileService.MiniServiceStore:
                         continue
                     
-                    miniService = profileService.MiniServiceStore.get(sid)
-
-                    async with miniService.statusLock.reader:
+                    async with profileService.MiniServiceStore.lock(sid,'reader') as miniService:
                         status = max(status)
                         if status == miniService.service_status.value:
                             continue

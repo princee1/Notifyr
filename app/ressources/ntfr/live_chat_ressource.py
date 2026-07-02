@@ -4,14 +4,15 @@ from pydantic import BaseModel
 from app.container import Get, InjectInMethod
 from  app.definition._ressource import BaseHTTPRessource, HTTPMethod,HTTPRessource, IncludeWebsocket, PingService, LockService, UseHandler, UsePermission, UseRoles
 from app.services.database.redis_service import RedisService
-from app.services.ntfr.chat_service import ChatService
+from app.services.chat_service import ChatService
+from app.services.ntfr.live_chat_service import LiveChatService
 from app.services.reactive_service import ReactiveService
 from app.services.worker.celery_service import CeleryService
 from app.services.setting_service import SettingService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.security_service import JWTAuthService
-from app.websockets.chat_ws import ChatWebSocket
+from app.websockets.live_chat_ws import LiveChatWebSocket
 from app.decorators.handlers import  ServiceAvailabilityHandler, WebSocketHandler
 from app.classes.auth_permission import WSPermission,Role
 from app.decorators.permissions import JWTRouteHTTPPermission
@@ -27,11 +28,11 @@ class ChatModel(BaseModel):
 @UseRoles([Role.CHAT])
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(ServiceAvailabilityHandler)
-@HTTPRessource(prefix=CHAT_PREFIX,websockets=[ChatWebSocket])
+@HTTPRessource(prefix=CHAT_PREFIX,websockets=[LiveChatWebSocket])
 class LiveChatRessource(BaseHTTPRessource):
 
     @InjectInMethod()
-    def __init__(self,jwtAuthService:JWTAuthService, configService: ConfigService,contactService:ContactsService,chatService:ChatService,settingService:SettingService,reactiveService:ReactiveService):
+    def __init__(self,jwtAuthService:JWTAuthService,liveChatService:LiveChatService, configService: ConfigService,contactService:ContactsService,chatService:ChatService,settingService:SettingService,reactiveService:ReactiveService):
         super().__init__()
         self.contactService = contactService
         self.configService = configService
@@ -39,14 +40,15 @@ class LiveChatRessource(BaseHTTPRessource):
         self.chatService = chatService
         self.settingService = settingService
         self.reactiveService = reactiveService
+        self.liveChatService = liveChatService
     
     @LockService(SettingService,lockType='reader')
     @UseHandler(WebSocketHandler)
-    @BaseHTTPRessource.Get('/live-chat-permission/{ws_path}',)
+    @BaseHTTPRessource.Get('/live-chat-permission/{ws_path}/',)
     def issue_chat_permission(self, ws_path:str):
 
         self._check_ws_path(ws_path)
-        run_id = self.websockets[ChatWebSocket.__name__].run_id
+        run_id = self.websockets[LiveChatWebSocket.__name__].run_id
         token = self.jwtAuthService.encode_ws_token(run_id,ws_path,self.settingService.CHAT_EXPIRATION)
         return JSONResponse(status_code=status.HTTP_201_CREATED,content={
             'chat-token':token,

@@ -14,8 +14,8 @@ from app.services.file.base_fileretriever_service import BaseFileRetrieverServic
 from app.services.file.file_service import FileService
 from app.services.vault_service import VaultService
 from app.utils.constant import MinioConstant, VaultTTLSyncConstant
-from app.utils.tools import RunInThreadPool
-from ..config_service import  ConfigService, UvicornWorkerService
+from app.utils.toolbox import RunInThreadPool
+from ..config_service import  ConfigService, WorkerService
 from typing import List, Dict
 #from aiobotocore import client
 
@@ -37,6 +37,7 @@ class ObjectS3Service(TempCredentialsDatabaseService):
     
     def build(self, build_state = DEFAULT_BUILD_STATE):
         try:
+            self.generate_credentials()
             self.client_init()
             if build_state == DEFAULT_BUILD_STATE:
                 super().build(build_state)
@@ -49,41 +50,47 @@ class ObjectS3Service(TempCredentialsDatabaseService):
             raise BuildFailureError(f'Failed to build objectS3Service: {str(e)}') from e
         except MinioAdminException as e:
             raise BuildFailureError(f'Failed to build objectS3Service due to Minio Admin error: {str(e)}') from e
-        
-        
+         
     async def _creds_rotator(self):
-        self.client_init()        
+        await RunInThreadPool(self.generate_credentials)()
+        self.client_init()    
+
+    def generate_credentials(self):
+        if 'default' in self.creds:
+            self.revoke_lease()
+
+        if self.configService.S3_CRED_TYPE == 'MINIO':
+            self._generate_minio_creds()
+        else:
+            self._generate_aws_creds() 
 
     def client_init(self,):
-        if self.configService.S3_CRED_TYPE == 'MINIO':
-            self.generate_minio_creds()
-        else:
-            self.generate_aws_creds()
-
         self.client = Minio(
             endpoint=self.configService.S3_ENDPOINT,
-            access_key=self.db_user,
-            secret_key=self.db_password,
+            access_key=self.db_user(),
+            secret_key=self.db_password(),
             secure=self.configService.MINIO_SSL,
             region=self.configService.S3_REGION
         )
         
-    def generate_aws_creds(self):
+    def _generate_aws_creds(self):
         ...  # Implementation for generating AWS credentials
 
-    def generate_minio_creds(self):
+    def _generate_minio_creds(self):
         if not self.configService.MINIO_STS_ENABLE:
             creds = self.vaultService.minio_engine.generate_static_credentials()
         else:
             creds = self.vaultService.minio_engine.generate_sts_credentials(ttl_seconds=VaultTTLSyncConstant.MINIO_TTL)
 
-        self.creds = VaultDatabaseCredentials(request_id=creds['request_id'], lease_id=creds["lease_id"], lease_duration=creds["lease_duration"],
+        creds = VaultDatabaseCredentials(request_id=creds['request_id'], lease_id=creds["lease_id"], lease_duration=creds["lease_duration"],
             renewable=creds["renewable"], wrap_info=creds.get("wrap_info", None), data=VaultDatabaseCredentialsData(
                 username=creds['data']['accessKeyId'],
                 password=creds['data']['secretAccessKey']
             ), 
             auth=creds.get('auth', None), warnings=creds.get('warnings', None)
         )
+
+        self.creds['default'] = creds
 
     @RunInThreadPool
     async def delete_object(self,object_name: str,version_id: str = None,buckets=MinioConstant.ASSETS_BUCKET):

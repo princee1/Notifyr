@@ -2,16 +2,25 @@
 import asyncio
 from random import randint, random
 import time
+from typing import Dict, Union
 import hvac
 from typing_extensions import Literal
 from app.classes.vault_engine import VaultDatabaseCredentials
 from app.definition._service import AbstractServiceClass, BaseService, ServiceStatus
+from app.errors.db_error import VaultCredentialAlreadyExistError, VaultCredentialNameDoesNotExistError
 from app.errors.service_error import BuildFailureError, ServiceTemporaryNotAvailableError
 from app.interface.timers import IntervalParams, SchedulerInterface
 from app.services.config_service import ConfigService
 from app.services.file.file_service import FileService
 from app.services.vault_service import VaultService
+from app.utils.constant import VaultConstant
 from app.utils.globals import APP_MODE
+from app.utils.toolbox import RunInThreadPool
+
+CREDS_NAME_KEY='__cred_name__'
+CredentialName = Union[Literal['default'],str]
+MultiCredentialsStore = Dict[Literal['default']|str,VaultDatabaseCredentials]
+
 
 
 @AbstractServiceClass()
@@ -28,7 +37,7 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
         DatabaseService.__init__(self,configService,fileService)
         SchedulerInterface.__init__(self,replace_existing=True,thread_pool_count=1)
         self.vaultService = vaultService
-        self.creds:VaultDatabaseCredentials = {}
+        self.creds:MultiCredentialsStore = {}
         self.max_retry = max_retry
         self.wait_time = wait_time
         self.t=t
@@ -44,11 +53,27 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
             self.interval_built = True
         
 
+    def add_credentials(self,role:VaultConstant.NotifyrDynamicSecretsRole,name:CredentialName='default',suffix=None,strict=False):
+        if name in self.creds:
+            self.revoke_lease(name)
+            if strict:
+                raise VaultCredentialAlreadyExistError(name)
+
+        cred = self.vaultService.database_engine.generate_credentials(role,suffix)
+        self.creds[name] = cred
+        
+    def get_credentials(self,name:CredentialName):
+        if name not in self.creds:
+            raise VaultCredentialNameDoesNotExistError(name)
+
+        return self.creds[name]
+
     def verify_dependency(self):
         if self.vaultService.service_status != ServiceStatus.AVAILABLE:
             raise BuildFailureError("Vault Service can’t issue creds")
 
     async def pingService(self,infinite_wait:bool,data:dict,profile:str=None,as_manager:bool=False,**kwargs):
+        cred_name:CredentialName = kwargs.get(CREDS_NAME_KEY,'default')
         self.check_auth()
         await super().pingService(infinite_wait,data,profile,as_manager,**kwargs)
              
@@ -56,42 +81,41 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
     def random_buffer_interval(ttl):
         return ttl - (ttl*.08*random() + randint(20,40))
 
-    def renew_db_creds(self):
-        lease_id = self.creds['lease_id']
+    def renew_db_creds(self,name:CredentialName='default'):
+        lease_id = self.lease_id(name)
+        if not lease_id:
+            return
         self.vaultService.renew_lease(lease_id,3600)
     
-    @property
-    def db_user(self):
-        return self.creds.get('data',dict()).get('username',None)
+    def db_user(self,name:CredentialName='default'):
+        creds = self.get_credentials(name)
+        return creds.get('data',dict()).get('username',None)
         
-    @property
-    def db_password(self):
-        return self.creds.get('data',dict()).get('password',None)
+    def db_password(self,name:CredentialName='default'):
+        creds = self.get_credentials(name)
+        return creds.get('data',dict()).get('password',None)
 
-    @property
-    def lease_id(self):
-        return self.creds.get('lease_id',None)
+    def lease_id(self,name:CredentialName='default'):
+        creds = self.get_credentials(name)
+        return creds.get('lease_id',None)
     
-    def revoke_lease(self):
-        return self.vaultService.revoke_lease(self.lease_id)
+    def revoke_lease(self,name:CredentialName='default'):
+        try:
+            return self.vaultService.revoke_lease(self.lease_id(name))
+        except Exception as e:
+            print(e)
 
     async def _check_vault_status(self):
-        temp_service = None 
-        async with self.vaultService.statusLock.reader:
-            if self.vaultService.service_status == ServiceStatus.AVAILABLE:
-                ...
-            else: 
-                temp_service = self.vaultService.service_status
-        return temp_service
+        async with self.vaultService.lock('reader'):
+            return self.vaultService.service_status
 
     async def creds_rotation(self):
         temp_service = await self._check_vault_status()
-        async with self.statusLock.writer:
-
+        async with self.lock('writer'):
             retry =0
             while retry<self.max_retry:
                 try:
-                    if temp_service == None:
+                    if temp_service == ServiceStatus.AVAILABLE:
                         await self._creds_rotator()
                         self.last_rotated=time.time()
                     else:

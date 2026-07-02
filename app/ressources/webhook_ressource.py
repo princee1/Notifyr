@@ -17,6 +17,6 @@ class WebhookIncomingRessource(BaseHTTPRessource):
         self.workflowService = workflowService
     
 
-    @BaseHTTPRessource.Post('{profile}')
+    @BaseHTTPRessource.Post('/{profile}')
     async def process_events(self,profile:str,request:Response,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
         ...

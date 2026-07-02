@@ -1,6 +1,6 @@
 from app.utils.globals import APP_MODE,ApplicationMode,CAPABILITIES
 
-from app.services.config_service import ConfigService,UvicornWorkerService
+from app.services.config_service import ConfigService,WorkerService
 from app.services.logger_service import LoggerService
 
 if APP_MODE == ApplicationMode.beat or APP_MODE == ApplicationMode.server or APP_MODE == ApplicationMode.worker:
@@ -20,7 +20,7 @@ if APP_MODE == ApplicationMode.worker or APP_MODE == ApplicationMode.server:
 
 
     if CAPABILITIES['agentic']:
-        from app.services.agent.llm_provider_service import LLMProviderService
+        from app.services.agent.llm_service import LLMService
         from app.services.agent.remote_agent_service import RemoteAgentService
 
     if CAPABILITIES['twilio']:
@@ -42,7 +42,10 @@ if APP_MODE == ApplicationMode.server:
         from app.services.database.object_service import ObjectS3Service
     
     if CAPABILITIES['chat']:
-        from app.services.ntfr.chat_service import ChatService
+        from app.services.chat_service import ChatService
+    
+    if CAPABILITIES['live'] and CAPABILITIES['chat']:
+        from app.services.ntfr.live_chat_service import LiveChatService
 
     from app.services.database.memcached_service import  MemCachedService
     from app.services.database.tortoise_service import TortoiseConnectionService
@@ -60,30 +63,28 @@ if APP_MODE == ApplicationMode.server:
 
 
 if APP_MODE == ApplicationMode.agentic and CAPABILITIES['agentic']:
+    from app.services.monitoring_service import MonitoringService
     from app.services.database.redis_service import RedisService
     from app.services.cost_service import CostService
-    from app.services.monitoring_service import MonitoringService
     from app.services.database.memcached_service import MemCachedService
     from app.services.vault_service import VaultService
     from app.services.database.mongoose_service import MongooseService
-    from app.services.agent.llm_provider_service import LLMProviderService
-    from app.services.agent.remote_agent_service import RemoteAgentService
-    from app.services.agent.agent_service import AgentService
+    from app.services.agent.llm_service import LLMService
     from app.services.database.qdrant_service import QdrantService
-    from app.services.database.graphiti_service import GraphitiService
-    from app.services.file.file_service import FileService
     from app.services.profile_service import ProfileService
-    from app.services.worker.arq_service import ArqIngestTaskService
-    from app.services.reactive_service import ReactiveService
     from app.services.custom_service import CustomService
     from app.services.system_service import SystemService
-
+    from app.services.database.graphiti_service import GraphitiService
+    from app.services.file.file_service import FileService
+    from app.services.worker.arq_service import ArqIngestTaskService
+    from app.services.reactive_service import ReactiveService
+    from app.services.agent.agent_service import AgentService
 
 
 if APP_MODE == ApplicationMode.arq and CAPABILITIES['agentic']:
     from app.services.vault_service import VaultService
     from app.services.database.mongoose_service import MongooseService
-    from app.services.agent.llm_provider_service import LLMProviderService
+    from app.services.agent.llm_service import LLMService
     from app.services.database.qdrant_service import QdrantService
     from app.services.database.graphiti_service import GraphitiService
     from app.services.database.redis_service import RedisService

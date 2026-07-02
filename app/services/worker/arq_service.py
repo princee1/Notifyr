@@ -8,17 +8,18 @@ from redis import WatchError
 from app.classes.step import Step
 from app.definition._error import BaseError
 from app.definition._service import BaseService, Service
-from app.services.config_service import ConfigService, UvicornWorkerService
+from app.services.config_service import ConfigService, WorkerService
 from app.services.file.file_service import FileService
 from app.utils.constant import RedisConstant
-from app.services.database.redis_service import RedisService
+from app.services.database.redis_service import RedisService,AGENTIC_CREDS
 from app.utils.globals import APP_MODE,ApplicationMode
 from app.utils.helper import SliceMode, slice_dict
 
 Time = Union[int | float | timedelta | None]
 Config = Literal['vector_config','graph_config']
 
-QUEUE_NAME = 'arq:data_ingestion_task'
+INGESTION_QUEUE_NAME = 'arq:data_ingestion_task'
+CONVERSATION_QUEUE_NAME ='arq:conversation_task'
 
 class DataTaskNotFoundError(BaseError):
     def __init__(self, job_id:str,reason:str):
@@ -75,15 +76,15 @@ class ArqIngestTaskService(BaseService):
     def build(self, build_state = ...):
         if APP_MODE == ApplicationMode.server or APP_MODE == ApplicationMode.arq:
             #self.arq_url = self.redisService.compute_backend_url(RedisConstant.EVENT_DB)
-            user,password = self.redisService.db_user,self.redisService.db_password
+            user,password = self.redisService.db_user(AGENTIC_CREDS),self.redisService.db_password(AGENTIC_CREDS)
             host = self.configService.REDIS_HOST
-            self.arq_url = f"redis://{user}:{password}@redis:6379/{RedisConstant.EVENT_DB}"
+            self.arq_url = f"redis://{user}:{password}@redis:6379/{RedisConstant.AGENTIC_DB}"
 
-    def __init__(self,redisService:RedisService,configService:ConfigService,UvicornWorkerService:UvicornWorkerService,fileService:FileService):
+    def __init__(self,redisService:RedisService,configService:ConfigService,workerService:WorkerService,fileService:FileService):
         self.redisService = redisService
         self.configService = configService
         self.fileService = fileService
-        self.uvicornWorkerService = UvicornWorkerService      
+        self.workerService = workerService      
         super().__init__()  
 
     if APP_MODE == ApplicationMode.server or APP_MODE == ApplicationMode.arq:
@@ -97,13 +98,13 @@ class ArqIngestTaskService(BaseService):
         async def close(self):
             await self._worker.close()
 
-        async def enqueue_task(self,task_name:str,job_id:str=None,expires:Time=None,defer_by:Time = None,kwargs:dict={}):
+        async def enqueue_job(self,task_name:str,job_id:str=None,queue_name:str= INGESTION_QUEUE_NAME,expires:Time=None,defer_by:Time = None,kwargs:dict={}):
             task_name = self.task_registry[task_name]
-            task = await self._worker.enqueue_job(task_name,_job_id=job_id,_queue_name=QUEUE_NAME,_expires=expires,_defer_by=defer_by, **kwargs)
+            task = await self._worker.enqueue_job(task_name,_job_id=job_id,_queue_name=queue_name,_expires=expires,_defer_by=defer_by, **kwargs)
             return task
         
-        async def get_queued_jobs(self)->list[JobDef]:
-            return await self._worker.queued_jobs(queue_name=QUEUE_NAME) or []
+        async def get_queued_jobs(self,queue_name:str=INGESTION_QUEUE_NAME)->list[JobDef]:
+            return await self._worker.queued_jobs(queue_name=queue_name) or []
             
         async def get_jobs_results(self,success:bool|None=None)->list[JobDef]:
             results = await self._worker.all_job_results()
@@ -115,11 +116,10 @@ class ArqIngestTaskService(BaseService):
             for r in results:
                 if r.success == success:
                     temp.append(r)
-            
             return temp
         
-        async def fetch(self,job_id:str):
-            return Job(job_id,self._worker,QUEUE_NAME)
+        async def fetch(self,job_id:str,queue_name:str=INGESTION_QUEUE_NAME):
+            return Job(job_id,self._worker,queue_name)
         
         async def info(self,job_id:str|Job):
             if isinstance(job_id,str):
@@ -193,8 +193,8 @@ class ArqIngestTaskService(BaseService):
                     
                 raise WatchError('Could not commit the change')
   
-        async def dequeue_task(self,job_id:str):
-            q_val = await self.redisService.rem(RedisConstant.EVENT_DB,QUEUE_NAME,job_id)
+        async def dequeue_job(self,job_id:str,queue_name:str=INGESTION_QUEUE_NAME):
+            q_val = await self.redisService.rem(RedisConstant.EVENT_DB,queue_name,job_id)
             j_val,r_del = await self.delete(job_id)
             return
 

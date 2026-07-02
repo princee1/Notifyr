@@ -3,7 +3,7 @@ from typing import Dict, List, Tuple, Type
 from pydantic import BaseModel
 from app.definition._error import BaseError
 from app.definition._service import DEFAULT_BUILD_STATE, BaseService, Service
-from app.models.custom_model import CustomModel, CustomValidationModel
+from app.models.odm.custom_model import CustomModel, CustomValidationModel
 from app.services.config_service import ConfigService
 from app.services.database.mongoose_service import MongooseService
 from app.utils.constant import MongooseDBConstant

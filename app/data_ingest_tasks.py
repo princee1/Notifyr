@@ -3,20 +3,21 @@ import json
 from typing import Any, Callable, List
 from app.classes.cost_definition import MarkdownCostDefinition
 from app.classes.crawl import WebCrawlState, CrawlTokenUsageReport, DigestState, MarkdownDocumentSize, SchemaNotFoundError
+from app.classes.nodes import SourceDescription
 from app.classes.qdrant import QdrantCollectionDoesNotExistError
 from app.classes.step import SkipStep, Step, StepRunner
 from app.errors.ingest_error import IngestTaskNotSupportedError
 from app.errors.llm_error import LLMConfigNotConfiguredError
 from app.models.crawal4ai_model import KnowledgeGraphExtractionConfig, SchemaExtractionConfig, TextsExtractionConfig
 from app.models.file_model import FileResponseUploadModel, UriMetadata
-from app.services.agent.llm_provider_service import LLMProviderMiniService
+from app.services.agent.llm_service import LLMMiniService
 from app.services.config_service import ConfigService
 from app.services.custom_service import CustomService
 from app.services.profile_service import ProfileService
 from app.utils.constant import CostConstant,ArqDataTaskConstant, Crawl4AIConstant, ParseStrategy
 from app.utils.globals import APP_MODE,ApplicationMode
 from app.utils.helper import slice_dict, uuid_v1_mc
-from app.utils.tools import RunAsync
+from app.utils.toolbox import RunAsync
 from app.models.ingest_model import ResearchDataIngestModel, VectorConfig,KGraphConfig, WebCrawlingDataIngestModel
 
 task_registry = []
@@ -154,7 +155,7 @@ async def process_file_loader_task(ctx:dict[str,Any],vector_config:VectorConfig|
 
     file_path = arqService.compute_data_file_upload_path(uri)
     extension =  fileService.get_extension(file_path)
-    textDataLoader = TextDataLoader(qdrantService.embedding_parse,file_path,lang,extension,vector_config.category,strategy,use_docling)
+    textDataLoader = TextDataLoader(qdrantService.embedding_parse,file_path,lang,extension,strategy,use_docling)
     token = None
     
     async with StepRunner(step,FileIngestionStepIndex.PROCESS) as skip:
@@ -168,7 +169,7 @@ async def process_file_loader_task(ctx:dict[str,Any],vector_config:VectorConfig|
         
         if graph_config != None:
             for chunk in textDataLoader.chunks:
-                await graphitiService.add_chunk_episode(chunk,graph_config.instruction,graph_config.entities,graph_config.edges,graph_config.description)
+                await graphitiService.add_chunk_episode(chunk,graph_config.domain,graph_config.instruction,graph_config.entities,graph_config.edges,graph_config.description)
 
     async with StepRunner(step,FileIngestionStepIndex.TOKEN_COST) as skip:
         skip()
@@ -212,7 +213,7 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
         if not schema:
             raise SchemaNotFoundError(ingestTask.extraction.custom_schema)
         
-    crawlLLMProvider:LLMProviderMiniService = ctx[CRAWL_PROVIDER_KEY]
+    crawlLLMProvider:LLMMiniService = ctx[CRAWL_PROVIDER_KEY]
     markdownCrawl: MarkdownCostDefinition = ctx[CRAWL_MARKDOWN_KEY]
 
     crawler = WebCrawlerIngestion(
@@ -246,6 +247,7 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
                     if graph_config != None:
                         await graphitiService.add_chunk_episode(
                             chunk,
+                            graph_config.domain,
                             graph_config.instruction,
                             entities=graph_config.entities,
                             edges=graph_config.edges,
@@ -266,29 +268,24 @@ async def process_website_crawling(ctx:dict[str,Any],vector_config:VectorConfig|
                 for item in result.extracted_content: 
                     if not item:
                         continue
-
+                    _id = item.get('id',uuid_v1_mc())
+                    title = item.get('title',None)
                     await graphitiService.add_content_episode(
-                        source=result.url,
                         entities=graph_config.entities,
                         edges=graph_config.edges,
-                        name = item.get('title',None),
-                        description = result.description,
+                        name = f"{_id}@{title}",
+                        description = SourceDescription(_id,result.source,title,result.url,lang,result.description),
                         body = json.loads(item.get('content',None)),
                         domain = graph_config.domain,
                         instruction = graph_config.instruction,
-                        uuid = f"{item.get('id',None)}@{uuid_v1_mc()}"
                     )
             elif isinstance(crawler.ingestTask.extraction,KnowledgeGraphExtractionConfig):
                 if not result.markdown_content:
                     continue
-
-                uuid = f"{uuid_v1_mc()}"
                 await graphitiService.add_content_episode(
                     name=result.title,
-                    source=result.url,
-                    description=result.description,
+                    description= SourceDescription(uuid_v1_mc(),result.source,result.title,result.url,lang,result.description),
                     body=result.markdown_content,
-                    uuid=uuid,
                     domain=graph_config.domain,
                     instruction=crawler.ingestTask.extraction.instruction,
                     entities=graph_config.entities,
@@ -336,12 +333,12 @@ async def process_research_task(ctx:dict[str,Any],vector_config:VectorConfig|Non
     fileService:FileService = Get(FileService)
     configService:ConfigService = Get(ConfigService)
     
-    researchLLMProvider:LLMProviderMiniService = ctx[RESEARCH_PROVIDER_KEY]
-    crawlLLMProvider:LLMProviderMiniService = ctx[CRAWL_PROVIDER_KEY]
+    researchLLMProvider:LLMMiniService = ctx[RESEARCH_PROVIDER_KEY]
+    crawlLLMProvider:LLMMiniService = ctx[CRAWL_PROVIDER_KEY]
     markdownResearch: MarkdownCostDefinition = ctx[RESEARCH_MARKDOWN_KEY]
 
     researcher =  ResearchIngestion(
-        researchTask=ResearchDataIngestModel(lang=lang,vector_config=vector_config,graph_config=graph_config,lang=lang,name=uri,**slice_dict(kwargs,['subject'],'exclude')),
+        researchTask=ResearchDataIngestModel(lang=lang,vector_config=vector_config,graph_config=graph_config,name=uri,**slice_dict(kwargs,['subject'],'exclude')),
         research_llm_config=researchLLMProvider.crawl_llm,
         crawl_llm_config=crawlLLMProvider.crawl_llm,
         base_dir=f"{configService.DATA_INGESTION_DIR}crawl4ai/",
@@ -404,8 +401,7 @@ async def process_research_task(ctx:dict[str,Any],vector_config:VectorConfig|Non
                 continue 
             graphitiService.add_content_episode(
                 name=result.title,
-                source=result.source,
-                description=result.description,
+                description = SourceDescription(uuid_v1_mc(),result.source,result.title,result.url,lang,result.description),
                 body=result.markdown,
                 instruction=graph_config.instruction,
                 domain=graph_config.domain,
@@ -456,7 +452,7 @@ if APP_MODE == ApplicationMode.arq:
 
     from app.services import QdrantService
     from app.services import GraphitiService
-    from app.services import LLMProviderService
+    from app.services import LLMService
     from app.services import FileService
     from app.services import MongooseService
     from app.services import RedisService
@@ -465,7 +461,7 @@ if APP_MODE == ApplicationMode.arq:
     from app.services import LoggerService
     from app.services import SystemService
     from app.services import SettingService
-    from app.services.worker.arq_service import ArqIngestTaskService,QUEUE_NAME
+    from app.services.worker.arq_service import ArqIngestTaskService,INGESTION_QUEUE_NAME
 
     from app.container import Get,build_container
     import asyncio
@@ -483,7 +479,7 @@ if APP_MODE == ApplicationMode.arq:
     class WorkerSettings:
         functions = task_registry
         redis_settings = RedisSettings.from_dsn(arqService.arq_url)
-        queue_name = QUEUE_NAME
+        queue_name = INGESTION_QUEUE_NAME
         max_jobs = 5
         allow_abort_jobs = True
         keep_result_forever = True
@@ -551,7 +547,7 @@ if APP_MODE == ApplicationMode.arq:
     
     @staticmethod
     async def startup(ctx:dict[str,Any]):
-        llMProviderService = Get(LLMProviderService)
+        llMProviderService = Get(LLMService)
         fileService = Get(FileService)
         costService = Get(CostService)
 

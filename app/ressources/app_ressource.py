@@ -9,7 +9,7 @@ from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessour
 from datetime import timedelta
 from app.depends.funcs_dep import Get_Contact
 from app.depends.orm_cache import ContactORMCache, ContactSummaryORMCache
-from app.models.contacts_model import ContactORM, ContactSummary
+from app.models.orm.contacts_model import ContactORM, ContactSummary
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.file.file_service import FileService

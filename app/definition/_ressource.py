@@ -2,20 +2,21 @@
 The `BaseResource` class initializes with a `container` attribute assigned from the `CONTAINER`
 instance imported from `container`.
 """
-from typing import Any, Callable, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, TypeVar, Type, TypedDict
+from typing import Any, Callable, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, TypeVar, Type, TypedDict, get_args
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.datastructures import Default
 from pydantic import BaseModel
 from app.classes.cost_definition import SimpleTaskCostDefinition
 from app.classes.profiles import ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
 from app.definition._ws import W
 from app.depends.dependencies import get_auth_permission
-from app.services.config_service import MODE, ConfigService
+from app.services.config_service import MODE, ConfigService, WorkerService
 from app.utils.helper import _make_delay_fn, copy_response
 from app.utils.constant import SpecialKeyParameterConstant
 from app.services import CostService
 from app.container import Get, Need
-from app.definition._service import S, BaseMiniService, BaseMiniServiceManager, BaseService
+from app.definition._service import S, BaseMiniService, BaseMiniServiceManager, BaseService, ServiceLockType
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from app.utils.prettyprint import PrettyPrinter_, PrettyPrinter
 import functools
@@ -29,6 +30,7 @@ import warnings
 
 configService: ConfigService = Get(ConfigService)
 costService:CostService = Get(CostService)
+workerService:WorkerService = Get(WorkerService)
 
 RequestLimit = 0
 
@@ -274,7 +276,7 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
     @staticmethod
     def HTTPRoute(path: str, methods: Iterable[HTTPMethod] | HTTPMethod = [HTTPMethod.POST],cost_definition:str=None, operation_id: str = None, dependencies: Sequence[Depends]|List[Depends] = None, response_model: Any = None, response_description: str = "Successful Response",
                   responses: Dict[int | str, Dict[str, Any]] | None = None,
-                  deprecated: bool | None = None, mount: bool = True):
+                  deprecated: bool | None = None, mount: bool = True,response_class:type[Response] =None):
         def decorator(func: Callable):
             computed_operation_id = BaseHTTPRessource._build_operation_id(
                 path, None, methods, operation_id)
@@ -306,6 +308,7 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
                 'response_model': response_model,
                 'methods': HTTPMethod.to_strs(methods),
                 'response_description': response_description,
+                'response_class': response_class or  Default(JSONResponse),
                 'responses': responses,
                 'deprecated': deprecated,
             }
@@ -908,7 +911,7 @@ def Throttle(fixed: float | None = None,fn: Callable[[], float] | None = None,un
 
     return decorator    
 
-def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]|None|Dict[ClientTypeLiteral|int]=None,key_func:Callable[[Request],str]|Literal['private','public']='private'):
+def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]|None|Dict[ClientTypeLiteral,int]=None,key_func:Callable[[Request],str]|Literal['group','client','public','private','default','worker','none','session','ip']='client'):
     """
     *Description copied from the slowapi library*
 
@@ -940,29 +943,64 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
         elif isinstance(cost,dict):
             if key_func != 'private':
                 raise ValueError('To add cost based on the client type we must have the client_id as key. HINT: use key_func="private"')
-            
             def cost_func(request:Request):
                 authPermission:AuthPermission =  get_auth_permission(request)
                 clientType = authPermission['client_type']
                 unit_cost = cost.get(clientType,1)
-                unit_cost =min(1,unit_cost)
-                return max(unit_cost,max_limit)      
+                unit_cost = max(1,unit_cost)
+                return min(unit_cost,max_limit)
             return cost_func
         else:
             raise ValueError('Could not parse the cost as a function')
         
     cost_callback = cost_decorator()
 
-    def private_key_func(request:Request):
+    def client_private_key_func(request:Request):
+        if not configService.SECURITY_FLAG:
+            return workerService.INSTANCE_ID
         authPermission:AuthPermission =  get_auth_permission(request)
         return authPermission['client_id']
 
-    if key_func == 'public':
-        key_func = None # use the global key_func
-    elif key_func == 'private':
-        key_func = private_key_func
+    def group_private_key_func(request:Request):
+        if not configService.SECURITY_FLAG:
+            return workerService.HOSTNAME
+        authPermission:AuthPermission = get_auth_permission(request)
+        if not (group_id:=authPermission.get('group_id',None)):
+            return client_private_key_func(request)
+        return group_id
+
+    def session_key_func(request:Request)->str:
+        return ...
+    
+    def private_key_func(request:Request)->str:
+        authPermission:AuthPermission = get_auth_permission(request)
+        return 'private'
+
+
+    if isinstance(key_func,str):
+        match key_func:
+            case 'default':
+                key_func = None # use the global key_func
+            case 'ip':
+                ...
+            case 'public':
+                key_func = lambda r: 'public'
+            case 'private':
+                key_func = private_key_func
+            case 'none':
+                key_func = lambda r: 'none'
+            case 'session':
+                key_func = session_key_func
+            case 'worker':
+                key_func = lambda r: workerService.INSTANCE_ID
+            case 'client':
+                key_func = client_private_key_func
+            case 'group':
+                key_func = group_private_key_func
+            case _:
+                key_func = client_private_key_func
     elif callable(key_func):
-        ...
+        ... # Use the key_func callable provided
     else:
         raise ValueError('Could not parse the key_func')
 
@@ -981,7 +1019,6 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
             meta['shared'] = shared
             
         def wrapper(target_function):
-
             @functools.wraps(target_function)
             async def callback(*args,**kwargs):
                 try:
@@ -991,9 +1028,7 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
                     request:Request = kwargs.get('request')
                     if response != None:
                         response = costService.GlobalLimiter._inject_headers(response,request.state.view_rate_limit)
-
                     raise HTTPException(e.status_code,e.detail,Helper.merge_headers(e.headers,response))
-            
             return callback
         
         Helper.appends_funcs_callback(func,wrapper,DecoratorPriority.LIMITER)
@@ -1038,8 +1073,8 @@ def PingService(services: list[S | dict], infinite_wait=False,is_manager=False,w
     
     return decorator
 
-def LockService(*services: Type[S], lockType: Literal['reader', 'writer'] = 'writer',infinite_wait:bool=False,as_manager:bool = False,miniLockType:Literal['reader', 'writer'] =None,**add_kwargs):
-    if lockType not in ['reader', 'writer']:
+def LockService(*services: Type[S], lockType: ServiceLockType = 'writer',infinite_wait:bool=False,as_manager:bool = False,miniLockType:Literal['reader', 'writer'] =None,**add_kwargs):
+    if lockType not in get_args(ServiceLockType):
         raise TypeError
     
     if miniLockType == None:
@@ -1071,9 +1106,7 @@ def LockService(*services: Type[S], lockType: Literal['reader', 'writer'] = 'wri
                                 if profile not in _service.MiniServiceStore:
                                     raise ProfileTypeNotMatchRequest(profile,add_kwargs.get('motor_fallback',False))
                                 
-                                s:BaseMiniService = _service.MiniServiceStore.get(profile)
-
-                                async with s.statusLock.reader if miniLockType == 'reader' else _service.statusLock.writer:
+                                async with  _service.MiniServiceStore.lock(profile,miniLockType):
                                     return await Helper.return_result(f,a,k)
                             else:
                                 return await Helper.return_result(f,a,k)

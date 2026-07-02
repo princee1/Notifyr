@@ -1,7 +1,7 @@
 
-from typing import Type
+from typing import Generic, Type, TypeVar, Union
 from app.definition import _service
-from app.models.communication_model import IMAPProfileModel, SMTPProfileModel
+from app.models.odm.communication_model import IMAPProfileModel, SMTPProfileModel
 from app.services.config_service import ConfigService
 #from app.services.email.api_email_service import EmailAPIService
 from app.services.database.redis_service import RedisService
@@ -9,11 +9,12 @@ from app.services.mini.email.protocol_email_service import IMAPEmailMiniService,
 from app.services.logger_service import LoggerService
 from app.services.profile_service import ProfileMiniService, ProfileService
 from app.services.reactive_service import ReactiveService
-from app.utils.tools import Mock
-from app.interface.email import EmailReadInterface, EmailSendInterface
+from app.utils.toolbox import Mock
+from app.interface.email import EmailReadInterface, EmailSendInterface,EmailInterface
 
+EI = TypeVar('EI',bound=EmailInterface)
 
-class EmailService(_service.BaseMiniServiceManager):
+class EmailService(_service.BaseMiniServiceManager,Generic[EI]):
 
     ACCEPTABLE_MODEL:set = ...
 
@@ -22,30 +23,31 @@ class EmailService(_service.BaseMiniServiceManager):
         return super().__init_subclass__()
 
     def verify_dependency(self):
-        if self.profilesService.service_status not in _service.ACCEPTABLE_STATES:
+        if self.profileService.service_status not in _service.ACCEPTABLE_STATES:
             raise _service.BuildFailureError('No email profile found')
 
     async def async_verify_dependency(self):
-        async with self.profilesService.statusLock.reader:
-            if self.profilesService.service_status not in _service.ACCEPTABLE_STATES:
+        async with self.profileService.lock('reader',None):
+            if self.profileService.service_status not in _service.ACCEPTABLE_STATES:
                 return False
             return True
 
     def __init__(self,profileService:ProfileService):
         super().__init__()
-        self.profilesService = profileService
+        self.profileService = profileService
+        self.MiniServiceStore: _service.MiniServiceStore[Union[EI,_service.BaseMiniService]] = _service.MiniServiceStore[EI,_service.BaseMiniService](self.name)
     
     def _create_mini_service(self,model,profile)->ProfileMiniService | None:
         return 
     
     def build(self,build_state=_service.DEFAULT_BUILD_STATE):
         
-        count = self.profilesService.MiniServiceStore.filter_count(lambda p: p.model.__class__ in self.ACCEPTABLE_MODEL )
+        count = self.profileService.MiniServiceStore.filter_count(lambda p: p.model.__class__ in self.ACCEPTABLE_MODEL )
         state_counter = self.StatusCounter(count)
 
         self.MiniServiceStore.clear()
 
-        for i,p in self.profilesService.MiniServiceStore:
+        for i,p in self.profileService.MiniServiceStore:
             model = p.model.__class__
             miniService = self._create_mini_service(model,p)
             if miniService == None:
@@ -62,7 +64,7 @@ class EmailService(_service.BaseMiniServiceManager):
     endService=True,
     links=[_service.LinkDep(ProfileService,to_build=True,to_destroy=True,)]
 )
-class EmailSenderService(EmailService):
+class EmailSenderService(EmailService[EmailSendInterface]):
 
     # BUG cant resolve an abstract class
 
@@ -73,8 +75,6 @@ class EmailSenderService(EmailService):
         self.configService = configService
         self.loggerService = loggerService
         self.redisService = redisService
-
-        self.MiniServiceStore = _service.MiniServiceStore[EmailSendInterface | _service.BaseMiniService](self.__class__.__name__)
 
     def _create_mini_service(self, model, profile):
         if model == SMTPProfileModel:
@@ -89,7 +89,7 @@ class EmailSenderService(EmailService):
     is_manager=True,
     links=[_service.LinkDep(ProfileService,to_build=True,to_destroy=True,)]
 )
-class EmailReaderService(EmailService):
+class EmailReaderService(EmailService[EmailReadInterface]):
 
     ACCEPTABLE_MODEL = {IMAPProfileModel}
 
@@ -99,8 +99,6 @@ class EmailReaderService(EmailService):
         self.reactiveService = reactiveService
         self.loggerService = loggerService
         self.redisService =redisService
-
-        self.MiniServiceStore = _service.MiniServiceStore[EmailReadInterface|_service.BaseMiniService](self.__class__.__name__)
 
     def _create_mini_service(self, model, profile):
         if model == IMAPProfileModel:

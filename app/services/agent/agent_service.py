@@ -1,95 +1,116 @@
 import asyncio
 import functools
-from typing import Any, Callable, Dict, List, Self,Any
-from fastapi import HTTPException
+from typing import Any, Callable, Dict, List, NamedTuple, Self,Any, get_args
 from pydantic import ValidationError
+from app.classes.secrets import ChaCha20SecretsWrapper
+from app.definition._agent import *
 from app.classes.cost_definition import InsufficientCreditsError, InvalidPurchaseRequestError
 from app.classes.prompt import PromptToken
 from app.definition import _service
-from app.errors.service_error import BuildFailureError, MiniServiceDoesNotExistsError
+from app.definition._tool import Tool, dynamic_tool_selection, handle_tool_errors
+from app.errors.llm_error import LLMProviderDoesNotExistError
+from app.errors.service_error import BuildFailureError, BuildOkError, MiniServiceDoesNotExistsError
 from app.grpc.agent_interceptor import AgentServerInterceptor, HandlerType
-from app.models.agents_model import *
+from app.models.odm.agents_model import *
+from app.models.odm.outbound_model import HTTPOutboundModel
+from app.prompt import system_prompt
 from app.services.config_service import ConfigService
 from app.services.cost_service import CostService
 from app.services.custom_service import CustomService
-from app.services.database.memcached_service import MemCachedService
-from app.services.database.mongoose_service import MongooseService
+from app.services.database.mongoose_service import AGENTIC_CREDS, MongooseService
 from app.services.database.qdrant_service import QdrantService
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, LinkDep, MiniService, MiniServiceStore, Service, BaseMiniServiceManager, ServiceStatus
-from app.services.mini.outbound.http_outbound_service import HTTPOutboundMiniService
+from app.services.database.redis_service import RedisService
 from app.services.profile_service import  ProfileMiniService, ProfileService
 from app.services.database.graphiti_service import GraphitiService
 from app.services.reactive_service import ReactiveService
 from app.services.vault_service import VaultService
+from app.models.odm.tools_model import *
 from app.tools.api_tool import APIControlTool, APIFetchTool
 from app.tools.cache_tool import CacheTool
 from app.tools.conversation_tool import ConversationTool
-from app.tools.graph_tool import KnowledgeGraphTool
-from app.tools.mcp_tool import MCPTool
-from app.tools.memory_tool import MemoryTool
+from app.tools.graph_tool import KnowledgeGraphTool,MemoryTool
 from app.tools.search_tool import SearchTool
 from app.tools.vector_tool import VectorRagTool
 from app.utils.constant import CostConstant, MongooseDBConstant
-from app.utils.helper import subset_model
-from pydantic import SecretStr
-from .llm_provider_service import LLMProviderMiniService, LLMProviderService
+from app.utils.helper import slice_dict
+from app.utils.toolbox import Mock
+from .llm_service import LLMMiniService, LLMService
 from .remote_agent_service import  RemoteAgentMiniService, RemoteAgentService
 from concurrent import futures
 import grpc
 from app.grpc import agent_pb2_grpc,agent_pb2,agent_message
-from langchain_openai import ChatOpenAI
-from langchain_anthropic import ChatAnthropic
-from langchain_cohere import ChatCohere
-from langchain_groq import ChatGroq
-from langchain_core.language_models import BaseChatModel
 from langchain.agents.factory import create_agent
-from langchain.tools import tool as tool_factory, ToolRuntime
-from langgraph.graph.state import CompiledStateGraph
-
+from langchain.tools import BaseTool, tool as tool_factory, ToolRuntime
+from langgraph.checkpoint.mongodb import MongoDBSaver
+from langgraph.store.mongodb import MongoDBStore
+from langchain.agents.middleware import HumanInTheLoopMiddleware, ModelCallLimitMiddleware, ToolCallLimitMiddleware
+from langchain.agents.middleware.model_call_limit import ModelCallLimitExceededError
+from langchain.messages import HumanMessage, SystemMessage,AIMessage,AIMessageChunk
+from langchain_classic import hub
+from langchain_core.rate_limiters import InMemoryRateLimiter
+from app.classes import conversation
 
 AVOID_RE_VALIDATE_BUILD_STATE = -100
 AVOID_RECREATE_AGENT_BUILD_STATE = -435
+RECREATE_MEMORY_BUILD_STATE = 895
+RECREATE_AGENT_BUILD_STATE = 543
+RECREATE_AGENT_WITH_OUTBOUND_BUILD_STATE=120
+TOOL_RECREATE_BUILD_STATE = 890
 
 REACTIVE_TOKEN_COST = 'token_cost'
+API_SECRET_KEY = 'API_KEY'
+
+InterruptConfig = Dict
 
 factory_include = ('temperature','model','timeout')
+acceptable_service = {ServiceStatus.AVAILABLE,ServiceStatus.WORKS_ALMOST_ATT,ServiceStatus.PARTIALLY_AVAILABLE}
+answer_exclude = {'token'}
 
-@MiniService(mirror=RemoteAgentMiniService,links=[LinkDep(LLMProviderMiniService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)])
+@MiniService(mirror=RemoteAgentMiniService,links=[LinkDep(LLMMiniService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)])
 class AgentMiniService(BaseMiniService):
-    ...
-    """
-    will register the tools
-    and store the agent config
-    graph of tools
-    call the provider
-    """
+
     def __init__(self,
                 configService:ConfigService,
                 graphitiService:GraphitiService,
                 qdrantService:QdrantService,
                 mongooseService:MongooseService,
-                llmProviderMService:LLMProviderMiniService,
+                llmMiniService:LLMMiniService,
                 customService:CustomService,
-                memcachedService:MemCachedService,
+                redisService:RedisService,
                 agent_model:dict,
-                outboundServices:Dict[str,HTTPOutboundMiniService]={}):
+                checkpointer:MongoDBSaver,
+                store:MongoDBStore,
+                toolModels:list[ToolModel],
+                outboundServices:Dict[str,ProfileMiniService[HTTPOutboundModel]]={},
+                clientServices:Dict[str,ProfileMiniService[BaseProfileModel]]={},
+                __as_subagent__=False):
             
-            self.depService = llmProviderMService
-            super().__init__(llmProviderMService,str(agent_model.id))
+            self.depService = llmMiniService
+            super().__init__(llmMiniService,str(agent_model['id']))
             self.mongooseService = mongooseService
             self.configService = configService
             self.graphitiService =  graphitiService
-            self.memcachedService = memcachedService
+            self.redisService = redisService
             self.qdrantService = qdrantService
             self.customService = customService
             self.outboundServices = outboundServices
+            self.clientServices = clientServices
             self.agent_model=agent_model
+            self.checkpointer = checkpointer
+            self.store = store
+            self.toolModels = toolModels
+
+            self.__as_subagent__ = __as_subagent__
 
             for outbound in self.outboundServices.values():
                 self.register(outbound)
 
-            self.executors ={}
-    
+            for client in self.clientServices.values():
+                self.register(client)
+            
+            self.tools:Dict[str,Tool] = {}
+
     def verify_dependency(self):
         if self.depService.service_status != ServiceStatus.AVAILABLE:
             raise BuildFailureError('LLM Provider is not available')
@@ -101,179 +122,263 @@ class AgentMiniService(BaseMiniService):
                 self.agent_model = AgentValidationModel.model_construct(**m)
         except ValidationError as e:
             raise BuildFailureError('Could not validate the agent model')
-
-        self.base_chat = self.ChatAgentFactory(self.agent_model)
-        self._init_tools()
-        self._init_middleware()
-        self._init_system_prompt()
-        self._init_response_format()
-        self.init_long_term_memory()
-        self.agent = self.create_agent()
-
         
-    def _init_tools(self)->list:
+        hitl_config = {}
+        tool_limits = []
+
+        tools = self._init_tools(hitl_config,tool_limits)
+        middleware = self._init_middleware(hitl_config,tool_limits)
+    
+        prompt = system_prompt.SYSTEM_TEMPLATE(self.agent_model.system)
+        self.prompt = SystemMessage([{'type':'text','text':prompt,"cache_control": {"type": "ephemeral"}}])
+        self.agent = create_agent(
+                model=self.chat_model,
+                middleware=middleware,
+                tools=tools,
+                system_prompt=prompt,
+                state_schema=NotifyrAgentState,
+                context_schema=NotifyrContext,
+                name=self.agent_name,
+                checkpointer=self.checkpointer,
+                store=self.store,
+                )
+
+        for id,service in self.outboundServices.items():
+            if service.service_status not in acceptable_service:
+                raise BuildOkError(f'OutboundService [{id}] does not have a valid state: {service.service_status}')
+        
+        for id,service in self.clientServices.items():
+            if service.service_status not in acceptable_service:
+                raise BuildOkError(f'OutboundService [{id}] does not have a valid state: {service.service_status}')
+        return
+
+    #########################################################################################################
+    ############################                                          ###################################
+    #########################################################################################################
+
+    def _init_tools(self,hitl_config:dict,tool_limit:list)->List[BaseTool]:
         tools = []
-        for model in self.agent_model.tools:
-            if isinstance(model,VectorToolModel):
-                tool = VectorRagTool(self.qdrantService,self.configService,self.customService,self.memcachedService,model)
-            elif isinstance(model,CacheToolModel):
-                tool = CacheTool(self.configService,self.qdrantService,self.memcachedService)
-            elif isinstance(model,KnowledgeGraphToolModel):
-                tool = KnowledgeGraphTool(self.graphitiService,self.configService,self.customService,self.memcachedService,self.qdrantService)
-            elif isinstance(model,(APIToolModel,APIControlModel)):
-                outboundService = self.outboundServices.get(model.outbound_id,None)
-                if not outboundService:
+        mcp_tools = []
+        rag_tools = []
+        for config in self.toolModels:
+
+            if isinstance(config,VectorToolModel):
+                tool = VectorRagTool(self.qdrantService,self.configService,self.customService,config)
+            elif isinstance(config,CacheToolModel):
+                tool = CacheTool(self.configService,self.redisService,config)
+            elif isinstance(config,KnowledgeGraphToolModel,MemoryToolModel):
+                cls = KnowledgeGraphTool if isinstance(config,KnowledgeGraphToolModel) else MemoryTool
+                tool = cls(self.graphitiService,self.configService,config)
+            elif isinstance(config,(APIToolModel,APIControlModel)):
+                if (outboundService:= self.outboundServices.get(config.outbound,None)) == None:
                     continue
-                types = APIFetchTool if isinstance(model,APIToolModel) else APIControlTool
+                if outboundService.service_status not in acceptable_service:
+                    continue
+                types = APIFetchTool if isinstance(config,APIToolModel) else APIControlTool
                 tool = types(self.configService,outboundService)
-            elif isinstance(model,MCPToolModel):
-                tool = MCPTool(self.configService)
-            elif isinstance(model,SearchToolModel):
-                tool = SearchTool(self.configService,self.customService,self.memcachedService,self.qdrantService)        
-            elif isinstance(model,MemoryToolModel):
-                tool = MemoryTool(self.memcachedService,self.qdrantService,self.configService)
-            elif isinstance(model,ConversationToolModel):
-                tool = ConversationTool(self.configService,self.memcachedService,self.qdrantService)
+            elif isinstance(config,SearchToolModel):
+                tool = SearchTool(self.configService,self.qdrantService,self.customService)
+            elif isinstance(config,MCPToolModel):
+                continue
+            elif isinstance(config,ConversationToolModel):
+                tool = ConversationTool(self.configService,self.mongooseService)
+            
+            self.tools[tool.name] = tool 
 
-            tool = tool_factory(tool.name,tool,description=tool.description,return_direct=tool.return_direct)
+            if (hitl:=tool.to_hitl()) != None:
+                hitl_config.update(hitl)
+            
+            if (limit:=tool.to_limit())!= None:
+                tool_limit.append(limit)
+            
+            if (retry:=tool.to_retry())!=None:
+                tool_limit.append(retry)
+            
+            tool = tool_factory(tool.name,tool,infer_schema=False,
+                                description=tool.description,
+                                return_direct=tool.return_direct,
+                                args_schema=tool.arg_schema,
+                                extras={'__conditions__':tool.to_condition()}
+                                )
             tools.append(tool)
-
-    def _init_middleware(self):
-        ...
         
-    def _init_system_prompt(self)->str:
+        return tools
+
+    def _init_middleware(self,interrupt_on,tool_limits:list[ToolCallLimitMiddleware[NotifyrAgentState,NotifyrContext]])->list[Callable|type]:
+        middleware = []
+        dynamic_middlewares = []
+        
+        thread_guard = ThreadGuardFactory(self.agent_model)
+        middleware.append(thread_guard)  # before agent
+
+        middleware.append(guard_session_ends)  # before model
+
+        if self.agent_model.callGuard != None:
+            if self.agent_model.callGuard._limit:
+                middleware.append(ModelCallLimitMiddleware( # before model
+                    exit_behavior='error',
+                    **self.agent_model.callGuard.model_dump(include=ModelCallGuardConfig.limit_keys,)),
+                    )
+            if self.agent_model.callGuard._retry:
+                middleware.append(ModelRetryMiddleware( # wrap model
+                    on_failure='error',
+                    **self.agent_model.callGuard.model_dump(include=ModelCallGuardConfig.retry_keys,)),
+                    )
+        
+        if self.agent_model.messageLimit != None:
+            message_limiter = MessageLimitFactory(self.agent_model) #before model
+            middleware.append(message_limiter)
+
+        dynamic_system_prompt = DynamicSystemPromptFactory(...,...)
+        middleware.append(dynamic_system_prompt) #wrap model
+        middleware.append(handle_agent) #wrap model
+        
+        middleware.append(dynamic_tool_selection) #wrap tool call
+        middleware.extend(tool_limits) #after model
+
+        middleware.append(handle_tool_errors)
+
+        # TODO add the LLMToolsSelector and Todo Middleware
+
+        if interrupt_on:
+            middleware.append(HumanInTheLoopMiddleware(interrupt_on=interrupt_on)) #after model
+                
+        if self.agent_model.throttle:
+            throttle = ThrottleFactory() # wrap model
+            middleware.append(throttle)
+
+        if isinstance(self.agent_model.model,str):
+            purposed_models = ChatModelFactory(self.agent_model,self.depService.model,self.depService.credentials)
+        else:
+            purposed_models,dynamic_middlewares = DynamicChatModelFactory(self.agent_model,self.depService.model,self.depService.credentials)
+        
+        summaryInjector = SessionInjectionFactory(self.agent_model,self.depService.model)
+        trimmer_middleware = MessageTrimmerFactory(self.agent_model,self.depService.model,purposed_models.summary)
+        interrupt_middleware = SemanticInterruptParserFactory(self.agent_model,purposed_models.interrupt,self)
+        marker_middleware = MarkerFactory(self.agent_model)
+        
+        middleware.append(interrupt_middleware) # before agent
+        middleware.append(marker_middleware) # before model
+        middleware.append(trimmer_middleware) # summary: before model / trim: wrap model
+        
+        middleware.append(filter_non_relevant_message) #wrap model
+        middleware.append(summaryInjector) #wrap model
+        
+        middleware.extend(dynamic_middlewares) # wrap model
+        middleware.append(inject_ai_turn) # after agent
+
+        self.chat_model = purposed_models.basic
+        return reversed(middleware)
+
+    def _init_mcp_tool(self):
         ...
     
-    def _init_response_format(self):
+    def _init_subagent(self):
         ...
+    #########################################################################################################
+    ############################                                          ###################################
+    #########################################################################################################
+   
+    async def invoke(self,thread:str,prompt:str,context:NotifyrContext,contents:list=[],mess_id:str=None):
+        content_blocks = []
+        content_blocks.append({'type':'text','text':prompt})
+        content_blocks.extend(contents or [])
+        add_kwargs:dict = {'__turn__':True}
+        if contents:
+            add_kwargs['__keep__'] = True
+        message = HumanMessage(content_blocks=content_blocks,id=mess_id,additional_kwargs={'__turn__':True})
 
-    def _build_graph(self):
-        ...
+        config = {"configurable": {"thread_id": thread,"checkpoint_ns": self.agent_model.id}} 
+        
+        answer = conversation.Answer()
 
-    def init_long_term_memory(self):
-        ...
+        response:AIMessage = await self.agent.ainvoke(message,config,context=context)
+        if (usage:= response.usage_metadata):
+            answer['token'] = conversation.Token(input_token=usage.get('input_tokens',0),output_token=usage.get('output_tokens',0))
+            
+        answer['reply_id'] = response.id
+        answer['reasoning'] = [b for b in response.content_blocks if b["type"] == "reasoning"]
+        answer['text'] = response.text
+        answer['tool_calling'] = [slice_dict(tc,conversation.TOOL_CALLING_KEYS,'include') for tc in response.tool_calls]
+        answer['invalid_tool_calling'] = [slice_dict(tc,conversation.invalid_tool_calling_keys,'include') for tc in response.invalid_tool_calls]
+        return answer
+        
+    async def stream(self,thread: str,prompt: str,context: NotifyrContext,contents: list = [],mess_id: str = None,):
+        content_blocks = [{'type': 'text', 'text': prompt}]
+        content_blocks.extend(contents or [])
+        add_kwargs:dict = {'__turn__':True}
+        if contents:
+            add_kwargs['__keep__'] = True
+        message = HumanMessage(content_blocks=content_blocks,id=mess_id,additional_kwargs={'__turn__':True})
 
-    async def update_long_term_memory(self):
-        ...  
+        config = {"configurable": {"thread_id": thread,"checkpoint_ns": self.agent_model.id}}
+        async for chunk in self.agent.astream_events(message,config=config,context=context,version="v2",):
 
-    def create_agent(self,ref_id=None,memory=None):
-        agent = create_agent(
-                model=self.base_chat,
-            )
+            answer = conversation.Answer()
+            match chunk['event']:
+                case 'on_chat_model_stream' | 'on_llm_stream':
+                    response = chunk['data']['chunk']
+                    answer['reply_id'] = response.id
+                    answer['reasoning'] = [
+                        b for b in getattr(response, 'content_blocks', [])
+                        if b.get("type") == "reasoning"
+                    ]
+                    answer['text'] = getattr(response, 'text', '')
+                    answer['tool_calling'] = [
+                        slice_dict(tc, conversation.TOOL_CALLING_KEYS, 'include')
+                        for tc in getattr(response, 'tool_calls', [])
+                    ]
+                    answer['invalid_tool_calling'] = [
+                        slice_dict(tc, conversation.invalid_tool_calling_keys, 'include')
+                        for tc in getattr(response, 'invalid_tool_calls', [])
+                    ]
+                case 'on_chat_model_end':
+                    response = chunk['data']['output']
+                    answer['reply_id'] = response.id
+                    if usage := getattr(response, 'usage_metadata', None):
+                        answer['token'] = conversation.Token(input_token=usage.get('input_tokens', 0),output_token=usage.get('output_tokens', 0),)
+                case _:
+                    continue
 
-        return agent
+            yield answer
+        
+    async def completion(self,input:str,content:list=[]):
+        message = [self.prompt,HumanMessage(input)]
+        message.extend(content)
+        response:AIMessage = await self.chat_model.ainvoke(message,)
 
-    async def fetch_chat_history(self):
-        ...
+    async def batch(self,inputs:list[str]):
+       async for response in self.chat_model.abatch_as_completed():
+           yield 
     
-    async def fetch_contact_memory(self):
-        ...
+    #########################################################################################################
+    ############################                                          ###################################
+    #########################################################################################################
 
-    def ChatAgentFactory(self,agentModel:AgentModel)->BaseChatModel:
-        api_key =lambda: self.depService.depService.credentials.to_plain()
+    def _verify_status(self):
+        if self.service_status not in acceptable_service:
+            raise AgentNotAvailableError(self.service_status,self.reason,self.miniService_id)
+        if self.service_status != ServiceStatus.AVAILABLE:
+            return self.reason
+        return None
 
-        max_output_token = self.depService.model.max_output_tokens
-        max_tokens = agentModel.max_tokens
-        if max_output_token:
-            max_tokens = max_output_token
+    #########################################################################################################
+    ############################                                          ###################################
+    #########################################################################################################
 
-        provider = self.depService.model.provider
-        match provider:
-            case 'anthropic': 
-                return ChatAnthropic(
-                    streaming=True,
-                    model_name=agentModel.model,
-                    max_retries=agentModel.max_retries,
-                    temperature=agentModel.temperature,
-                    top_p=agentModel.top_p,
-                    top_k=agentModel.top_k,
-                    timeout=agentModel.timeout,
-                    effort=agentModel.effort,
-                    anthropic_proxy=agentModel.proxy_url,
-                    base_url=self.depService.model.base_url
-                )
-            
-            case 'cohere': 
-                return ChatCohere(
-                    streaming=True,
-                    temperature=agentModel.temperature,
-                    model=agentModel.model,
-                    cohere_api_key=SecretStr(api_key()),
-                    timeout_seconds=agentModel.timeout, 
-                    base_url=self.depService.model.base_url
+    @property
+    def agent_name(self)->str:
+        return f"agent:{self.agent_model.alias}#{self.agent_model.id}"
 
-                )
+@Service(is_manager=True,mirror=RemoteAgentService,links=[
+    LinkDep(ProfileService,to_build=True,build_state=RECREATE_AGENT_WITH_OUTBOUND_BUILD_STATE),
+    LinkDep(LLMService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE),
+    LinkDep(MongooseService,to_build=True,build_state=RECREATE_MEMORY_BUILD_STATE),
+    ])
+class AgentService(BaseMiniServiceManager[AgentMiniService],agent_pb2_grpc.AgentServicer):
 
-            case 'deepseek'| 'openai' | 'gemini':
-
-                match provider:
-                    case 'deepseek':
-                        base_url = self.depService.model.base_url or "https://api.deepseek.com"
-                    case 'gemini':
-                        base_url= self.depService.model.base_url or "https://generativelanguage.googleapis.com/v1beta"
-                    case _:
-                        base_url = self.depService.model.base_url or None
-
-                return ChatOpenAI(
-                    streaming=True,
-                    max_completion_tokens=max_tokens,
-                    api_key=api_key,
-                    base_url= base_url,
-                    temperature=agentModel.temperature,
-                    max_retries=agentModel.max_retries,
-                    timeout=agentModel.timeout,
-                    top_p=agentModel.top_p,
-                    model=agentModel.model,
-                    frequency_penalty=agentModel.frequency_penalty,
-                    presence_penalty=agentModel.presence_penalty,
-                    n=agentModel.n,
-                    reasoning_effort=agentModel.effort,
-                    openai_proxy=agentModel.proxy_url
-            )
-            
-            case 'groq': 
-                return ChatGroq(
-                    streaming=True,
-                    max_tokens=max_tokens,
-                    max_retries=agentModel.max_retries,
-                    timeout=agentModel.timeout,
-                    n=agentModel.n,
-                    api_key=api_key,
-                    model=agentModel.model,
-                    temperature=agentModel.temperature,
-                    groq_proxy=agentModel.proxy_url,
-                    reasoning_effort=agentModel.effort,
-                    reasoning_format=agentModel.reasoning_format,
-                    base_url=self.depService.model.base_url
-                )
-            
-            case 'ollama': raise NotImplementedError()
-    
     @staticmethod
-    def Base_Agent(function:Callable):
-        @functools.wraps(function)
-        async def wrapper(self:Self,agent:CompiledStateGraph=None):
-            if agent == None:
-                agent = self.agent
-
-            return await function(self,agent)
-
-        return wrapper
-
-    @Base_Agent
-    async def invoke(self,agent:CompiledStateGraph):
-        ...
-    
-    @Base_Agent
-    async def stream(self,agent:CompiledStateGraph):
-        ...
-
-    
-@Service(is_manager=True,links=[LinkDep(LLMProviderService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)],mirror=RemoteAgentService)
-class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
-
-    @staticmethod
-    def Error_Handler(function:Callable):
+    def ErrorHandler(function:Callable):
         """
         This is a decorator that acts as exception handler, method for the grpc communication will have to be decorated
         by this to handle error found in their implementation
@@ -285,103 +390,137 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
         @functools.wraps(function)
         async def handler(self:Self,request:Any|list[Any],context):
             try:
-                return await function(self,request,context)
+                async with self.lock('reader',None):
+                    if self.service_status not in acceptable_service:
+                        raise AgentNotAvailableError(self.service_status,self.reason,None)
+                    return await function(self,request,context)
+
+            except AgentNotAvailableError as e:
+                context.abort(grpc.StatusCode.UNAVAILABLE,)
+            
+            except AgentInputFormatNotSupportedError as e:
+                context.abort(grpc.StatusCode.INVALID_ARGUMENT,...)
+            
+            except AgentContextDoesNotExistError as e:
+                context.abort(grpc.StatusCode.INVALID_ARGUMENT,)
+
+            except AgentMessageLimitExceededError as e:
+                context.abort(...,...)
+            
+            except AgentSessionAlreadyEndedError as e:
+                context.abort(...,...)
+            
+            except AgentThreadBlockedError as e:
+                context.abord(...,...)
+            
+            except ModelCallLimitExceededError as e:
+                context.abort(...,...)
+            
+            except AgentModelRetryExceedError as e:
+                context.abort(...,...)
+
             except MiniServiceDoesNotExistsError as e:
-                context.abort(grpc.StatusCode.NOT_FOUND,
-                              f'Agent @ {e.miniService_id} does not exist')
+                context.abort(grpc.StatusCode.NOT_FOUND,f'Agent @ {e.miniService_id} does not exist')
             
             except InvalidPurchaseRequestError as e:
-                context.abort(grpc.StatusCode.UNAVAILABLE)
+                context.abort(grpc.StatusCode.UNAVAILABLE,)
             
             except InsufficientCreditsError as e:
-                context.abort(grpc.StatusCode.RESOURCE_EXHAUSTED,
-                              f"Credit not suffisant. Current Balance: {e.current_balance} - Cost: {e.purchase_cost}")
+                context.abort(grpc.StatusCode.RESOURCE_EXHAUSTED,f"Credit not suffisant. Current Balance: {e.current_balance} - Cost: {e.purchase_cost}")
 
         return handler
 
-    @Error_Handler
+    #########################################################################################################
+    ############################                                          ###################################
+    #########################################################################################################
+
+    @ErrorHandler
     async def Prompt(self, request, context):
         request = agent_message.PromptRequest.from_proto(request)
-        async with self.statusLock.reader as lock:
-            service = self.MiniServiceStore.get(request.agent)
-            async with service.statusLock.reader as l:
-                await self.costService.check_enough_credits(CostConstant.TOKEN_CREDIT,service.agent_model.max_tokens*2)
+        async with self.MiniServiceStore.lock(request.agent) as agent:
+            reason:str|None = agent._verify_status()
+            contents = [conversation.ContentBlock.exports(c.mode,c.type,c.value,c.mime) for c in request.blocks]
+            _context = create_context(request)
+            answer = await agent.invoke(request.thread,request.prompt,_context,contents,request.mess_id)
+            self.purchase_token(request_id=answer['id'],issuer=request.user,agent=request.agent,**answer['token'])
+            return agent_message.PromptAnswer(agent=request.agent,reason =reason,**slice_dict(answer,answer_exclude,'exclude')).to_proto()
 
-                reply = agent_message.PromptAnswer()
-                reply.to_proto()
-                
-                self.purchase_token()
-                return reply
-
-    @Error_Handler
+    @ErrorHandler
     async def PromptStream(self, request, context):
         request = agent_message.PromptRequest.from_proto(request)
+        async with self.MiniServiceStore.lock(request.agent) as agent:
+            reason:str|None = agent._verify_status()
+            contents = [conversation.ContentBlock.exports(c.mode,c.type,c.value,c.mime) for c in request.blocks]
+            _context = create_context(request)
+            async for answer in agent.stream(request.thread,request.prompt,_context,contents,request.mess_id):
+                yield agent_message.PromptAnswer(agent=request.agent,reason =reason,**slice_dict(answer,answer_exclude,'exclude')).to_proto()
+                asyncio.sleep(0.2)
+            self.purchase_token(request_id=answer['reply_id'],issuer=request.user,agent=request.agent,**answer['token'])
 
-        async with self.statusLock.reader as lock:
-            service = self.MiniServiceStore.get(request.agent)
-            async with service.statusLock.reader as l:
-
-                for i in range(5): # stream
-                    await self.costService.check_enough_credits(CostConstant.TOKEN_CREDIT,service.agent_model.max_tokens*2)
-                    
-                    reply = agent_message.PromptAnswer()
-                    reply = reply.to_proto()
-                    self.purchase_token()
-
-                    yield reply
-                    asyncio.sleep(0.2)
-
-    @Error_Handler
+    @ErrorHandler
     async def StreamPrompt(self, request_iterator, context):
-        
-        streams = []
+        prompt = ''
         async for request in request_iterator:
             request = agent_message.PromptRequest.from_proto(request)
-            streams.append(streams)
+            prompt += request.prompt
+        
+        async with self.MiniServiceStore.lock(request.agent) as agent:
+            reason:str|None = agent._verify_status()
+            _context = create_context(request)
+            answer = await agent.invoke(request.thread,prompt,_context,mess_id=request.mess_id)
+            self.purchase_token(request_id=answer['reply_id'],issuer=request.user,agent=request.agent,**answer['token'])
+            return agent_message.PromptAnswer(agent=request.agent,reason =reason,**slice_dict(answer,answer_exclude,'exclude')).to_proto()
 
-        async with self.statusLock.reader as lock:
-            service = self.MiniServiceStore.get(request.agent)
-            async with service.statusLock.reader as l:
-                await self.costService.check_enough_credits(CostConstant.TOKEN_CREDIT,service.agent_model.max_tokens*2)
-                
-                reply = agent_message.PromptAnswer()         
-                reply = reply.to_proto()
-
-                self.purchase_token()
-                return reply
-
-    @Error_Handler
+    @ErrorHandler
     async def S2SPrompt(self, request_iterator, context):
         async for request in request_iterator:
             request = agent_message.PromptRequest.from_proto(request)
+            async with self.MiniServiceStore.lock(request.agent) as agent:
+                    reason:str|None = agent._verify_status()
+                    _context = create_context(request)
+                    async for answer in agent.stream(request.thread,request.prompt,_context,mess_id=request.mess_id):
+                        yield agent_message.PromptAnswer(agent=request.agent,reason = reason,**slice_dict(answer,answer_exclude,'exclude')).to_proto()
+                        asyncio.sleep(0.1)
+                    self.purchase_token(request_id=answer['reply_id'],issuer=request.user,agent=request.agent,**answer['token'])
 
-            async with self.statusLock.reader as lock:
-                service = self.MiniServiceStore.get(request.agent)
+    @ErrorHandler
+    async def Completion(self,request,context):
+        request = agent_message.PromptRequest.from_proto(request)
+        async with self.MiniServiceStore.lock(request.agent) as service:
+            reason:str|None = service._verify_status()
+            contents = conversation.ContentBlock.exports()
+            answer = await service.completion(request.prompt,contents,mess_id=request.mess_id)
+            reply = agent_message.PromptAnswer(agent=request.agent,reason = reason,**slice_dict(answer,answer_exclude,'exclude')).to_proto()      
+            self.purchase_token(request_id=answer['reply_id'],issuer=request.user,agent=request.agent,**answer['token'])
+            return reply
 
-                async with service.statusLock.reader as l:
-                    await self.costService.check_enough_credits(CostConstant.TOKEN_CREDIT,service.agent_model.max_tokens*2)
+    @Mock()
+    @ErrorHandler
+    async def S2SBatch(self,request_iterator,context):
+        messages = []
+        async for request in request_iterator:
+            request = agent_message.PromptRequest.from_proto(request)
+            messages.append(request)
 
-                    asyncio.sleep(0.1)
-                    reply = agent_message.PromptAnswer()
-                    reply = reply.to_proto()
+        async with self.MiniServiceStore.lock(request.agent) as service:
+            async for answer in service.batch():
+                yield
+        # append it as a list of message
 
-                    self.purchase_token()
-                    yield reply
-
-    def verify_auth(self,token:str)->bool:
-        if self.auth_header != token:
-            raise HTTPException(status_code=401,detail="Unauthorized")
+    #########################################################################################################
+    ############################                                          ###################################
+    #########################################################################################################
 
     def __init__(self, configService: ConfigService,
                     vaultService:VaultService,
                     mongooseService:MongooseService,
-                    llmProviderService:LLMProviderService,
+                    llmProviderService:LLMService,
                     qdrantService:QdrantService,
                     reactiveService:ReactiveService,
                     profileService:ProfileService,
                     graphitiService:GraphitiService,
                     costService:CostService,
-                    memcachedService:MemCachedService,
+                    redisService:RedisService,
                     customService:CustomService) -> None:
         
         super().__init__()
@@ -394,93 +533,156 @@ class AgentService(BaseMiniServiceManager,agent_pb2_grpc.AgentServicer):
         self.profileService = profileService
         self.reactiveService = reactiveService
         self.costService = costService
-        self.memcachedService = memcachedService
+        self.redisService = redisService
         self.customService = customService
 
         self.MiniServiceStore = MiniServiceStore[AgentMiniService](self.name)
+        self.tools_config:Dict[str,ToolModels] = {}
 
-    def subscribe_token(self,on_next:Callable[[Any],None],on_complete:Callable[[],None],on_error:Callable[[Exception],None]=None):
-        return self.reactiveService.subscribe(
-            REACTIVE_TOKEN_COST,
-            on_next=on_next,
-            on_completed=on_complete,
-            on_error=on_error
-        )
-
-    def purchase_token(self,input_token:int,output_token:int,request_id:str,issuer:str,agent:str):
-        promptToken = PromptToken(
-            input=input_token,
-            output=output_token,
-            request_id=request_id,
-            issuer=issuer,
-            agent=agent
-            )
-        self.reactive_subject.on_next(promptToken)
-
-    def complete_purchase(self):
-        self.reactive_subject.on_completed()
-
-    def filter_outbound_agentic(self,outbound_id:str):
+    def verify_dependency(self):
         ...
 
-    def build(self, build_state=...):
+    def build(self, build_state=DEFAULT_BUILD_STATE):
         if build_state == DEFAULT_BUILD_STATE:
-            secrets = self.vaultService.secrets_engine.read('internal-api','AGENTIC')
+            secrets = self.vaultService.secrets_engine.read('internal','AGENTIC')
 
-            if 'API_KEY' not in secrets:
-                raise BuildFailureError('No Internal API_KEY between the agentic server and the worker process found, cannot connect')
+            if API_SECRET_KEY not in secrets:
+                raise BuildFailureError(f'No Internal {API_SECRET_KEY} between the agentic server and the worker process found, cannot connect')
             
-            self.auth_header = secrets['API_KEY']
+            self._agentic_key = ChaCha20SecretsWrapper(secrets[API_SECRET_KEY])
+            self.reactive_subject = self.reactiveService.create_subject(REACTIVE_TOKEN_COST,'Normal',REACTIVE_TOKEN_COST,'message')
 
-            self.reactive_subject = self.reactiveService.create_subject(
-                name=REACTIVE_TOKEN_COST,
-                type_='Normal',
-                subject_id=REACTIVE_TOKEN_COST,
-                sid_type='message'
-            )
+        if build_state == DEFAULT_BUILD_STATE or build_state == RECREATE_MEMORY_BUILD_STATE:
+            self.checkpointer = MongoDBSaver(self.mongooseService.client_store.get_client(AGENTIC_CREDS,'sync'),
+                                        MongooseDBConstant.DATABASE_NAME,
+                                        MongooseDBConstant.CHAT_COLLECTION,
+                                        MongooseDBConstant.CHAT_WRITE_COLLECTION,
+                                        )
 
+            self.store = MongoDBStore(self.mongooseService.client_store.get_collection(
+                AGENTIC_CREDS,
+                MongooseDBConstant.STORE_COLLECTION,
+                'sync'))
+
+        if build_state == DEFAULT_BUILD_STATE or build_state == TOOL_RECREATE_BUILD_STATE:
+            self.tools_config.clear()
+            for T in get_args(ToolModels):
+                for t in self.mongooseService.sync_find(MongooseDBConstant.TOOL_COLLECTION,T,return_model=True,as_subset_model=True,filter_out=True):
+                    self.tools_config[t.id] = t
+        
         models:list[dict] = self.mongooseService.sync_find(MongooseDBConstant.AGENT_COLLECTION,AgentModel)
         counter = self.StatusCounter(len(models))
         self.MiniServiceStore.clear()
 
         for model in models:
             try:
-                provider_id = model['provider']
-                provider = self.llmProviderService.MiniServiceStore.get(provider_id)
+                agent = self._create_agent(model)
+                agent._builder(_service.BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
+                counter.count(agent)
+                self.MiniServiceStore.add(agent)
+            except LLMProviderDoesNotExistError as e:
+                continue
+            except MiniServiceDoesNotExistsError as e:
+                continue
+                        
+        return super().build(counter, build_state)
+    
+    #########################################################################################################
+    ############################                                          ###################################
+    #########################################################################################################
 
-                agent = AgentMiniService(
+    async def serve(self):
+        interceptor = AgentServerInterceptor(self.AgenticAPIKey, {
+            '/agent.Agent/Prompt': HandlerType.ONE_ONE,
+            '/agent.Agent/PromptStream': HandlerType.ONE_MANY,
+            '/agent.Agent/StreamPrompt': HandlerType.MANY_ONE,
+            '/agent.Agent/S2SPrompt': HandlerType.MANY_MANY,
+            '/agent.Agent/Completion':HandlerType.ONE_ONE,
+            '/agent.Agent/S2SBatch':HandlerType.MANY_MANY,
+        })
+        self.server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=25),interceptors=(interceptor,))
+        agent_pb2_grpc.add_AgentServicer_to_server(self,self.server)
+        port = self.server.add_insecure_port('0.0.0.0:50051')
+        await self.server.start()
+    
+    async def stop_grpc(self):
+        await self.server.stop()
+        await self.server.wait_for_termination()
+    
+    #########################################################################################################
+    ############################                                          ###################################
+    #########################################################################################################
+
+    def subscribe_token(self,on_next:Callable[[Any],None],on_complete:Callable[[],None],on_error:Callable[[Exception],None]=None):
+        return self.reactiveService.subscribe(REACTIVE_TOKEN_COST,on_next=on_next,on_completed=on_complete,on_error=on_error)
+
+    def purchase_token(self,input_token:int,output_token:int,request_id:str,issuer:str,agent:str):
+        promptToken = PromptToken(input=input_token,output=output_token,request_id=request_id,issuer=issuer,agent=agent)
+        self.reactive_subject.on_next(promptToken)
+
+    def complete_purchase(self):
+        self.reactive_subject.on_completed()
+
+    #########################################################################################################
+    ############################                                          ###################################
+    #########################################################################################################
+   
+    def _create_agent(self, model):
+        provider_id = model['provider']
+        provider = self.llmProviderService.MiniServiceStore.get(provider_id)
+
+        tools:list[str] = model['tools']
+        outboundServices = set()
+        clientServices = set()
+
+        agentTools = []
+
+        for t in tools:
+            if t not in self.tools_config:
+                continue
+            t = self.tools_config[t]
+
+            if isinstance(t,(APIControlModel,APIToolModel)):
+                if t.outbound:
+                    outboundServices.add(t.outbound)
+            if isinstance(t,SearchToolModel):
+                ...
+            agentTools.append(t)
+                    
+        outboundServices = slice_dict(self.profileService.MiniServiceStore._store_,outboundServices,'include',True)
+        clientServices =  slice_dict(self.profileService.MiniServiceStore._store_,clientServices,'include',True)
+
+        return AgentMiniService(
                     self.configService,
                     self.graphitiService,
                     self.qdrantService,
                     self.mongooseService,
                     provider,
                     self.customService,
-                    self.memcachedService,
-                    model
+                    self.redisService,
+                    model,
+                    self.checkpointer,
+                    self.store,
+                    agentTools,
+                    outboundServices,
+                    clientServices
                 )
-                agent._builder(_service.BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
-                counter.count(agent)
-                self.MiniServiceStore.add(agent)
-            except MiniServiceDoesNotExistsError as e:
-                continue
-                    
-        return super().build(counter, build_state)
-    
-    async def serve(self):
-        if self.service_status != ServiceStatus.AVAILABLE:
-            return
+        
+    #########################################################################################################
+    ############################                                          ###################################
+    #########################################################################################################
 
-        interceptor = AgentServerInterceptor(self.auth_header, {
-            '/agent.Agent/Prompt': HandlerType.ONE_ONE,
-            '/agent.Agent/PromptStream': HandlerType.ONE_MANY,
-            '/agent.Agent/StreamPrompt': HandlerType.MANY_ONE,
-            '/agent.Agent/S2SPrompt': HandlerType.MANY_MANY,
-        })
-        self.server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=10),interceptors=(interceptor,))
-        agent_pb2_grpc.add_AgentServicer_to_server(self,self.server)
-        self.server.add_insecure_port('0.0.0.0:50051')
-        await self.server.start()
-        await self.server.wait_for_termination()
+    @property
+    def AgenticAPIKey(self)->str:
+        return self._agentic_key.to_plain()
     
-    async def stop_grpc(self):
-        await self.server.stop()
+def create_context(request:agent_message.PromptRequest):
+    _context = request.context
+    if not _context:
+        raise AgentContextDoesNotExistError
+    return NotifyrContext(_context.request_id,
+                          _context.session_id,
+                          _context.channel,
+                          _context.user,
+                          _context.auth,
+                          _context.save)

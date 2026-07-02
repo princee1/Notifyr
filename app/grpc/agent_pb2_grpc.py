@@ -4,6 +4,7 @@ import grpc
 
 import app.grpc.agent_pb2 as agent__pb2
 
+
 class AgentStub(object):
     """Missing associated documentation comment in .proto file."""
 
@@ -30,6 +31,16 @@ class AgentStub(object):
                 )
         self.S2SPrompt = channel.stream_stream(
                 '/agent.Agent/S2SPrompt',
+                request_serializer=agent__pb2.PromptRequest.SerializeToString,
+                response_deserializer=agent__pb2.PromptAnswer.FromString,
+                )
+        self.Completion = channel.unary_unary(
+                '/agent.Agent/Completion',
+                request_serializer=agent__pb2.PromptRequest.SerializeToString,
+                response_deserializer=agent__pb2.PromptAnswer.FromString,
+                )
+        self.S2SBatch = channel.stream_stream(
+                '/agent.Agent/S2SBatch',
                 request_serializer=agent__pb2.PromptRequest.SerializeToString,
                 response_deserializer=agent__pb2.PromptAnswer.FromString,
                 )
@@ -66,6 +77,20 @@ class AgentServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def Completion(self, request, context):
+        """Unary
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def S2SBatch(self, request_iterator, context):
+        """Bi-Directional Stream
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_AgentServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -86,6 +111,16 @@ def add_AgentServicer_to_server(servicer, server):
             ),
             'S2SPrompt': grpc.stream_stream_rpc_method_handler(
                     servicer.S2SPrompt,
+                    request_deserializer=agent__pb2.PromptRequest.FromString,
+                    response_serializer=agent__pb2.PromptAnswer.SerializeToString,
+            ),
+            'Completion': grpc.unary_unary_rpc_method_handler(
+                    servicer.Completion,
+                    request_deserializer=agent__pb2.PromptRequest.FromString,
+                    response_serializer=agent__pb2.PromptAnswer.SerializeToString,
+            ),
+            'S2SBatch': grpc.stream_stream_rpc_method_handler(
+                    servicer.S2SBatch,
                     request_deserializer=agent__pb2.PromptRequest.FromString,
                     response_serializer=agent__pb2.PromptAnswer.SerializeToString,
             ),
@@ -162,6 +197,40 @@ class Agent(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.stream_stream(request_iterator, target, '/agent.Agent/S2SPrompt',
+            agent__pb2.PromptRequest.SerializeToString,
+            agent__pb2.PromptAnswer.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def Completion(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/agent.Agent/Completion',
+            agent__pb2.PromptRequest.SerializeToString,
+            agent__pb2.PromptAnswer.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def S2SBatch(request_iterator,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.stream_stream(request_iterator, target, '/agent.Agent/S2SBatch',
             agent__pb2.PromptRequest.SerializeToString,
             agent__pb2.PromptAnswer.FromString,
             options, channel_credentials,

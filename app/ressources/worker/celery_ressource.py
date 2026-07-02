@@ -14,7 +14,7 @@ from app.services.config_service import ConfigService
 from app.services.worker.task_service import TaskService
 from app.depends.variables import _wrap_checker
 
-@PingService([{"cls":CeleryService,"kwargs":{"__celery_availability__":True}}])
+
 @UseHandler(ServiceAvailabilityHandler,AsyncIOHandler,ProfileHandler)
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource('celery-control')
@@ -34,6 +34,7 @@ class CeleryRessource(BaseHTTPRessource):
     @UseRoles([Role.PUBLIC])
     @UseHandler(CeleryControlHandler)
     @LockService(CeleryService,lockType='reader',check_status=False)
+    @PingService([{"cls":CeleryService,"kwargs":{"__celery_availability__":True}}])
     @BaseHTTPRessource.HTTPRoute('/ping/',methods=[HTTPMethod.GET])
     async def ping_workers(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
         return await self.celeryService.ping()
@@ -42,6 +43,7 @@ class CeleryRessource(BaseHTTPRessource):
     @UseRoles([Role.PUBLIC])
     @UseHandler(CeleryControlHandler)
     @LockService(CeleryService,lockType='reader',check_status=False)
+    @PingService([{"cls":CeleryService,"kwargs":{"__celery_availability__":True}}])
     @BaseHTTPRessource.HTTPRoute('/inspect/',methods=[HTTPMethod.GET])
     async def inspect(self,request:Request,response:Response,mode:InspectMode = Depends(celery_inspect_mode_query),authPermission:AuthPermission=Depends(get_auth_permission)):
         return await self.celeryService.inspect(mode)
@@ -49,12 +51,31 @@ class CeleryRessource(BaseHTTPRessource):
     @UseLimiter('10/minutes')
     @UsePermission(AdminPermission)
     @UseHandler(MiniServiceHandler,CeleryControlHandler)
-    @LockService(CeleryService,lockType='reader',check_status=False,as_manager=True)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
+    @LockService(CeleryService,lockType='reader',check_status=False,as_manager=True)
+    @PingService([{"cls":CeleryService,"kwargs":{"__celery_availability__":True,"__verify_celery__":True}}])
     @BaseHTTPRessource.HTTPRoute('/purge/{profile}/',methods=[HTTPMethod.DELETE])
     async def purge_queue(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)], request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
         return await channel.purge_queue()
-        
+
+    @UseLimiter('1/minutes')
+    @UsePermission(AdminPermission)
+    @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
+    @LockService(CeleryService,lockType='reader',check_status=False,as_manager=True)
+    @PingService([{"cls":CeleryService,"kwargs":{"__celery_availability__":True,"__verify_celery__":True}}])
+    @BaseHTTPRessource.HTTPRoute('/pause/{profile}/',methods=[HTTPMethod.DELETE])
+    async def pause_queue(self,channel:Annotated[ChannelMiniService,Depends(get_profile)], request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
+        await channel.pause_worker()
+
+    @UseLimiter('1/minutes')
+    @UsePermission(AdminPermission)
+    @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
+    @LockService(CeleryService,lockType='reader',check_status=False,as_manager=True)
+    @PingService([{"cls":CeleryService,"kwargs":{"__celery_availability__":True,"__verify_celery__":True}}])
+    @BaseHTTPRessource.HTTPRoute('/resume/{profile}/',methods=[HTTPMethod.PATCH])
+    async def resume_queue(self,channel:Annotated[ChannelMiniService,Depends(get_profile)], request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
+        await channel.resume_worker()
+
     ################################################################        ############################################################
     #                                                        Non-Mounted Route                                                         #
     ################################################################        ############################################################
@@ -62,6 +83,7 @@ class CeleryRessource(BaseHTTPRessource):
     @UseLimiter('1/hours')
     @UsePermission(AdminPermission)
     @LockService(CeleryService,lockType='reader',check_status=False)
+    @PingService([{"cls":CeleryService,"kwargs":{"__celery_availability__":True}}])
     @BaseHTTPRessource.HTTPRoute('/shutdown/',methods=[HTTPMethod.PATCH],deprecated=True,mount=False)
     async def shutdown_workers(self,destination:List[str], request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
         return await self.celeryService.shutdown()
@@ -69,22 +91,7 @@ class CeleryRessource(BaseHTTPRessource):
     @UseLimiter('100/minutes')
     @UseRoles([Role.ADMIN])
     @LockService(CeleryService,lockType='reader',check_status=False)
+    @PingService([{"cls":CeleryService,"kwargs":{"__celery_availability__":True}}])
     @BaseHTTPRessource.HTTPRoute('/revoke/',methods=[HTTPMethod.DELETE],deprecated=True,mount=False)
     async def revoke(self,task_ids:List[str],request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
-        ...
-
-    @UseLimiter('1/minutes')
-    @UsePermission(AdminPermission)
-    @LockService(CeleryService,lockType='reader',check_status=False,as_manager=True)
-    @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
-    @BaseHTTPRessource.HTTPRoute('/pause/{profile}/',methods=[HTTPMethod.DELETE],mount=False)
-    async def pause_queue(self,channel:Annotated[ChannelMiniService,Depends(get_profile)], request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
-        await channel.pause_worker()
-
-    @UseLimiter('1/minutes')
-    @UsePermission(AdminPermission)
-    @LockService(CeleryService,lockType='reader',check_status=False,as_manager=True)
-    @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
-    @BaseHTTPRessource.HTTPRoute('/resume/{profile}/',methods=[HTTPMethod.PATCH],mount=False)
-    async def resume_queue(self,channel:Annotated[ChannelMiniService,Depends(get_profile)], request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
         ...

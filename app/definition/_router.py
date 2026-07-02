@@ -1,10 +1,14 @@
 from functools import wraps
 from typing import Dict, Type,Callable
-from fastapi import HTTPException, Request, Response,status
+from fastapi import Depends, HTTPException, Request, Response,status
 from app.container import Get
 from app.definition._service import BaseService
+from app.depends.dependencies import get_bearer_token
 from app.errors.service_error import ServiceMajorSystemFailureError, ServiceNotAvailableError, ServiceTemporaryNotAvailableError
+from app.services.agent.agent_service import AgentService
+from app.utils.constant import HTTPHeaderConstant
 
+agentService = Get(AgentService)
 
 def lock_service_wrapper(service:Type[BaseService]):
 
@@ -36,7 +40,7 @@ def lock_service_wrapper(service:Type[BaseService]):
 
 class HandlerDetails:
     
-    def __init__(self,status_code:int,detail:Callable[[Exception],str|None|dict]|None|str):
+    def __init__(self,status_code:int,detail:Callable[[Exception],str|None|dict]|None|str=lambda e:str(e)):
         self.status_code = status_code
         self.detail = detail
     
@@ -72,3 +76,13 @@ def exception_handler(error:Dict[Type[Exception],HandlerDetails]):
         return wrapper
     
     return decorator
+
+
+def get_instance_id(request:Request)->str:
+    if not (instance_id:=request.headers.get(HTTPHeaderConstant.X_NOTIFYR_APP_INSTANCE_ID,None)):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED,'Missing instance_id')
+    return instance_id
+
+def auth_depends(token: str = Depends(get_bearer_token)):
+        if agentService.AgenticAPIKey != token:
+            raise HTTPException(status_code=401,detail="Unauthorized")

@@ -413,7 +413,7 @@ def unflattened_dict(flattened_dict: dict[str, Any], separator: str = DICT_SEP) 
 
 SliceMode = Literal['include','exclude']
 
-def slice_dict(data:dict,keys:Iterable[str],mode:SliceMode):
+def slice_dict(data:dict,keys:Iterable[str],mode:SliceMode,copy=False):
     if not isinstance(keys,set):
         keys = set(keys)
     
@@ -425,6 +425,9 @@ def slice_dict(data:dict,keys:Iterable[str],mode:SliceMode):
 
         if (k in keys) == (mode == 'include'):
             temp[k] = data[k]
+    
+    if copy:
+        return temp
         
     data.clear()
     data.update(temp)
@@ -649,14 +652,21 @@ def is_optional(annotation) -> bool:
 
 M= TypeVar('M',bound=BaseModel)
 
+ModelCache = {}
 def subset_model(
     base: Type[M],
     name: str,
     include: set[str] | None = None,
     exclude: set[str] | None = None,
     optional: bool = True,
-    __config__:ConfigDict |None = None
+    __config__:ConfigDict |None = None,
+    __cache__:bool = False
 )->Type[M]:
+    if __cache__:
+        key = f"Model(base={base},name={name},include={include},exclude={exclude},optional={optional}"
+        if key in ModelCache:
+            return key
+
     fields = {}
     for field_name, field in base.model_fields.items():
         if include and field_name not in include:
@@ -676,7 +686,11 @@ def subset_model(
     
         fields[field_name] = (ann, default)
     
-    return create_model(name,__config__=__config__, **fields)
+    m = create_model(name,__config__=__config__, **fields)
+    if __cache__:
+        ModelCache[key] = m
+
+    return m
 
 ################################   ** Cache Helper **      #################################
 

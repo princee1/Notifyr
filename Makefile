@@ -63,6 +63,7 @@ deploy-beat:
 	fi
 
 deploy-agentic:
+	@sleep 20 && clear
 	@if [ "$$(cat $(DEPLOY_CONFIG) | $(JQ) -r '.capabilities.agentic')" = "true" ]; then \
 		echo "================================================="; \
 		echo "🛠️ Creating the agentic service because the ai functionality is required"; \

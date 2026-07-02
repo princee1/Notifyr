@@ -22,7 +22,7 @@ device_detector==5.0.1
 discord_webhook==1.4.1
 email-validator==2.3.0
 emoji==2.14.0
-fastapi==0.121.3
+fastapi==0.135.0
 fastapi-cache2==0.2.2
 flower==2.0.1
 grpcio==1.62.0
@@ -35,6 +35,7 @@ hvac==2.4.0
 injector==0.21.0
 Jinja2==3.1.6
 lxml==5.3.1
+mongoquery==1.4.3
 motor==3.7.1
 minio==7.2.18
 ordered_set==4.1.0
@@ -46,7 +47,6 @@ psutil==7.0.0
 psycopg2_binary==2.9.10
 pydantic==2.10.6
 pydantic_core==2.27.2
-PyJWT==2.10.1
 PyJWT==2.10.1
 pymemcache==4.0.0
 pymongo==4.15.4
@@ -66,3 +66,4 @@ typing_extensions==4.15.0
 urllib3==2.5.0
 uvicorn==0.38.0
 validators==0.33.0
+websockets==15.0.1

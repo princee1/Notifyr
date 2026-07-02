@@ -12,7 +12,7 @@ from bs4 import BeautifulSoup
 
 from app.classes.profiles import ProfileState,ProfileModelException
 from app.errors.service_error import BuildFailureError, BuildWarningError
-from app.models.communication_model import IMAPProfileModel, ProtocolProfileModel, SMTPProfileModel
+from app.models.odm.communication_model import IMAPProfileModel, ProtocolProfileModel, SMTPProfileModel
 from app.services.database.redis_service import RedisService
 from app.services.profile_service import ProfileMiniService
 from app.services.reactive_service import ReactiveService
@@ -21,7 +21,7 @@ from app.utils.helper import get_value_in_list, uuid_v1_mc
 from app.utils.prettyprint import SkipInputException
 #from app.classes.mail_oauth_access import OAuth, MailOAuthFactory
 from app.classes.mail_provider import IMAPCriteriaBuilder, SMTPConfig, IMAPConfig, IMAPSearchFilter as Search, SMTPErrorCode, get_email_provider_name, get_error_description
-from app.utils.tools import Time,Mock
+from app.utils.toolbox import Time,Mock
 
 from app.utils.constant import EmailHostConstant
 from app.classes.email import EmailBuilder, EmailMetadata, EmailReader, NotSameDomainEmailError, extract_email_id_from_msgid
@@ -158,7 +158,7 @@ class BaseEmailService(_service.BaseMiniService, ProfileEventInterface):
             raise _service.BuildFailureError(f'Profile is not active {self.depService.model.profile_state.name} ')
 
     async def async_verify_dependency(self):
-        async with self.depService.statusLock.reader:
+        async with self.depService.lock('reader'):
             self.verify_dependency()
             return True
 

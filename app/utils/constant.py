@@ -56,6 +56,7 @@ class HTTPHeaderConstant:
     X_PARENT_PROCESS_PID="X-Parent-Process-PID"
     X_REQUEST_ID='X-Request-ID'
     X_BALANCER_EXCHANGE_TOKEN='X-Balancer-Exchange-Token'
+    X_NOTIFYR_APP_INSTANCE_ID='X-NotifyrApp-Instance-ID'
 
 
 class CookieConstant:
@@ -164,23 +165,30 @@ class MongooseDBConstant:
     COMMUNICATION_PROFILE_COLLECTION = 'communication'
     WEBHOOK_PROFILE_COLLECTION = 'webhook'
     CHAT_COLLECTION = 'chat'
+    CHAT_WRITE_COLLECTION = 'chat_write'
+
     WORKFLOW_COLLECTION ='workflow'
     EDGE_COLLECTION='edge'
     NODE_COLLECTION='node'
     TASKS_COLLECTION = 'tasks'
     LLM_COLLECTION = 'llm'
     CUSTOM_MODEL_COLLECTION = 'custom'
+    TOOL_COLLECTION = 'tool'
+    STORE_COLLECTION = 'store'
 
+    OUTBOUND_COLLECTION = 'outbound'
     DATABASE_NAME = 'notifyr'
 
 
     def __init__(self):
-        self.available_collection = []
+        available_collection = []
 
         for x in dir(self.__class__):
             if x.endswith('_COLLECTION'):
                 x = getattr(self.__class__,x)
-                self.available_collection.append(x)
+                available_collection.append(x)
+        
+        self.available_collection = set(available_collection)
             
 ########################                     ########################################
 
@@ -214,7 +222,7 @@ class SettingDBConstant:
 DEFAULT_SETTING = {
     SettingDBConstant.AUTH_EXPIRATION_SETTING: SECONDS_IN_AN_HOUR * 10,
     SettingDBConstant.REFRESH_EXPIRATION_SETTING: SECONDS_IN_AN_HOUR * 24 * 1,
-    SettingDBConstant.CHAT_EXPIRATION_SETTING: SECONDS_IN_AN_HOUR,
+    SettingDBConstant.CHAT_EXPIRATION_SETTING: 30,
     SettingDBConstant.ASSET_LANG_SETTING: "en",
     SettingDBConstant.CONTACT_TOKEN_EXPIRATION_SETTING:360000000,
     SettingDBConstant.API_EXPIRATION_SETTING: 360000000,
@@ -241,15 +249,16 @@ class VaultConstant:
         return f'/vault/shared/{file}'
 
 
-    NotifyrSecretType = Literal['tokens','webhook','messages','generation-id','communication','setting','internal-api']
+    NotifyrSecretType = Literal['tokens','webhook','messages','generation-id','communication','setting','internal']
     TOKENS_SECRETS = 'tokens'
     MESSAGES_SECRETS = 'messages'
     GENERATION_ID = 'generation-id'
     COMMUNICATION_SECRETS = 'communication'
     LLM_SECRETS = 'llm'
+    OUTBOUND_SECRETS='outbound'
     WEBHOOK_SECRETS = 'webhook'
     SETTINGS_SECRETS='setting'
-    INTERNAL_API_SECRETS='internal-api'
+    INTERNAL_API_SECRETS='internal'
 
 
     NotifyrTransitKeyType = Literal['profiles-key','messages-key','chat-key','s3-rest-key']
@@ -327,6 +336,7 @@ class RedisConstant:
     LIMITER_DB=1
     CACHE_DB=3
     CONFIG_DB=4
+    AGENTIC_DB=5
 
 ########################                     ########################################
 
@@ -395,7 +405,7 @@ class LLMProviderConstant:
 
     LLMProvider = Literal['openai','anthropic','cohere','groq','deepseek']
     
-    MODELS: dict[str, dict[Literal['models','default'], list[str]]] = {
+    MODELS: dict[str, dict[Literal['models','default','embedding_model'], list[str]]] = {
         "openai": {
             "models": [
                 "gpt-5.2", "gpt-5.2-pro", "gpt-5.1", "gpt-5", "gpt-5-mini", "gpt-5-nano",
@@ -405,6 +415,9 @@ class LLMProviderConstant:
                 "gpt-realtime", "gpt-realtime-mini", "gpt-audio", "gpt-audio-mini",
                 "gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo",
                 "gpt-4o-mini", "gpt-4o", "o1-mini", "o1-preview", "o3-mini", "o3-mini-high"
+            ],
+            "embedding_model":[
+
             ],
             "default": "gpt-4o"
         },
@@ -556,6 +569,9 @@ class AgenticConstant:
 
     VECTOR_ROUTER = lambda p:f'/vector{p}'
     K_GRAPH_ROUTER = lambda p:f'/k-graph{p}'
+    CONVERSATION_ROUTER = lambda p:f'/conversation{p}'
+
+    AGENTIC_COLLECTIONS = {MongooseDBConstant.LLM_COLLECTION,MongooseDBConstant.TOOL_COLLECTION,MongooseDBConstant.STORE_COLLECTION,MongooseDBConstant.CHAT_COLLECTION,MongooseDBConstant.CHAT_WRITE_COLLECTION}
 
 class Crawl4AIConstant:
     INGEST_PARENT_DIR ='crawl4ai'

@@ -7,6 +7,9 @@ from app.definition._error import ServerFileError
 from app.callback import Callbacks_Stream,Callbacks_Sub
 from app.definition._service import ACCEPTABLE_STATES, BaseService, ServiceStatus
 from app.interface.timers import  SchedulerInterface
+from app.models.odm.agents_model import AgentModel
+from app.models.odm.custom_model import CustomModel
+from app.models.odm.tools_model import ToolModel
 from app.ressources import *
 from app.services.agent.remote_agent_service import RemoteAgentService
 from app.services.cost_service import CostService
@@ -17,7 +20,7 @@ from app.services.database.redis_service import RedisService
 from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.vault_service import VaultService
 from app.services.worker.task_service import TaskService
-from app.services.config_service import ConfigService, UvicornWorkerService
+from app.services.config_service import ConfigService, WorkerService
 from app.utils.prettyprint import PrettyPrinter_
 from fastapi import Request, Response, FastAPI
 from typing import Callable,Literal
@@ -31,15 +34,15 @@ import traceback
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
 
-from app.utils.tools import RunInThreadPool
+from app.utils.toolbox import RunInThreadPool
 # from fastapi_cache.backends.inmemory import InMemoryBackend
 # from fastapi_cache.backends.memcached import MemcachedBackend
 
 from ..meta.server_meta import *
 from .middleware import MIDDLEWARE
 from app.definition._service import PROCESS_SERVICE_REPORT
-from app.models.communication_model import *
-from app.models.webhook_model import *
+from app.models.odm.communication_model import *
+from app.models.odm.webhook_model import *
 
 from app.utils.globals import CAPABILITIES
 from app.classes.profiles import ProfilModelValues
@@ -51,7 +54,7 @@ HTTPMode = Literal['HTTPS', 'HTTP']
 
 BUILTIN_ERROR = [AttributeError,NameError,TypeError,TimeoutError,BufferError,MemoryError,KeyError,NameError,IndexError,RuntimeError,OSError,Exception]
 
-DOCUMENTS = [*ProfilModelValues.values(),CommunicationProfileModel,WebhookProfileModel]
+DOCUMENTS = [*ProfilModelValues.values(),CommunicationProfileModel,WebhookProfileModel,ToolModel,AgentModel,CustomModel]
 
 _shutdown_hooks=[]
 _startup_hooks=[]
@@ -192,19 +195,24 @@ class AppServer(EventInterface):
         # FastAPICache.init(InMemoryBackend(),prefix="fastapi-cache")
         if CAPABILITIES['agentic']:
             remoteAgentService = Get(RemoteAgentService)
-            await remoteAgentService.init_http_session()
+            if remoteAgentService.service_status == ServiceStatus.NOT_AVAILABLE:
+                return
+            remoteAgentService.init_http_session()
+            remoteAgentService.start_agentic_healthcheck()
             await remoteAgentService.connect_channel()
-
         
     @register_hook('shutdown',active=True)
     async def on_shutdown(self):
         redisService:RedisService = Get(RedisService)
         redisService.to_shutdown = True
-        await redisService.close_connections()
+        await redisService.close_connections(True)
 
         if CAPABILITIES['agentic']:
             remoteAgentService = Get(RemoteAgentService)
+            if remoteAgentService.service_status == ServiceStatus.NOT_AVAILABLE:
+                return
             await remoteAgentService.close_http_session()
+            await remoteAgentService.cancel_agentic_health_task()
             await remoteAgentService.disconnect_channel()
 
     @register_hook('startup',)
@@ -323,7 +331,7 @@ class AppServer(EventInterface):
 
 def initialize_config_service(server_args):
     config_service = Get(ConfigService)
-    workerService = Get(UvicornWorkerService)
+    workerService = Get(WorkerService)
     workerService.set_server_config(server_args)
     return config_service
     

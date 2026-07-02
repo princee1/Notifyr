@@ -1,36 +1,124 @@
-from app.definition._tool import ContextPipelineTool
-from app.models.agents_model import VectorToolModel
+from typing import List
+from app.classes.chunk import ChunkContext, ChunkSource
+from app.classes.embeddings import EmbeddingWrapper
+from app.classes.qdrant import QdrantCollectionDoesNotExistError
+from app.definition._tool import ToolContextFactory, RetrievalTool, ToolRuntime, ToolStatus
+from app.definition._agent import BaseToolArtifact, ToolMetadata
+from app.models.odm.tools_model import VectorToolModel
 from app.services.config_service import ConfigService
 from app.services.custom_service import CustomService
-from app.services.database.memcached_service import MemCachedService
 from app.services.database.qdrant_service import QdrantService
+from app.prompt import context_prompt, rag_prompt
+from app.services.database.redis_service import RedisService
+from langchain.messages import HumanMessage,ToolMessage
+from app.utils.helper import slice_dict
 
-class VectorRagTool(ContextPipelineTool):
-	"""
-	1. Embed the user query
-	2. look up the cache if hit return response else
-	3. look for those values in the vector database with, if it is not enough do another payload search
-	4. compare and fetch with the top-k closet vector 
-	5. do a tree depth search of related nodes only if needed
-	6. filter content
-	7. build the prompt with the user query
-	8. prompt using the llm
-	9. store the response in a cache or in the vector database
-	"""
+CHUNK_SOURCES_KEYS = {'chunk_id','source','document_id','document_name','computed_similarity','similarity'}
+class GraphChunkContext(ChunkContext):
+	computed_similarity:float
 
-	def __init__(self,qdrantService:QdrantService,configService:ConfigService,customService:CustomService,memcachedService:MemCachedService,config:VectorToolModel):
+class VectorChunkSource(ChunkSource):
+	computed_similarity:float
+	similarity:float
+
+class RagVectorArtifact(BaseToolArtifact):
+	sources:List[VectorChunkSource] 
+	collection:str
+
+class VectorRagTool(RetrievalTool):
+
+	def __init__(self,qdrantService:QdrantService,configService:ConfigService,customService:CustomService,redisService:RedisService,config:VectorToolModel):
 			super().__init__(config)
 			self.qdrantService = qdrantService
 			self.configService = configService
 			self.customService = customService
-			self.memcachedService = memcachedService
+			self.redisService = redisService
 			self.config = config
-	
-	async def __call__(self,query:str):
+			self.filter = self.qdrantService.to_filter(self.config.filter)
+				
+	async def __call__(self,query:str,runtime:ToolRuntime)->ToolMessage:
+		
+		try:
+			async with ToolContextFactory(artifact={'collection':self.config.collection}) as factory:
+				vector = await self.qdrantService.embed_query(query)
+				with_vector = (self.reranker_config != None)
+				config = self.config.model_dump(exclude=('filter',))
+				contexts = await self.qdrantService.search(vector,filter=self.filter,with_vector=with_vector,**config)
+				if self.reranker_config != None:
+					results:list[GraphChunkContext] = []
+					await self.graph_search(contexts,0,set(),results)
+					contexts = sorted(results,key =lambda c:c.get('computed_similarity',0), reverse=True)[self.reranker_config.top_k:] #reranker
+				prompt_context = context_prompt.VECTOR_RAG_TEMPLATE(contexts)
+				artifact = self.to_artifact(contexts)
+				factory.update(artifact)
+				
+		except QdrantCollectionDoesNotExistError as e:
+			prompt_context = context_prompt.ERROR_TEMPLATE(f"[Collection {e.collection_name} not found]")
+		except ...:
 			...
+		return ToolMessage(prompt_context,
+					tool_call_id=runtime.tool_call_id,
+					status=factory.status,
+					artifact=factory.as_artifact(),
+					additional_kwargs={**factory.as_option(),**self.metadata})
+				
+	async def graph_search(self,contexts:list[ChunkContext],depth:int,seen:set[str],results:list[GraphChunkContext]):
+		if depth >= self.reranker_config.max_depth:
+			return
+		
+		for ctx in contexts:
+			if ctx['chunk_id'] in seen:
+				continue
+			seen.add(ctx['chunk_id'])
 
-	async def search(self):
-		...
+			if not ctx['relationship']:
+				continue
+			similar_context:list[tuple[str,int]] = []
+			rel_points:dict[str,ChunkContext] = await self.qdrantService.get_points(self.collection,ctx['relationship'],True,5,'dict')
+			base_vector = EmbeddingWrapper(ctx['chunk_id'],ctx['vector'],None)
+			for i,(chunk_id,_ctx) in enumerate(rel_points.items()):
+				if chunk_id in seen:
+					continue
+				dist = EmbeddingWrapper.cosine(base_vector,EmbeddingWrapper(chunk_id,_ctx['vector'],None))
+				_ctx['similarity'] = dist
+				if dist < self.reranker_config.thresh_add:
+					seen.add(chunk_id)
+					continue
+				if dist < self.reranker_config.thresh_search:
+					seen.add(chunk_id)
+					self.compute_similarity(_ctx,ctx,depth)
+					if len(results) >= self.reranker_config.max_context:
+						return
+				else:
+					similar_context.append((chunk_id,dist))
+
+			sorted_contexts = sorted(similar_context,reverse=True,key=lambda c:c[1])[self.reranker_config.branching_factor:]
+			await self.graph_search(sorted_contexts,depth+1,seen=seen,results=results)
+		
+		return
+
+	def compute_similarity(self,child:GraphChunkContext,parent:GraphChunkContext,depth:int):
+		factor = parent.get('computed_similarity',1)
+		sim = child['similarity']/(depth+1)
+		child['computed_similarity'] = factor * sim
 	
-	async def _search(self):
-		...
+	def to_artifact(self,result:list[GraphChunkContext])->RagVectorArtifact:
+		hashes = set()
+		sources = []
+		for r in result:
+			slice_dict(r,CHUNK_SOURCES_KEYS,'include',False)
+			sources.append(r)
+
+		return {'hashes':list(hashes),'sources':sources}
+
+	@property
+	def collection(self):
+		return	self.config.collection
+
+	@property
+	def reranker_config(self):
+		return self.config.broad_search
+
+	@classmethod
+	def to_metadata(cls):
+		return super().to_metadata('Vector')

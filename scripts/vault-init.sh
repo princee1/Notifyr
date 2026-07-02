@@ -307,10 +307,10 @@ create_default_token(){
   local balancer_exchange_token="balancer_exchange:$(pwgen -s 80 1)"
   local agentic_api_key="agentic:$(pwgen -s 70 1)"
 
-  vault kv put notifyr-secrets/internal-api/DMZ API_KEY="$dmz_api_key"
-  vault kv put notifyr-secrets/internal-api/BALANCER API_KEY="$balancer_exchange_token"
-  vault kv put notifyr-secrets/internal-api/DASHBOARD API_KEY="$dashboard_api_key"
-  vault kv put notifyr-secrets/internal-api/AGENTIC API_KEY="$agentic_api_key"
+  vault kv put notifyr-secrets/internal/DMZ API_KEY="$dmz_api_key"
+  vault kv put notifyr-secrets/internal/BALANCER API_KEY="$balancer_exchange_token"
+  vault kv put notifyr-secrets/internal/DASHBOARD API_KEY="$dashboard_api_key"
+  vault kv put notifyr-secrets/internal/AGENTIC API_KEY="$agentic_api_key"
 
   echo -n "$dmz_api_key" > "$VAULT_SECRETS_DIR/dmz-api-key.txt"
   echo -n "$dashboard_api_key" > "$VAULT_SECRETS_DIR/dashboard-api-key.txt"
@@ -360,16 +360,26 @@ setup_database_config(){
   # --- MONGO ROLES ---
   if ! setup_config_kv2 "mongo_roles" "check"; then
     echo "Configuring Mongo roles..."
-    vault write notifyr-database/roles/app-mongo-ntfr-role \
+    vault write notifyr-database/roles/agentic-mongo-ntfr-role \
       db_name="mongodb" \
       creation_statements='{ "db": "notifyr", "roles": [
       { "role": "readWrite", "db": "notifyr", "collection":"agent" },
+      { "role": "readWrite", "db": "notifyr", "collection":"chat" },
+      { "role": "readWrite", "db": "notifyr", "collection":"tool" },
+      { "role": "readWrite", "db": "notifyr", "collection":"store" },
+      { "role": "readWrite", "db": "notifyr", "collection":"chat_write" }]}' \
+      default_ttl="12h" \
+      max_ttl="16h"
+
+    vault write notifyr-database/roles/app-mongo-ntfr-role \
+      db_name="mongodb" \
+      creation_statements='{ "db": "notifyr", "roles": [
       { "role": "readWrite", "db": "notifyr", "collection":"communication" },
       { "role": "readWrite", "db": "notifyr", "collection":"webhook" },
       { "role": "readWrite", "db": "notifyr", "collection":"tasks" },
+      { "role": "readWrite", "db": "notifyr", "collection":"outbound" },
       { "role": "readWrite", "db": "notifyr", "collection":"errorProfile" },
-      { "role": "readWrite", "db": "notifyr", "collection":"workflow" },
-      { "role": "readWrite", "db": "notifyr", "collection":"chat" }]}' \
+      { "role": "readWrite", "db": "notifyr", "collection":"workflow" }]}' \
       default_ttl="12h" \
       max_ttl="16h"
 
@@ -411,6 +421,12 @@ setup_database_config(){
       max_ttl="35d" \
       creation_statements='["~*","&*", "+@string", "+@hash", "+@list", "+@set", "+@sortedset","+@transaction", "+@stream","+@keyspace", "+@pubsub", "-@admin", "-@dangerous", "-@connection", "+PING","+SELECT","+SCAN","+INFO","+KEYS"]'
 
+    vault write notifyr-database/roles/agentic-redis-ntfr-role \
+      db_name="redis-notifyr" \
+      default_ttl="12h" \
+      max_ttl="24h" \
+      creation_statements='["~notifyr/agentic/*","&notifyr/agentic/*","+@all"]'
+    
     vault write notifyr-database/roles/admin-redis-ntfr-role \
       db_name="redis-notifyr" \
       default_ttl="2h" \
@@ -527,7 +543,7 @@ create_database_config(){
     echo "Configuring MongoDB connection..."
     vault write notifyr-database/config/mongodb \
       plugin_name="mongodb-database-plugin" \
-      allowed_roles="admin-mongo-ntfr-role, app-mongo-ntfr-role" \
+      allowed_roles="admin-mongo-ntfr-role, app-mongo-ntfr-role, agentic-mongo-ntfr-role" \
       connection_url="mongodb://{{username}}:{{password}}@$MONGO_HOST:27017/admin?replicaSet=$MONGO_REPLICA_NAME" \
       username="$MONGO_INITDB_ROOT_USERNAME" \
       password="$MONGO_INITDB_ROOT_PASSWORD"
@@ -545,7 +561,7 @@ create_database_config(){
         port=6379 \
         username="vaultadmin-redis" \
         password="$REDIS_NOTIFYR_PASSWORD" \
-        allowed_roles="admin-redis-ntfr-role, app-redis-ntfr-role, credit-redis-ntfr-role"
+        allowed_roles="admin-redis-ntfr-role, app-redis-ntfr-role, credit-redis-ntfr-role, agentic-redis-ntfr-role"
     vault write -f notifyr-database/rotate-root/redis-notifyr
     
 

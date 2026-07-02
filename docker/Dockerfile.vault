@@ -32,7 +32,7 @@ WORKDIR /build/neo4j-vault-database-plugin/
 
 RUN make build
 
-FROM hashicorp/vault:latest
+FROM hashicorp/vault:1.21
 
 USER root
 
@@ -129,11 +129,11 @@ path "notifyr-secrets/setting" {
   capabilities = ["read","list","update","create"]
 }
 
-path "notifyr-secrets/internal-api" {
+path "notifyr-secrets/internal" {
   capabilities = ["read","list"]
 }
 
-path "notifyr-secrets/internal-api/*" {
+path "notifyr-secrets/internal/*" {
   capabilities = ["read"]
 }
 
@@ -145,11 +145,11 @@ path "notifyr-secrets/communication/*" {
   capabilities = ["create", "update", "read", "delete"]
 }
 
-path "notifyr-secrets/ai-provider" {
+path "notifyr-secrets/llm" {
   capabilities = ["read","list"]
 }
 
-path "notifyr-secrets/ai-provider/*" {
+path "notifyr-secrets/llm/*" {
   capabilities = ["create", "update", "read", "delete"]
 }
 
@@ -158,6 +158,14 @@ path "notifyr-secrets/webhook" {
 }
 
 path "notifyr-secrets/webhook/*" {
+  capabilities = ["create", "update", "read", "delete"]
+}
+
+path "notifyr-secrets/outbound" {
+  capabilities = ["read","list"]
+}
+
+path "notifyr-secrets/outbound/*" {
   capabilities = ["create", "update", "read", "delete"]
 }
 
@@ -219,6 +227,10 @@ path "notifyr-rabbitmq/creds/celery-ntfr-role" {
 # ---- DATABASE ENGINE ----
 
 path "notifyr-database/creds/app*" {
+  capabilities = ["read"]
+}
+
+path "notifyr-database/creds/agentic*" {
   capabilities = ["read"]
 }
 

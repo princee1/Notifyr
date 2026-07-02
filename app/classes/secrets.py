@@ -3,7 +3,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from typing import Union
 from app.utils.helper import DICT_SEP, flatten_dict, unflattened_dict
-from app.utils.tools import Time
+from app.utils.toolbox import Time
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms
 
 
@@ -51,10 +51,10 @@ class ChaCha20SecretsWrapper(SecretsWrapper):
                 encryptor = cipher.encryptor()
                 self.cipher_data[k] = encryptor.update(v.encode())
 
-    @Time
+    #@Time
     def _decrypt(self):
         
-        if isinstance(self.cipher_data, str):
+        if isinstance(self.cipher_data, bytes):
             cipher = self._new_cipher()
             decryptor = cipher.decryptor()
             return decryptor.update(self.cipher_data).decode()

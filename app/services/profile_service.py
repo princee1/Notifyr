@@ -1,8 +1,8 @@
 from datetime import datetime
 from random import randint
-from typing import Literal, Type
+from typing import Annotated, Literal, Type
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from app.classes.secrets import ChaCha20Poly1305SecretsWrapper, ChaCha20SecretsWrapper
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BaseService, MiniService, MiniServiceStore, Service, ServiceStatus
 from app.errors.db_error import MongoCollectionDoesNotExists
@@ -14,12 +14,13 @@ from app.services.logger_service import LoggerService
 from app.services.vault_service import VaultService
 from app.utils.constant import MongooseDBConstant, VaultConstant
 from app.utils.helper import flatten_dict, subset_model
-from app.models.communication_model import  BaseProfileModel, ProfilModelValues
-from app.classes.profiles import ErrorProfileModel
+from app.classes.profiles import ErrorProfileModel, ProfilModelValues, BaseProfileModel
 from typing import Generic, TypeVar
-from app.utils.tools import RunInThreadPool
+from app.utils.toolbox import RunInThreadPool
 
 TModel = TypeVar("TModel",bound=BaseProfileModel)
+
+MiniServiceRef = Annotated[str,TModel]
 
 @MiniService(
     override_init=True
@@ -32,7 +33,6 @@ class ProfileMiniService(BaseMiniService,Generic[TModel]):
             self.validationModel = subset_model(self.model_type,f'Validation{self.model_type.__class__.__name__}')
             super().__init__(None,str(model['_id']))
             self.queue_name = f'{self.model_type._queue}:{self.miniService_id}'
-
         else:
             super().__init__(None,str(model.id))
             self.queue_name = f'{model._queue}:{self.miniService_id}'
@@ -76,20 +76,20 @@ class ProfileMiniService(BaseMiniService,Generic[TModel]):
 
 
 @Service(is_manager=True)
-class ProfileService(BaseMiniServiceManager):
+class ProfileService(BaseMiniServiceManager[ProfileMiniService[BaseProfileModel]]):
 
     def __init__(self, mongooseService: MongooseService, configService: ConfigService,redisService:RedisService,loggerService:LoggerService,vaultService:VaultService):
         super().__init__()
-        self.MiniServiceStore:MiniServiceStore[ProfileMiniService[BaseProfileModel]] = MiniServiceStore[ProfileMiniService[BaseProfileModel]](self.__class__.__name__)
         self.mongooseService = mongooseService
         self.configService = configService
         self.redisService = redisService
         self.loggerService = loggerService
         self.vaultService = vaultService
+        self.Singleton:dict[Type[TModel],MiniServiceRef] = {} 
     
     def build(self, build_state = DEFAULT_BUILD_STATE):
         self.MiniServiceStore.clear()
-        
+        self.Singleton.clear()
         for v in ProfilModelValues.values():
             for m in self.mongooseService.sync_find(v._collection,v):
                 p = ProfileMiniService[v](
@@ -99,7 +99,10 @@ class ProfileService(BaseMiniServiceManager):
                     model=m,model_type=v)
                 p._builder(BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
                 self.MiniServiceStore.add(p)
-        
+
+            if v._singleton:
+                self.Singleton[v] = p.miniService_id
+     
         if len(self.MiniServiceStore) == 0:
             raise BuildOkError('No Profile Found...')
              
@@ -112,14 +115,14 @@ class ProfileService(BaseMiniServiceManager):
     
     async def async_verify_dependency(self):
         try:
-            async with self.vaultService.statusLock.reader:
+            async with self.vaultService.lock('reader'):
                 if self.vaultService.service_status not in VaultService._ping_available_state:
                     raise ValueError
                 
                 if not self.vaultService.is_loggedin:
                     raise ValueError
             
-            async with self.mongooseService.statusLock.reader:
+            async with self.mongooseService.lock('reader'):
                 if self.mongooseService.service_status not in VaultService._ping_available_state:
                     raise ValueError
                     

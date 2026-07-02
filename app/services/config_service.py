@@ -224,15 +224,15 @@ class ConfigService(_service.BaseService):
 
         # CELERY CONFIG #
         self.BROKER_PROVIDER:Literal['redis','rabbitmq'] = self.getenv('BROKER_PROVIDER','rabbitmq')
-
         self.CELERY_RESULT_EXPIRES = ConfigService.parseToInt(self.getenv("CELERY_RESULT_EXPIRES"), 60*60*24)
         self.CELERY_VISIBILITY_TIMEOUT = ConfigService.parseToInt(self.getenv('CELERY_VISIBILITY_TIMEOUT'),60*60*2)
-        
         self.CELERY_WORKERS_EXPECTED = SCALING.get('worker',0)
 
         # APS CONFIG #
         self.APS_ACTIVATED:bool = ConfigService.parseToBool(self.getenv('APS_ACTIVATED','true'),True)
         self.APS_JOBSTORE:Literal['redis','mongodb','memory'] = self.getenv('APS_JOBSTORE','redis')
+
+        # LANGCHAIN MULTIMODAL COUNT#
 
     def verify(self):
         if self.S3_CRED_TYPE not in ['MINIO','AWS']:
@@ -265,7 +265,7 @@ class ConfigService(_service.BaseService):
         return super().destroy()
         
 @_service.Service()
-class UvicornWorkerService(_service.BaseService):
+class WorkerService(_service.BaseService):
 
     def __init__(self,configService:ConfigService):
         super().__init__()
@@ -288,5 +288,6 @@ class UvicornWorkerService(_service.BaseService):
             return True
      
     def build(self, build_state = ...):
-        self.INSTANCE_ID = f"notiry://{PROCESS_PID}:{PROCESS_PID}@{socket.gethostname()}:{APP_MODE.value}/"        
+        self.HOSTNAME = socket.gethostname()
+        self.INSTANCE_ID = f"notiry://{PARENT_PID}:{PROCESS_PID}@{self.HOSTNAME}:{APP_MODE.value}/"  
         raise BuildOkError()

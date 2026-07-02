@@ -20,6 +20,9 @@ class AgenticBadResponseError(AgenticError):
     """Agentic server returned a bad HTTP response."""
     pass
 
+class AgenticServerConnectionRefusedError(AgenticError):
+    ...
+
 
 class AgenticGrpcIdleError(AgenticError):
     """Agentic gRPC channel is in idle state."""

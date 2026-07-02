@@ -16,17 +16,77 @@ service Agent {
     //Bi-Directional Stream
     rpc S2SPrompt(stream PromptRequest) returns (stream PromptAnswer);
 
+    //Unary
+    rpc Completion(PromptRequest) returns (PromptAnswer);
+    
+    //Bi-Directional Stream
+    rpc S2SBatch(stream PromptRequest) returns (stream PromptAnswer);
+
+}
+
+//-------------------------------------------------------------------------------------
+
+
+message ContentBlock {
+    string mode = 1;
+    string type = 2;
+    string value = 3;
+    string mime = 4;
+}
+
+message Context {
+    string user = 1;
+    string request_id = 2;
+    string session_id = 3;
+    string channel = 4;
+    string auth = 5;
+    bool save = 6;
+    optional string user_encoded = 7;
 }
 
 message PromptRequest {
     string agent = 1;
-    string prompt = 2;
-    string context = 3;
+    string user = 2;
+    string prompt = 3;
+    string thread = 4;
+    optional Context context = 5;
+    repeated ContentBlock blocks = 6;
+    string mess_id = 7;
+    float send_at = 8;
+}
+
+//-------------------------------------------------------------------------------------
+
+message Reasoning {
+    int32 index = 1;
+    string thought = 2;
+    string id = 3;
+}
+
+message ToolCalling {
+    string id = 1;
+    string args = 2;
+    string name = 3;
+}
+
+message InvalidToolCalling {
+    string id = 1;
+    string args = 2;
+    string name = 3;
+    string error = 4;
+    string index = 5;
 }
 
 message PromptAnswer {
-    string answer = 1;
-    bool error = 2;
-    string _type = 3;
+    string text = 1;
+    string reply_id = 3;
+    string reason = 4;
+    string agent = 5;
+    repeated Reasoning reasoning = 6;
+    repeated ToolCalling tool_calling = 7;
+    repeated InvalidToolCalling invalid_tool_calling = 8;
+
 }
+
+//-------------------------------------------------------------------------------------
 

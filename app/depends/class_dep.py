@@ -11,9 +11,9 @@ from app.interface.email import EmailInterface, EmailSendInterface
 from app.models.call_model import BaseVoiceCallModel
 from app.models.ingest_model import FileUploadDataIngestModel
 from app.models.email_model import CustomEmailModel, EmailStatus, EmailTemplateModel, TrackingEmailEventORM
-from app.models.link_model import LinkORM
+from app.models.orm.link_model import LinkORM
 from app.models.sms_model import OnGoingBaseSMSModel
-from app.models.twilio_model import CallEventORM, CallStatusEnum, SMSEventORM, SMSStatusEnum
+from app.models.orm.twilio_model import CallEventORM, CallStatusEnum, SMSEventORM, SMSStatusEnum
 from app.services.config_service import ConfigService
 from app.container import Get
 from app.utils.constant import ParseStrategy, SpecialKeyAttributesConstant
@@ -417,3 +417,11 @@ class FileDataIngestQuery(ToPydanticModelInterface):
             use_docling=self.use_docling
         )
 
+
+
+
+class EmbeddingSimilarity:
+
+    def __init__(self,mode:DeleteMode=Depends(delete_mode_query),threshold:int=Query(alias='threshold',default=0.7,ge=-1,le=1)):
+        self.mode = mode
+        self.threshold = threshold

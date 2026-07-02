@@ -11,11 +11,11 @@ from app.errors.ingest_error import AgenticDatabaseNotAllowedError
 from app.errors.llm_error import LLMModelMaxTokenExceededError, LLMModelNotPermittedError, LLMProviderDoesNotExistError, LLMConfigNotConfiguredError
 from app.errors.service_error import MiniServiceDoesNotExistsError
 from app.manager.task_manager import TaskManager
-from app.models.agents_model import AgentModel
-from app.models.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, ContentSubscriptionORM, SubscriptionContactStatusORM
+from app.models.odm.agents_model import AgentModel
+from app.models.orm.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, ContentSubscriptionORM, SubscriptionContactStatusORM
 from app.models.ingest_model import DataIngestModel, WebCrawlingDataIngestModel
-from app.models.link_model import LinkORM
-from app.models.llm_model import LLMProfileModel
+from app.models.orm.link_model import LinkORM
+from app.models.odm.llm_model import LLMProfileModel
 from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM
 from app.services.admin_service import AdminService
@@ -40,7 +40,7 @@ from app.errors.upload_error import (
     InvalidExtensionError,
 )
 from app.utils.globals import CAPABILITIES
-from app.services.agent.llm_provider_service import LLMProviderService
+from app.services.agent.llm_service import LLMService
 
 class CeleryTaskGuard(Guard):
     def __init__(self,task_names:list[str],task_types:list[TaskType]=[]):
@@ -364,7 +364,7 @@ class UploadFilesGuard(Guard):
             # extension check
             if self.allowed_extensions is not None:
                 lower = filename.lower()
-                ext = self.fileService.get_extension(ext)      
+                ext = self.fileService.get_extension(lower)      
                 if ext not in self.allowed_extensions:
                     raise InvalidExtensionError(filename, self.allowed_extensions)
 
@@ -414,7 +414,7 @@ class LLMProviderGuard(Guard):
         super().__init__()
         self.mongooseService = Get(MongooseService)
         self.configService = Get(ConfigService)
-        self.llmProviderService = Get(LLMProviderService)
+        self.llmProviderService = Get(LLMService)
 
     async def guard(self, agentModel:AgentModel=None):
 
@@ -428,16 +428,19 @@ class LLMProviderGuard(Guard):
                 raise  LLMProviderDoesNotExistError(provider)
             
             if llm_model.models:
-                if agentModel.model not in llm_model.models:
+                if len(set(agentModel._model).difference(llm_model.models))>1:
                     raise LLMModelNotPermittedError(agentModel.provider,agentModel.model,llm_model.models)
             else:
                 models = LLMProviderConstant.MODELS[llm_model.provider]
-                if agentModel.model not in models:
+                if len(set(agentModel._model).difference(models))>1:
                     raise LLMModelNotPermittedError(llm_model.provider,agentModel.model,list(models))
             
-            if agentModel.max_tokens and llm_model.max_output_tokens and agentModel.max_tokens > llm_model.max_output_tokens:
-                raise LLMModelMaxTokenExceededError(agentModel.provider,agentModel.max_tokens,llm_model.max_output_tokens)
-                
+            if agentModel.generation.max_tokens != None and llm_model.max_output_tokens and agentModel.generation.max_tokens > llm_model.max_output_tokens:
+                raise LLMModelMaxTokenExceededError(agentModel.provider,agentModel.generation.max_tokens,llm_model.max_output_tokens,'output')
+            
+            if agentModel.profile.max_inputs_token != None and llm_model.max_input_tokens and agentModel.profile.max_inputs_token > llm_model.max_input_tokens:
+                raise LLMModelMaxTokenExceededError(agentModel.provider,agentModel.profile.max_inputs_token,llm_model.max_input_tokens,'input')
+
         return True,""
             
 

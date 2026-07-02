@@ -1,10 +1,10 @@
 from typing import Dict, Literal
-from fastapi import APIRouter, BackgroundTasks, Query, Request, Response, status, Body,HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response, status, Body,HTTPException
 from app.classes.cost_definition import InsufficientCreditsError, InvalidPurchaseRequestError
 from app.classes.embeddings import EmbeddingUsage
 from app.container import Get
 from app.cost.token_cost import TokenCost
-from app.definition._router import HandlerDetails, exception_handler, lock_service_wrapper
+from app.definition._router import HandlerDetails, auth_depends, exception_handler, get_instance_id, lock_service_wrapper
 from app.models.vector_model import QdrantEmbedRequestModel
 from app.services.cost_service import CostService
 from app.services.database.memcached_service import MemCachedService
@@ -14,6 +14,9 @@ from app.services.worker.arq_service import ArqIngestTaskService
 from app.utils.constant import AgenticConstant, CostConstant
 
 prefix=AgenticConstant.VECTOR_ROUTER('')
+
+MAX_TOKEN_EMBEDDING = 9182
+DIMENSION = 512
 
 def VectorDBRouter(depends:list=None):
     if depends == None:
@@ -28,13 +31,13 @@ def VectorDBRouter(depends:list=None):
         ...
     
     async def on_shutdown():
-        ...
+        await qdrantService.close()
     
-    router = APIRouter(prefix=prefix,on_startup=[on_startup],on_shutdown=[on_shutdown])
+    router = APIRouter(prefix=prefix,on_startup=[on_startup],on_shutdown=[on_shutdown],dependencies=[Depends(auth_depends)])
 
     @router.post('/',status_code=status.HTTP_201_CREATED)
     @lock_service_wrapper(QdrantService)
-    async def create_collection(request:Request,response:Response,collection:Dict = Body()):
+    async def create_collection(request:Request,response:Response,collection:Dict = Body(),instance_id:str=Depends(get_instance_id)):
         if not isinstance(collection,dict):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -51,7 +54,7 @@ def VectorDBRouter(depends:list=None):
 
     @router.get('/s/{collection_name}',status_code=status.HTTP_200_OK)
     @lock_service_wrapper(QdrantService)
-    async def get_collection(request:Request,response:Response,collection_name:str):
+    async def get_collection(request:Request,response:Response,collection_name:str,instance_id:str=Depends(get_instance_id)):
         collection = await qdrantService.get_collection(
             collection_name
             )
@@ -59,7 +62,7 @@ def VectorDBRouter(depends:list=None):
        
     @router.delete('/',status_code=status.HTTP_200_OK)
     @lock_service_wrapper(QdrantService)
-    async def delete_collection(request:Request,response:Response,collection_name:str,mode:Literal['hard','soft']=Query('soft')):
+    async def delete_collection(request:Request,response:Response,collection_name:str,instance_id:str=Depends(get_instance_id),mode:Literal['hard','soft']=Query('soft')):
         if mode =='hard':
             res = await qdrantService.delete_collections(collection_name)
             if not res:
@@ -73,13 +76,13 @@ def VectorDBRouter(depends:list=None):
 
     @router.get('/',status_code=status.HTTP_200_OK)
     @lock_service_wrapper(QdrantService)
-    async def get_all_collection(request:Request,response:Response,collection_name:str):
+    async def get_all_collection(request:Request,response:Response,instance_id:str=Depends(get_instance_id)):
         collections = await qdrantService.get_collections()
         return collections.model_dump()
 
     @router.delete('/docs/{collection_name}/{job_id}',status_code=status.HTTP_200_OK)
     @lock_service_wrapper(QdrantService)
-    async def delete_document(job_id:str,request:Request,response:Response,collection_name:str):
+    async def delete_document(job_id:str,request:Request,response:Response,collection_name:str,instance_id:str=Depends(get_instance_id)):
         document_name = job_id
         res = await qdrantService.delete_document(
             document_name=document_name,
@@ -90,17 +93,19 @@ def VectorDBRouter(depends:list=None):
     @router.post('/embed/',status_code=status.HTTP_200_OK)
     @lock_service_wrapper(QdrantService)
     @exception_handler({InvalidPurchaseRequestError:HandlerDetails(400),InsufficientCreditsError:HandlerDetails(402)})
-    async def embed_query(request:Request,response:Response,backgroundTasks:BackgroundTasks,query:QdrantEmbedRequestModel):
-        await costService.check_enough_credits(CostConstant.TOKEN_CREDIT,8192*2)
+    async def embed_query(request:Request,response:Response,backgroundTasks:BackgroundTasks,query:QdrantEmbedRequestModel,instance_id:str=Depends(get_instance_id)):
+        await costService.check_enough_credits(CostConstant.TOKEN_CREDIT,MAX_TOKEN_EMBEDDING)
 
         embedding,usage = await qdrantService.embed_query(
-            query=query.query
+            query=query.query,
+            model={'openai':'text-embedding-3-small','gemini':'smallest'},
+            dimension=DIMENSION,
         )
 
         async def purchase_embed_token(usage:EmbeddingUsage):
             cost = TokenCost(query.request_id,query.issuer)
-            cost.purchase(usage.model,usage.provider,...,'input','Embedding Query',usage.prompt_tokens)
-            cost.purchase(usage.model,usage.provider,...,'output','Embedding Query',usage.embed_tokens)
+            cost.purchase(usage.model,usage.provider,qdrantService.embedding_id,'input','Embedding Query',usage.prompt_tokens)
+            cost.purchase(usage.model,usage.provider,qdrantService.embedding_id,'output','Embedding Query',usage.embed_tokens)
             await costService.deduct_credits(CostConstant.TOKEN_CREDIT,cost.generate_bill())
 
         backgroundTasks.add_task(purchase_embed_token,usage)

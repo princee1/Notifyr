@@ -5,7 +5,7 @@ from app.classes.crawl import CrawlLLMConfig
 from app.definition import _service
 from app.errors.llm_error import LLMConfigNotConfiguredError
 from app.errors.service_error import BuildFailureError, BuildOkError, BuildWarningError
-from app.models.llm_model import (
+from app.models.odm.llm_model import (
     EMBEDDER_PROVIDER_SET, LLMProfileModel, 
     VectorEmbeddingConfig, CrawlLLMConfigModel, WebResearchConfigModel, 
     GraphitiLLMConfig, GraphitiEmbeddingConfig,
@@ -69,7 +69,7 @@ PROVIDERS = {
 LLM_VALIDATION_TIMEOUT=5
 
 @MiniService(links=[LinkDep(ProfileMiniService,to_build=True)])
-class LLMProviderMiniService(BaseMiniService):
+class LLMMiniService(BaseMiniService):
     
     def __init__(self,configService:ConfigService,profileMiniService:ProfileMiniService[LLMProfileModel]):
         self.depService = profileMiniService
@@ -80,6 +80,10 @@ class LLMProviderMiniService(BaseMiniService):
     def model(self) -> LLMProfileModel:
         return self.depService.model
     
+    @property
+    def credentials(self):
+        return self.depService.credentials
+        
     def build(self, build_state = DEFAULT_BUILD_STATE):
         
         provider = self.model.provider.lower()
@@ -193,15 +197,13 @@ class LLMProviderMiniService(BaseMiniService):
                                       )
 
 @Service(is_manager=True,links=[LinkDep(ProfileService,to_build=True)])
-class LLMProviderService(BaseMiniServiceManager):
+class LLMService(BaseMiniServiceManager[LLMMiniService]):
     
     def __init__(self,profileService:ProfileService,loggerService:LoggerService,configService:ConfigService):
         super().__init__()
         self.profileService = profileService
         self.configService = configService
         self.loggerService = loggerService
-
-        self.MiniServiceStore = MiniServiceStore[LLMProviderMiniService](self.name)
 
     def build(self, build_state=...):
 
@@ -225,7 +227,7 @@ class LLMProviderService(BaseMiniServiceManager):
         for i,p in self.profileService.MiniServiceStore:
             if p.model.__class__ != LLMProfileModel:
                 continue
-            llm_provider = LLMProviderMiniService(
+            llm_provider = LLMMiniService(
                 self.configService,
                 p
             )
