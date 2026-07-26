@@ -7,6 +7,7 @@ from app.utils.helper import generateId
 
 Auth = Literal['guest','subscribed','registered']
 Channel = Literal['sms','message','call','email','live-chat']
+Mode = Literal['stream','direct']
 
 # MIME type definitions by category
 FileMime = Literal['pdf', 'docx', 'pptx', 'csv', 'xlsx', 'txt', 'json', 'xml', 'yaml']
@@ -97,6 +98,10 @@ class Message(BaseModel):
 #########################################################################################################
 
 @dataclass
+class Thread:
+    agent:str
+    thread:str
+@dataclass
 class Session:
     request_id:str
     session_id:str
@@ -143,6 +148,8 @@ class Answer(TypedDict):
     tool_calling:List[ToolCalling]
     invalid_tool_calling:List[InvalidToolCalling]
     token: Token
+    mode:Mode
+    end:str
 
 #########################################################################################################
 ############################                                          ###################################
@@ -155,17 +162,17 @@ class InterruptDecision(BaseModel):
 ############################                                          ###################################
 #########################################################################################################
 
-class Thread(NamedTuple):
-    agent:str
-    conversation:str
+# class Thread(NamedTuple):
+#     agent:str
+#     conversation:str
 
-def to_thread(thread:str,agent:str):
-    return f"{thread}@{agent}"
+# def to_thread(thread:str,agent:str):
+#     return f"{thread}@{agent}"
 
-def from_thread(thread:str)->Thread:
-    t = thread.split('@')
-    if not t or len(t) != 2:
-        raise ...
-    return Thread(*t)
+# def from_thread(thread:str)->Thread:
+#     t = thread.split('@')
+#     if not t or len(t) != 2:
+#         raise ...
+#     return Thread(*t)
 
 

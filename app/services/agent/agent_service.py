@@ -1,6 +1,6 @@
 import asyncio
 import functools
-from typing import Any, Callable, Dict, List, NamedTuple, Self,Any, get_args
+from typing import Any, Callable, Dict, List, NamedTuple, Self,Any, TypeVar, get_args
 from pydantic import ValidationError
 from app.classes.secrets import ChaCha20SecretsWrapper
 from app.definition._agent import *
@@ -66,6 +66,9 @@ InterruptConfig = Dict
 factory_include = ('temperature','model','timeout')
 acceptable_service = {ServiceStatus.AVAILABLE,ServiceStatus.WORKS_ALMOST_ATT,ServiceStatus.PARTIALLY_AVAILABLE}
 answer_exclude = {'token'}
+
+C = TypeVar('C',BaseModel)
+
 
 @MiniService(mirror=RemoteAgentMiniService,links=[LinkDep(LLMMiniService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)])
 class AgentMiniService(BaseMiniService):
@@ -291,6 +294,8 @@ class AgentMiniService(BaseMiniService):
         config = {"configurable": {"thread_id": thread,"checkpoint_ns": self.agent_model.id}} 
         
         answer = conversation.Answer()
+        answer['mode']='direct'
+        answer['end'] = True
 
         response:AIMessage = await self.agent.ainvoke(message,config,context=context)
         if (usage:= response.usage_metadata):
@@ -313,8 +318,8 @@ class AgentMiniService(BaseMiniService):
 
         config = {"configurable": {"thread_id": thread,"checkpoint_ns": self.agent_model.id}}
         async for chunk in self.agent.astream_events(message,config=config,context=context,version="v2",):
-
             answer = conversation.Answer()
+            answer['mode'] ='stream'
             match chunk['event']:
                 case 'on_chat_model_stream' | 'on_llm_stream':
                     response = chunk['data']['chunk']
@@ -333,6 +338,7 @@ class AgentMiniService(BaseMiniService):
                         for tc in getattr(response, 'invalid_tool_calls', [])
                     ]
                 case 'on_chat_model_end':
+                    answer['end']=True
                     response = chunk['data']['output']
                     answer['reply_id'] = response.id
                     if usage := getattr(response, 'usage_metadata', None):
@@ -342,10 +348,16 @@ class AgentMiniService(BaseMiniService):
 
             yield answer
         
-    async def completion(self,input:str,content:list=[]):
+    async def completion(self,input:str,model:Type[C]|None=None,content:list=[])->C|str:
         message = [self.prompt,HumanMessage(input)]
         message.extend(content)
-        response:AIMessage = await self.chat_model.ainvoke(message,)
+        if issubclass(model,BaseModel):
+            chat_model = self.chat_model.with_structured_output(model,include_raw=True)
+            response:AIMessage =  await chat_model.ainvoke(message)
+            response
+        else:
+            response:AIMessage = await self.chat_model.ainvoke(message,)
+            response
 
     async def batch(self,inputs:list[str]):
        async for response in self.chat_model.abatch_as_completed():
@@ -355,10 +367,12 @@ class AgentMiniService(BaseMiniService):
     ############################                                          ###################################
     #########################################################################################################
 
-    def _verify_status(self):
+    def _verify_status(self,_raise=False):
         if self.service_status not in acceptable_service:
             raise AgentNotAvailableError(self.service_status,self.reason,self.miniService_id)
         if self.service_status != ServiceStatus.AVAILABLE:
+            if _raise :
+                raise AgentNotAvailableError(self.service_status,self.reason,self.miniService_id)
             return self.reason
         return None
 
@@ -451,7 +465,7 @@ class AgentService(BaseMiniServiceManager[AgentMiniService],agent_pb2_grpc.Agent
         async with self.MiniServiceStore.lock(request.agent) as agent:
             reason:str|None = agent._verify_status()
             contents = [conversation.ContentBlock.exports(c.mode,c.type,c.value,c.mime) for c in request.blocks]
-            _context = create_context(request)
+            _context = create_context(request,'stream')
             async for answer in agent.stream(request.thread,request.prompt,_context,contents,request.mess_id):
                 yield agent_message.PromptAnswer(agent=request.agent,reason =reason,**slice_dict(answer,answer_exclude,'exclude')).to_proto()
                 asyncio.sleep(0.2)
@@ -676,13 +690,14 @@ class AgentService(BaseMiniServiceManager[AgentMiniService],agent_pb2_grpc.Agent
     def AgenticAPIKey(self)->str:
         return self._agentic_key.to_plain()
     
-def create_context(request:agent_message.PromptRequest):
+def create_context(request:agent_message.PromptRequest,mode:Mode='direct'):
     _context = request.context
     if not _context:
         raise AgentContextDoesNotExistError
     return NotifyrContext(_context.request_id,
                           _context.session_id,
                           _context.channel,
+                          mode,
                           _context.user,
                           _context.auth,
                           _context.save)

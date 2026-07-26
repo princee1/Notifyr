@@ -39,10 +39,10 @@ class TaskService(BaseService,SchedulerInterface):
     _schedule_type_supported = {TaskType.DATETIME,TaskType.INTERVAL,TaskType.TIMEDELTA,TaskType.CRONTAB}
 
 
-    def __init__(self, configService: ConfigService,vaultService:VaultService,processWorkerService:WorkerService,redisService:RedisService,mongooseService:MongooseService,loggerService:LoggerService,costService:CostService):
+    def __init__(self, configService: ConfigService,vaultService:VaultService,workerService:WorkerService,redisService:RedisService,mongooseService:MongooseService,loggerService:LoggerService,costService:CostService):
         super().__init__()
         self.configService = configService
-        self.workerService = processWorkerService
+        self.workerService = workerService
         self.vaultService = vaultService
         self.redisService = redisService
         self.mongooseService = mongooseService

@@ -12,9 +12,9 @@ from app.services.database.mongoose_service import MongooseService
 from app.services.database.redis_service import RedisService
 from app.services.logger_service import LoggerService
 from app.services.vault_service import VaultService
-from app.utils.constant import MongooseDBConstant, VaultConstant
+from app.utils.constant import MongooseDBConstant, StreamConstant, SubConstant, VaultConstant
 from app.utils.helper import flatten_dict, subset_model
-from app.classes.profiles import ErrorProfileModel, ProfilModelValues, BaseProfileModel
+from app.classes.profiles import ErrorLevel, ErrorProfileModel, ErrorType, ProfilModelValues, BaseProfileModel
 from typing import Generic, TypeVar
 from app.utils.toolbox import RunInThreadPool
 
@@ -72,8 +72,27 @@ class ProfileMiniService(BaseMiniService,Generic[TModel]):
         print('Template Profile Model:', TModel)
         self.model = await self.mongooseService.get(self.model.__class__,self.miniService_id)
         await RunInThreadPool(self._read_encrypted_creds)()
-        
 
+    async def send_error(self,description,error_type:ErrorType,name:str=None,code:str|int=None,error_description:str=None,level:ErrorLevel=None):
+        alias = f''
+        error = ErrorProfileModel(alias=alias,description=description,profile_id=self.miniService_id,
+                                  error_code=code,error_name=name,error_level=level,error_type=error_type,
+                                  error_description=error_description)
+        await self.redisService.stream_data(
+            StreamConstant.PROFILE_ERROR_STREAM,
+            error.model_dump()
+        )
+    
+    async def fetch_errors(self,level:ErrorLevel=None,code:str|int=None,limit:int=None):
+        filter = {'profile_id':self.miniService_id}
+        if level:
+            filter['error_level'] = level
+        if code:
+            filter['error_code'] = code
+        
+        await self.mongooseService.find(ErrorProfileModel,filter,limit=limit)
+        
+        
 
 @Service(is_manager=True)
 class ProfileService(BaseMiniServiceManager[ProfileMiniService[BaseProfileModel]]):
@@ -108,10 +127,13 @@ class ProfileService(BaseMiniServiceManager[ProfileMiniService[BaseProfileModel]
              
     def verify_dependency(self):
         if self.vaultService.service_status not in VaultService._ping_available_state:
-            raise BuildFailureError
+            raise BuildFailureError('Cannot decrypt the profile secret')
         
         if self.mongooseService.service_status not in VaultService._ping_available_state:
-            raise BuildFailureError
+            raise BuildFailureError('Cannot retrieve the profile data')
+
+        if self.redisService.service_status not in VaultService._ping_available_state:
+            raise BuildFailureError('Cannot implement logic if redis is not available')
     
     async def async_verify_dependency(self):
         try:

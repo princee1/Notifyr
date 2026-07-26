@@ -9,7 +9,7 @@ from app.services.config_service import ConfigService
 from app.services.cost_service import CostService
 from app.services.database.mongoose_service import MongooseService
 from app.services.database.redis_service import RedisService
-from app.classes.conversation import Message, Reply, Session, User
+from app.classes.conversation import Message, Reply, Session, Thread, User
 from app.services.setting_service import SettingService
 from app.services.vault_service import VaultService
 from app.services.worker.arq_service import ArqIngestTaskService
@@ -67,12 +67,24 @@ class ChatService(BaseService):
         self.settingService = settingService
         self.arqService = arqService
     
-    async def end_chat(self,session:Session,thread:str,agent:str):
+    async def end_chat(self,user:User,session:Session,thread:Thread):
         # TODO Delete current message by session and add them into a session object and summarize
         # TODO Add a job that will turn the old conversation into a knowledge Graph
         ...
     
-    async def fetch_chat(self,Session,thread:str,agent:str):
+    async def fetch_chat(self,user:User,thread:Thread):
+        ...
+
+    async def delete_chat(self,user:User,thread:Thread):
+        ...
+
+    async def interrupt(self,user:User,thread:Thread):
+        ...
+
+    async def fetch_interrupt(self,user:User,thread:Thread):
+        ...
+    
+    async def fetch_memory(self,user:User,thread:Thread):
         ...
     
     async def stream_answer(self,generator:AsyncGenerator[Any,Message],_session:Session,_user:User,_agent:str,*args,_wait=0.5,**kwargs):

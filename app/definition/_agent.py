@@ -9,7 +9,7 @@ from langchain_cohere import ChatCohere
 from langchain_groq import ChatGroq
 from langchain_core.language_models import BaseChatModel
 from langgraph.graph.state import CompiledStateGraph
-from app.classes.conversation import Auth, Channel
+from app.classes.conversation import Auth, Channel, Mode
 from app.classes.secrets import ChaCha20Poly1305SecretsWrapper
 from app.definition._error import BaseError
 from app.definition._service import ServiceStatus
@@ -152,9 +152,11 @@ class NotifyrContext:
     request_id:str
     session_id:str
     channel:Channel
+    mode:Mode
     user_id:str
     auth: Auth
     save:bool=True
+    index:int=None
     user: Optional[dict]  = field(default=None,init=False)
     retry_count:int = field(default=0,init=False)
 

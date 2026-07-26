@@ -13,7 +13,7 @@ from app.definition._ressource import BaseHTTPRessource, ClassMetaData, HTTPMeth
 from app.definition._service import MiniStateProtocol, StateProtocol
 from app.depends.dependencies import get_auth_permission
 from app.depends.funcs_dep import get_profile
-from app.classes.profiles import ProfilModelValues, BaseProfileModel, ErrorProfileModel
+from app.classes.profiles import ErrorProfileMap, ProfilModelValues, BaseProfileModel, ErrorProfileModel
 from app.errors.db_error import DocumentSingletonLimitReachedError
 from app.manager.broker_manager import Broker
 from app.manager.merchant_manager import Merchant
@@ -210,7 +210,17 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     async def refresh_memory_state(self,profile:str,request:Request,channel:Annotated[ChannelMiniService,Depends(get_profile)],broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
         await channel.refresh_worker_state()
         broker.propagate(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
-         
+
+    @UseRoles([Role.PUBLIC])
+    @UsePermission(ProfilePermission)
+    @UseHandler(MiniServiceHandler,RedisHandler)
+    @UsePipe(DocumentFriendlyPipe(),before=False)
+    @UsePipe(MiniServiceInjectorPipe(CeleryService,'service'),)
+    @LockService(ProfileService,'reader',as_manager=True,miniLockType='reader')
+    @BaseHTTPRessource.HTTPRoute('/errors/{profile}/',methods=[HTTPMethod.GET])
+    async def read_error(self,profile:str,error:ErrorProfileMap,service:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response, authPermission:AuthPermission=Depends(get_auth_permission)):
+        return await service.fetch_errors(**error.model_dump())
+
     @classmethod
     async def pipe_profil_model(cls,request:Request,modelType:Literal['model','model_creds','model_update']): 
         try:
@@ -260,11 +270,6 @@ class ProfilRessource(BaseHTTPRessource):
     def __init__(self,mongooseService:MongooseService):
         super().__init__()
         self.mongooseService = mongooseService
-
-    @BaseHTTPRessource.HTTPRoute('/error/',methods=[HTTPMethod.GET])
-    async def read_error(self,request:Request,error:ErrorProfileModel, authPermission:AuthPermission=Depends(get_auth_permission)):
-        error = error.model_dump()
-        return await self.mongooseService.find(ErrorProfileModel,error)
     
     @UsePipe(DocumentFriendlyPipe(include={'ignore'}),before=False)
     @BaseHTTPRessource.HTTPRoute('/error/{error}/',methods=[HTTPMethod.PATCH])
@@ -281,5 +286,6 @@ class ProfilRessource(BaseHTTPRessource):
     async def get_all(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
         return await self.mongooseService.find_all(BaseProfileModel)
     
-    
-    
+    @BaseHTTPRessource.HTTPRoute('/types/',methods=[HTTPMethod.GET])
+    async def get_profile_type(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
+        ...

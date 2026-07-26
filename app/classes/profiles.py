@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import ClassVar, Optional, Type, TypedDict
+from typing import ClassVar, Optional, Type, TypedDict, Union
 from beanie import Document
 from typing_extensions import Literal
 from pydantic import BaseModel, Field, field_validator
@@ -128,18 +128,32 @@ class BaseProfileModel(BaseDocument):
 ######################################################
 # Error Model
 ######################################################
-class ErrorProfileModel(Document):
+
+ProfilErrorType = Literal['rate-limiting','authentication','quota','authorization','security','outage','connect','authenticate','general']
+ErrorLevel = Literal['warn','critical','message']
+
+class ErrorType(BaseModel):
+    type:ProfilErrorType
+    detail:Union[str,dict]
+    next_build:Optional[int] = None
+
+class ErrorProfileModel(BaseDocument):
     profile_id: Optional[str]
 
+    error_type: Optional[ErrorType]
     error_code: Optional[int]
     error_name: Optional[str]
     error_description: Optional[str]
-    error_level:Optional[Literal['warn','critical','message']]
-    error_type:Optional[Literal['connect','authenticate','permission','rate_limit','general']]
+    error_level:Optional[ErrorLevel]
 
     ignore:Optional[bool] = False
 
     class Settings:
         name = MongooseDBConstant.ERROR_PROFILE_COLLECTION
+
+class ErrorProfileMap(BaseModel):
+    level: ErrorLevel = None,
+    code: str | int = None,
+    limit: int = None
 
 ProfilModelValues: dict[str, Type[BaseProfileModel]] = {}
