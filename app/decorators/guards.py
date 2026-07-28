@@ -3,6 +3,7 @@ from app.classes.auth_permission import AuthPermission, PolicyModel, RefreshPerm
 from app.classes.cost_definition import CreditNotInPlanError
 from app.classes.mongo import BaseDocument
 from app.definition._error import ServerFileError
+from app.definition._service import BaseService
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
 from app.depends.class_dep import TrackerInterface
@@ -475,4 +476,15 @@ class MongooseHardLimitGuard(Guard):
             raise CollectionHardLimitReachedError(self.limit,self.model._collection)
         
         return True,''
-            
+
+
+class ServiceStatusGuard(Guard):
+    def __init__(self,services:List[Type[BaseService]]):
+        super().__init__()
+        self.services = {}
+    
+    async def guard(self,service:str, authPermission:AuthPermission):
+        if service not in self.services:
+            raise ...
+
+        return True

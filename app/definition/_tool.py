@@ -53,7 +53,6 @@ class UnexpectedToolError(ToolError):
 ToolStatus = Literal['success','error']
 
 ToolRuntime=BaseToolRuntime[NotifyrContext,NotifyrAgentState]
-
 class ToolContextFactory:
 
     def __init__(self,marked:int = 5,deleted:bool = None,artifact:dict=None,option:dict=None):
@@ -157,6 +156,10 @@ class Tool:
     @property
     def name(self):
         return self.config.alias
+    
+    @property
+    def return_direct(self):
+        return False or self.config.return_direct
 
     @property
     def description(self):
@@ -399,4 +402,3 @@ def HybridRAGFactory(agentModel:AgentModel,model:BaseChatModel,tools:list[BaseTo
         return ToolMessage()
     
     return hybrid_rag
-        

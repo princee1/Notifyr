@@ -1,5 +1,5 @@
 from app.container import InjectInMethod
-from app.definition._ressource import BaseHTTPRessource, HTTPRessource, UseLimiter
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseLimiter
 from app.services.chat_service import ChatService
 from app.services.config_service import ConfigService
 from app.services.database.mongoose_service import MongooseService
@@ -33,13 +33,23 @@ class PublicChatRessource(BaseHTTPRessource):
         self.chatService = chatService
     
     @UseLimiter('100/seconds',key_func='public')
-    @BaseHTTPRessource.HTTPRoute('/interrupt/',)
-    async def interrupt(self,):
+    @BaseHTTPRessource.HTTPRoute('/interrupt/',methods=[HTTPMethod.POST])
+    async def fetch_interrupt(self,):
         ...
     
     @UseLimiter('100/seconds',key_func='public')
-    @BaseHTTPRessource.HTTPRoute('/memory/',)
+    @BaseHTTPRessource.HTTPRoute('/interrupt/',methods=[HTTPMethod.GET])
+    async def resume_interrupt(self,):
+        ...
+    
+    @UseLimiter('100/seconds',key_func='public')
+    @BaseHTTPRessource.HTTPRoute('/memory/',methods=[HTTPMethod.GET])
     async def memory(self):
+        ...
+    
+    @UseLimiter('100/seconds',key_func='public')
+    @BaseHTTPRessource.HTTPRoute('/graph/',methods=[HTTPMethod.GET])
+    async def graph(self):
         ...
 
 chat_ressource:list[type[BaseHTTPRessource]] = [AdminChatRessource,PublicChatRessource]

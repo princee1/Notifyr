@@ -2,6 +2,7 @@ import asyncio
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, WebSocketException,status
 from app.classes.prompt import PromptToken
 from app.definition._router import auth_depends, get_instance_id
+from app.services.agent.agent_service import AGENT_BUILD_CREATE_STATE
 from app.utils.constant import CostConstant, HTTPHeaderConstant
 from app.utils.toolbox import RunInThreadPool
 from app.container import Get,Register
@@ -13,28 +14,13 @@ from app.services import MongooseService
 from app.services import QdrantService
 from app.services import CostService
 from app.services import ReactiveService
+from app.services import GraphitiService
 from app.depends.dependencies import get_bearer_token
 from fastapi import FastAPI,Depends, HTTPException, Request
 from app.routers import Routers
 from app.cost.token_cost import TokenCost
 
 
-class GrpcTask:
-    def __init__(self):
-        self.task:asyncio.Task = None
-    
-    def set_task(self,task:asyncio.Task):
-        self.task = task
-    
-    def cancel_task(self):
-        if self.task:
-            try:
-                self.task.cancel()
-            except asyncio.CancelledError as e:
-                pass
-            except Exception:
-                pass
-            self.task = None
 
 async def on_purchase_token_next(tokens:PromptToken):
     costService = Get(CostService)
@@ -52,14 +38,17 @@ def bootstrap_agent_app()->FastAPI:
     vaultService = Get(VaultService)
     agentService = Get(AgentService)
     mongooseService = Get(MongooseService)
-    qdrantService = Get(QdrantService)
-    reactiveService = Get(ReactiveService)
-
-    grpcTask = GrpcTask()    
+    graphitiService = Get(GraphitiService)
 
     async def on_startup():
         mongooseService.start()
+        redisService.start()
+        graphitiService.start()
+
         redisService.register_consumer(callbacks_stream=Callbacks_Stream,callbacks_sub=Callbacks_Sub)
+        await agentService.init_mcp_server()
+        agentService._builder(False,build_state=AGENT_BUILD_CREATE_STATE,force_sync_verify=True)
+        
         await agentService.serve()
         agentService.subscribe_token(
             on_next=lambda t: asyncio.create_task(on_purchase_token_next(t)),
@@ -68,9 +57,12 @@ def bootstrap_agent_app()->FastAPI:
 
     async def on_shutdown():
         mongooseService.shutdown()
+        redisService.shutdown()
+        graphitiService.shutdown()
 
         redisService.to_shutdown = True
         await redisService.close_connections(True)
+
         await RunInThreadPool(redisService.revoke_lease)()
         await RunInThreadPool(mongooseService.revoke_lease)()
 

@@ -1,9 +1,11 @@
+from dataclasses import dataclass
+
 from app.classes.conversation import Auth, Channel
 from app.classes.embeddings import EmbeddingModel
 from app.classes.mongo import BaseDocument
 from app.classes.qdrant import QdrantFilterModel, QdrantSearchParamsModel
 from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
-from typing import Any, ClassVar, Dict, List, Literal, Optional, Self, Union, get_args
+from typing import Any, Callable, ClassVar, Dict, List, Literal, Optional, Self, Union, get_args
 from app.classes.url import URLMappingModel
 from mongoquery import Query
 from app.utils.constant import MongooseDBConstant
@@ -189,12 +191,79 @@ class APIToolModel(ToolModel):
 class APIControlModel(APIToolModel):
     ...
 
-class MCPToolModel(ToolModel):
-    transports:Literal['http','stdio'] = 'http'
+class MCPServerToolModel(ToolModel):
+    transport:Literal['http','stdio'] = 'http'
     session_mode:Literal['stateless','stateful']
-    url:str
-    outbound:str
+    outbound:Optional[str] = None
+    authType:Literal['none','headers','auth']
+    headers:Optional[Dict[str,str]] = None
+    command:Optional[str] = None
+    args:Optional[List[str]] = None
+    url:Optional[str]
+    
+    @model_validator(mode='after')
+    def validate_format(self)->Self:
+        if self.transport == 'http':
+            # HTTP transport requires url and authType, disallows command and args
+            if self.url is None:
+                raise ValueError("'url' is required when transport is 'http'")
+            if self.command is not None or self.args is not None:
+                raise ValueError("'command' and 'args' are not allowed when transport is 'http'")
+        elif self.transport == 'stdio':
+            # STDIO transport requires command, disallows url, authType, and additionalHeaders
+            if self.command is None:
+                raise ValueError("'command' is required when transport is 'stdio'")
+            if self.url is not None:
+                raise ValueError("'url' is not allowed when transport is 'stdio'")
+            if self.authType is not None:
+                raise ValueError("'authType' is not allowed when transport is 'stdio'")
+            if self.headers is not None:
+                raise ValueError("'additionalHeaders' is not allowed when transport is 'stdio'")
+        return self
+    
+    
+    @property
+    def langchain_config(self) -> Dict[str, Any]:
+        """
+        Generate LangChain-compatible server configuration.
+        Automatically handles transport-specific configuration and authentication.
+        
+        Returns:
+            Dict with LangChain MCP server configuration
+            
+        Example:
+            HTTP: {
+                "transport": "http",
+                "url": "http://localhost:8000/mcp",
+                "headers": {"Authorization": "Bearer token", ...}
+            }
+            
+            STDIO: {
+                "command": "python",
+                "args": ["-m", "mcp.server"]
+            }
+        """
+        if self.transport == 'http':
+            config = {
+                'transport': 'http',
+                'url': self.url,
+            }
+            return config
+        
+        elif self.transport == 'stdio':
+            config = {'command': self.command,}
+            if self.args:
+                config['args'] = self.args
+            return config
+        
+        return {}
 
+
+
+@dataclass
+class MCPToolModel:
+    server:MCPServerToolModel
+    tool:Callable
 
 ####################################################################################################################################
 ##################################################                                                 #################################
@@ -215,4 +284,4 @@ class SearchToolModel(ToolModel):
 class ConversationToolModel(ToolModel):
     ...
 
-ToolModels = Union[VectorToolModel,CacheToolModel,APIControlModel,APIToolModel,MCPToolModel,SearchToolModel,MemoryToolModel,ConversationToolModel]
+ToolModels = Union[VectorToolModel,CacheToolModel,APIControlModel,APIToolModel,MCPServerToolModel,SearchToolModel,MemoryToolModel,ConversationToolModel]

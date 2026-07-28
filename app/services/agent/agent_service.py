@@ -30,6 +30,7 @@ from app.tools.api_tool import APIControlTool, APIFetchTool
 from app.tools.cache_tool import CacheTool
 from app.tools.conversation_tool import ConversationTool
 from app.tools.graph_tool import KnowledgeGraphTool,MemoryTool
+from app.tools.mcp_tool import MCPTool
 from app.tools.search_tool import SearchTool
 from app.tools.vector_tool import VectorRagTool
 from app.utils.constant import CostConstant, MongooseDBConstant
@@ -50,6 +51,8 @@ from langchain.messages import HumanMessage, SystemMessage,AIMessage,AIMessageCh
 from langchain_classic import hub
 from langchain_core.rate_limiters import InMemoryRateLimiter
 from app.classes import conversation
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_mcp_adapters.tools import load_mcp_tools
 
 AVOID_RE_VALIDATE_BUILD_STATE = -100
 AVOID_RECREATE_AGENT_BUILD_STATE = -435
@@ -57,6 +60,7 @@ RECREATE_MEMORY_BUILD_STATE = 895
 RECREATE_AGENT_BUILD_STATE = 543
 RECREATE_AGENT_WITH_OUTBOUND_BUILD_STATE=120
 TOOL_RECREATE_BUILD_STATE = 890
+AGENT_BUILD_CREATE_STATE = 4859
 
 REACTIVE_TOKEN_COST = 'token_cost'
 API_SECRET_KEY = 'API_KEY'
@@ -81,9 +85,8 @@ class AgentMiniService(BaseMiniService):
                 llmMiniService:LLMMiniService,
                 customService:CustomService,
                 redisService:RedisService,
+                agentService:'AgentService',
                 agent_model:dict,
-                checkpointer:MongoDBSaver,
-                store:MongoDBStore,
                 toolModels:list[ToolModel],
                 outboundServices:Dict[str,ProfileMiniService[HTTPOutboundModel]]={},
                 clientServices:Dict[str,ProfileMiniService[BaseProfileModel]]={},
@@ -99,10 +102,17 @@ class AgentMiniService(BaseMiniService):
             self.customService = customService
             self.outboundServices = outboundServices
             self.clientServices = clientServices
-            self.agent_model=agent_model
-            self.checkpointer = checkpointer
-            self.store = store
-            self.toolModels = toolModels
+            self.agent_model= agent_model
+            self.agentService = agentService
+
+            self.toolModels = []
+            self.mcpServerModels:list[MCPServerToolModel] = []
+
+            for tM in toolModels:
+                if isinstance(tM,MCPServerToolModel):
+                    self.mcpServerModels.append(tM)
+                else:
+                    self.toolModels.append(tM)
 
             self.__as_subagent__ = __as_subagent__
 
@@ -130,7 +140,8 @@ class AgentMiniService(BaseMiniService):
         tool_limits = []
 
         tools = self._init_tools(hitl_config,tool_limits)
-        middleware = self._init_middleware(hitl_config,tool_limits)
+        mcp_tools = self._init_mcp_tool()
+        middleware = self._init_middleware(hitl_config,tool_limits,mcp_tools)
     
         prompt = system_prompt.SYSTEM_TEMPLATE(self.agent_model.system)
         self.prompt = SystemMessage([{'type':'text','text':prompt,"cache_control": {"type": "ephemeral"}}])
@@ -142,8 +153,8 @@ class AgentMiniService(BaseMiniService):
                 state_schema=NotifyrAgentState,
                 context_schema=NotifyrContext,
                 name=self.agent_name,
-                checkpointer=self.checkpointer,
-                store=self.store,
+                checkpointer=self.agentService.checkpointer,
+                store=self.agentService.store,
                 )
 
         for id,service in self.outboundServices.items():
@@ -159,12 +170,13 @@ class AgentMiniService(BaseMiniService):
     ############################                                          ###################################
     #########################################################################################################
 
-    def _init_tools(self,hitl_config:dict,tool_limit:list)->List[BaseTool]:
+    def _init_tools(self,hitl_config:dict,tool_limit:list,mcp_tools:list[MCPToolModel])->List[BaseTool]:
         tools = []
-        mcp_tools = []
-        rag_tools = []
-        for config in self.toolModels:
-
+        for config in [*self.toolModels,*mcp_tools]:
+            if hasattr(config,'outbound',None) and (outboundService:= self.outboundServices.get(config.outbound,None)) == None:
+                continue
+            if outboundService.service_status not in acceptable_service:
+                continue
             if isinstance(config,VectorToolModel):
                 tool = VectorRagTool(self.qdrantService,self.configService,self.customService,config)
             elif isinstance(config,CacheToolModel):
@@ -173,18 +185,14 @@ class AgentMiniService(BaseMiniService):
                 cls = KnowledgeGraphTool if isinstance(config,KnowledgeGraphToolModel) else MemoryTool
                 tool = cls(self.graphitiService,self.configService,config)
             elif isinstance(config,(APIToolModel,APIControlModel)):
-                if (outboundService:= self.outboundServices.get(config.outbound,None)) == None:
-                    continue
-                if outboundService.service_status not in acceptable_service:
-                    continue
                 types = APIFetchTool if isinstance(config,APIToolModel) else APIControlTool
                 tool = types(self.configService,outboundService)
             elif isinstance(config,SearchToolModel):
                 tool = SearchTool(self.configService,self.qdrantService,self.customService)
             elif isinstance(config,MCPToolModel):
-                continue
+                tool = MCPTool(config,self.configService,self.redisService)
             elif isinstance(config,ConversationToolModel):
-                tool = ConversationTool(self.configService,self.mongooseService)
+                tool = ConversationTool(self.configService,self.mongooseService,self.agentService.checkpointer)
             
             self.tools[tool.name] = tool 
 
@@ -197,19 +205,23 @@ class AgentMiniService(BaseMiniService):
             if (retry:=tool.to_retry())!=None:
                 tool_limit.append(retry)
             
-            tool = tool_factory(tool.name,tool,infer_schema=False,
+            tool = tool_factory(tool.name,
+                                infer_schema=False,
                                 description=tool.description,
                                 return_direct=tool.return_direct,
                                 args_schema=tool.arg_schema,
                                 extras={'__conditions__':tool.to_condition()}
-                                )
+                                )(tool)
             tools.append(tool)
-        
+                
         return tools
 
     def _init_middleware(self,interrupt_on,tool_limits:list[ToolCallLimitMiddleware[NotifyrAgentState,NotifyrContext]])->list[Callable|type]:
         middleware = []
         dynamic_middlewares = []
+
+        if self.agent_model.rag == '':
+            ...
         
         thread_guard = ThreadGuardFactory(self.agent_model)
         middleware.append(thread_guard)  # before agent
@@ -274,10 +286,17 @@ class AgentMiniService(BaseMiniService):
         return reversed(middleware)
 
     def _init_mcp_tool(self):
-        ...
-    
+        mcpToolsModel:list[MCPToolModel] = []
+        for mcp in self.mcpServerModels:
+            if mcp.id not in self.agentService.mcp_tools:
+                continue
+            tools = self.agentService.mcp_tools[mcp.id]
+            mcpToolsModel.extend([ MCPToolModel(mcp,t) for t in tools ])
+        return mcpToolsModel
+        
     def _init_subagent(self):
         ...
+    
     #########################################################################################################
     ############################                                          ###################################
     #########################################################################################################
@@ -550,6 +569,9 @@ class AgentService(BaseMiniServiceManager[AgentMiniService],agent_pb2_grpc.Agent
         self.redisService = redisService
         self.customService = customService
 
+        self.mcp_client:MultiServerMCPClient = None
+        self.mcp_tools=dict[str,List[BaseTool]] = {}
+
         self.MiniServiceStore = MiniServiceStore[AgentMiniService](self.name)
         self.tools_config:Dict[str,ToolModels] = {}
 
@@ -584,22 +606,23 @@ class AgentService(BaseMiniServiceManager[AgentMiniService],agent_pb2_grpc.Agent
                 for t in self.mongooseService.sync_find(MongooseDBConstant.TOOL_COLLECTION,T,return_model=True,as_subset_model=True,filter_out=True):
                     self.tools_config[t.id] = t
         
-        models:list[dict] = self.mongooseService.sync_find(MongooseDBConstant.AGENT_COLLECTION,AgentModel)
-        counter = self.StatusCounter(len(models))
-        self.MiniServiceStore.clear()
+        if  (build_state == DEFAULT_BUILD_STATE and self.CONTEXT == 'async') or build_state == AGENT_BUILD_CREATE_STATE:
+            models:list[dict] = self.mongooseService.sync_find(MongooseDBConstant.AGENT_COLLECTION,AgentModel)
+            counter = self.StatusCounter(len(models))
+            self.MiniServiceStore.clear()
 
-        for model in models:
-            try:
-                agent = self._create_agent(model)
-                agent._builder(_service.BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
-                counter.count(agent)
-                self.MiniServiceStore.add(agent)
-            except LLMProviderDoesNotExistError as e:
-                continue
-            except MiniServiceDoesNotExistsError as e:
-                continue
-                        
-        return super().build(counter, build_state)
+            for model in models:
+                try:
+                    agent = self._create_agent(model)
+                    agent._builder(_service.BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
+                    counter.count(agent)
+                    self.MiniServiceStore.add(agent)
+                except LLMProviderDoesNotExistError as e:
+                    continue
+                except MiniServiceDoesNotExistsError as e:
+                    continue
+                            
+            return super().build(counter, build_state)
     
     #########################################################################################################
     ############################                                          ###################################
@@ -655,7 +678,6 @@ class AgentService(BaseMiniServiceManager[AgentMiniService],agent_pb2_grpc.Agent
             if t not in self.tools_config:
                 continue
             t = self.tools_config[t]
-
             if isinstance(t,(APIControlModel,APIToolModel)):
                 if t.outbound:
                     outboundServices.add(t.outbound)
@@ -675,13 +697,55 @@ class AgentService(BaseMiniServiceManager[AgentMiniService],agent_pb2_grpc.Agent
                     self.customService,
                     self.redisService,
                     model,
-                    self.checkpointer,
-                    self.store,
+                    self,
                     agentTools,
                     outboundServices,
                     clientServices
                 )
         
+    async def init_mcp_server(self):
+        mcp_connections = {}
+        stateful = []
+        stateless = []
+        for id,t in filter(lambda t:isinstance(t,MCPServerToolModel),self.tools_config.items()):
+            t:MCPServerToolModel =t
+            connection = t.langchain_config
+            if t.session_mode == 'stateful':
+                stateful.append(id)
+            else:
+                stateless.append(id)
+
+            outboundService:ProfileMiniService[HTTPOutboundModel]=self.profileService.MiniServiceStore._store_.get(t.outbound,None)
+            if not (t.authType !=None  and outboundService!= None):
+                continue
+
+            credentials = outboundService.credentials.to_plain()
+            if t.authType == 'auth' and 'auth' in credentials:
+                connection['auth'] = credentials['auth']
+            else:
+                connection['headers'] = {}
+                if t.headers:
+                    connection['headers'].update(t.headers)
+                if 'headers' in credentials:
+                    connection['headers'].update(credentials['headers'])
+
+            mcp_connections[id] = connection
+        
+        self.mcp_client = MultiServerMCPClient(mcp_connections)
+        self.mcp_tools.clear()
+
+        for id in stateful:
+            async with self.mcp_client.session(id) as session:
+                tools = await load_mcp_tools(session)
+                self.mcp_tools[id] = tools
+        
+        for id in stateless:
+            tools = await self.mcp_client.get_tools()
+            self.mcp_tools[id] = tools
+
+    async def async_verify_dependency(self):
+        await self.init_mcp_server()
+    
     #########################################################################################################
     ############################                                          ###################################
     #########################################################################################################

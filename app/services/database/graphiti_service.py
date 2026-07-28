@@ -156,9 +156,6 @@ class GraphitiService(TempCredentialsDatabaseService):
         )
         return result
     
-    async def search_node(self,query:str):
-        ...
-
     async def build_communities(self):
         await self.graphiti.build_communities()
     

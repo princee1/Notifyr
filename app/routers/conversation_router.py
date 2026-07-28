@@ -36,6 +36,12 @@ def ConversationRouter():
     async def delete_chat(agent:Annotated[AgentMiniService,Depends(agent_yielder)],instance_id:str=Depends(get_instance_id)):
         agent._verify_status(True)
 
+    @router.delete('/graph/{service}')
+    @exception_handler(SERVICE_HANDLER_DETAILS)
+    @exception_handler(MINI_SERVICE_HANDLER_DETAILS)
+    async def fetch_graph(agent:Annotated[AgentMiniService,Depends(agent_yielder)],instance_id:str=Depends(get_instance_id)):
+        agent._verify_status(True)
+        
     @router.get('/interrupts/{service}')
     @exception_handler(SERVICE_HANDLER_DETAILS)
     @exception_handler(MINI_SERVICE_HANDLER_DETAILS)

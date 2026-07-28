@@ -39,11 +39,6 @@ from app.models.odm.llm_model import LLMProfileModel
 base_attr = {'id','revision_id','created_at','last_modified','version'}
 
 
-@HTTPRessource('prompt-playground')
-class PromptPlaygroundRessource(BaseHTTPRessource):
-    pass
-
-
 @UseRoles([Role.ADMIN])
 @PingService([MongooseService])
 @UsePermission(JWTRouteHTTPPermission)

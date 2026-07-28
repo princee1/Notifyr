@@ -182,7 +182,7 @@ class AgentModel(BaseDocument):
     generation:GenerationConfig = Field(default_factory=GenerationConfig)
     profile: ChatProfileConfig = Field(default_factory=ChatProfileConfig)
     marker: MarkerConfig = Field(default_factory=MarkerConfig)
-
+    
     limiter : Optional[RateLimiterConfig] = Field(default_factory=RateLimiterConfig)
     callGuard: Optional[ModelCallGuardConfig] = Field(default_factory=ModelCallGuardConfig)
     messageLimit: Optional[MessageLimitConfig] = Field(default_factory=MessageLimitConfig)

@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from langchain.agents.middleware import after_agent, before_agent,before_model,Runtime
 from app.definition._agent import NotifyrAgentState, NotifyrContext
-from app.definition._tool import RetrievalTool, ToolRuntime
+from app.definition._tool import RetrievalTool, ToolContextFactory, ToolRuntime
 from app.models.odm.agents_model import AgentModel
 from app.models.odm.tools_model import CacheToolModel
 from app.services import ConfigService
@@ -31,15 +31,19 @@ class CacheTool(RetrievalTool):
 
 
     async def __call__(self,runtime:ToolRuntime,mode:CacheMode,query:str,response:str=None)->str:
-        match mode:
-            case 'cache':
-                return await self.cache()
-            case 'invalidate': 
-                return await self.invalidate()
-            case 'lookup':
-                return self.lookup()
-            case _:
-                ...
+        try:
+            async with ToolContextFactory() as factory:
+                match mode:
+                    case 'cache':
+                        return await self.cache()
+                    case 'invalidate': 
+                        return await self.invalidate()
+                    case 'lookup':
+                        return self.lookup()
+                    case _:
+                        ...
+        except:
+            ...
 
     async def lookup(self,query:str):
         ...
