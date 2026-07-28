@@ -1,5 +1,5 @@
 import asyncio
-from typing import Annotated, AsyncIterable, Type
+from typing import Annotated, AsyncIterable, Optional, Type
 from fastapi import Body, Depends, Header, Request, Response,status
 from fastapi.responses import StreamingResponse
 from fastapi.sse import EventSourceResponse, ServerSentEvent
@@ -7,29 +7,33 @@ from pydantic import ConfigDict
 from app.classes.auth_permission import AuthPermission, ClientType, Role
 from app.classes.conversation import Message, Reply, Session, User
 from app.classes.embeddings import EmbeddingModel, EmbeddingWrapper
+from app.classes.mongo import MongoFindFilter
 from app.container import InjectInMethod
 from app.decorators.guards import LLMProviderGuard
-from app.decorators.handlers import AgentHandler, AgenticHandler, LLMHandler, AsyncIOHandler, CostHandler, GrpcHandler, MotorErrorHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler
+from app.decorators.handlers import AgentHandler, AgenticHandler, DataSourceHandler, LLMHandler, AsyncIOHandler, CostHandler, GrpcHandler, MiniServiceHandler, MotorErrorHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, AgentPermission, ClientTypesPermission, JWTRouteHTTPPermission
-from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe
+from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe, SanitizePathParameterPipe
 from app.definition._cost import DataCost
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles, LockService
 from app.definition._service import MiniStateProtocol, StateProtocol
 from app.depends.class_dep import EmbeddingSimilarity
-from app.depends.funcs_dep import get_profile
-from app.errors.agent_error import AgentToolDoesNotExistError, SemanticAgentAlreadyExistError
+from app.depends.variables import SourceMode,source_mode_query
+from app.errors.agent_error import AgentDependencyError, AgentToolDoesNotExistError, SemanticAgentAlreadyExistError, SubAgentContainsSubAgentError
+from app.errors.depends_error import DataSourceNotSupportedError
 from app.manager.broker_manager import Broker
 from app.depends.dependencies import get_auth_permission, get_request_id
 from app.manager.merchant_manager import Merchant
 from app.models.odm.agents_model import AgentModel, PromptPlaygroundModel
-from app.models.odm.tools_model import ToolModel
+from app.models.odm.tools_model import SubAgentToolModel, ToolModel
 from app.models.vector_model import QdrantEmbedRequestModel
 from app.services  import MongooseService
 from app.services.agent.llm_service import LLMService
 from app.services.agent.remote_agent_service import RemoteAgentMiniService
 from app.services.chat_service import ChatService, answer_to_reply, message_to_request
+from app.services.config_service import ConfigService
 from app.services.custom_service import CustomService
+from app.services.database.mongoose_service import AGENTIC_CREDS
 from app.utils.constant import AgenticConstant, CostConstant, LLMProviderConstant
 from app.utils.helper import subset_model
 from app.services  import RemoteAgentService
@@ -56,20 +60,21 @@ class AgentsRessource(BaseHTTPRessource):
         return agent
 
     @InjectInMethod()
-    def __init__(self,remoteAgentService:RemoteAgentService,mongooseService:MongooseService,customService:CustomService): 
+    def __init__(self,remoteAgentService:RemoteAgentService,mongooseService:MongooseService,customService:CustomService,configService:ConfigService): 
         super().__init__()
         self.remoteAgentService = remoteAgentService
         self.mongooseService = mongooseService
         self.customService = customService
+        self.configService = configService
         self.provider_guard = LLMProviderGuard()
     
-    async def semantic_lookup(self, request_id:str, issuer:str, agentModel:AgentModel,threshold:float):
+    async def semantic_lookup(self, request_id:str, issuer:str, agentModel:AgentModel,threshold:float,agentModels:list[AgentModel]=None):
         embedBody = QdrantEmbedRequestModel(query=agentModel.description,request_id=request_id,issuer=issuer)
         embedding = await self.remoteAgentService.request('POST',AgenticConstant.VECTOR_ROUTER('/embed/'),json=embedBody.model_dump())
 
         embedding:EmbeddingModel = EmbeddingModel(vector_id=agentModel.id,**embedding)
         wrapper = EmbeddingWrapper(embedding,threshold=threshold)
-        for agent in await self.mongooseService.find_all(AgentModel):
+        for agent in (agentModels or (await self.mongooseService.find_all(AgentModel))):
             if agentModel.embeddings == None:
                 continue
             if (coef:=EmbeddingWrapper.cosine(wrapper,EmbeddingWrapper(agentModel.embeddings)))>=wrapper.threshold:
@@ -77,12 +82,26 @@ class AgentsRessource(BaseHTTPRessource):
 
         return embedding
 
-    async def lookup_tools(self,agentModel:AgentModel):
-        tools_model = await self.mongooseService.find_all(ToolModel)
-        tools = [t.id for t in tools_model]
+    async def lookup_tools(self,agentModel:AgentModel,verify:bool=True):
+        tools = []
+        agents:set[str] = set() 
+        for t in await self.mongooseService.find_all(ToolModel):
+            tools.append(t.id)
+            if not isinstance(t,SubAgentToolModel):
+                continue
+            if t.id in agentModel.tools and agentModel.type == 'sub-agent' and not self.configService.ALLOWED_TWO_LEVEL_SUBAGENT:
+                raise SubAgentContainsSubAgentError(agentModel.id,t.id)
+        
+            agents.intersection_update(t.agents)
+
+        if not verify:
+            return agents
+        
         diff = set(agentModel.tools).difference(tools)
         if len(diff) > 0:
             raise AgentToolDoesNotExistError(agentModel.id,diff)
+        
+        return agents
         # TODO make sure we do not have similar tools
     
     @UsePipe(MerchantPipe())
@@ -97,11 +116,15 @@ class AgentsRessource(BaseHTTPRessource):
     async def create_agent(self,agentModel:AgentModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],similarity:Annotated[EmbeddingSimilarity,Depends(EmbeddingSimilarity)], profile:str=Depends(get_agent), authPermission:AuthPermission=Depends(get_auth_permission)):
         await self.mongooseService.primary_key_constraint(agentModel,True)
         await self.mongooseService.exists_unique(agentModel,True)
-        # TODO check cross needed agent
         
-        await self.lookup_tools(agentModel)
+        agentModels = await self.mongooseService.find_all(AgentModel)
+        needed_agents = await self.lookup_tools(agentModel)
+
+        if (diff_agents:=needed_agents.difference([a.id for a in agentModels])):
+            raise AgentDependencyError(diff_agents,'needed')
+
         if similarity.mode == 'hard':
-            embedding = await self.semantic_lookup(cost.request_id,cost.issuer,agentModel)
+            embedding = await self.semantic_lookup(cost.request_id,cost.issuer,agentModel,similarity.threshold,agentModels)
             agentModel.embeddings = embedding
 
         merchant.safe_payment(
@@ -112,13 +135,34 @@ class AgentsRessource(BaseHTTPRessource):
         broker.propagate(StateProtocol(name=RemoteAgentService,to_build=True,to_destroy=True))
         return agentModel
 
-    @UseRoles([Role.PUBLIC])        
-    @UsePermission(AgentPermission)
+    @UseRoles([Role.PUBLIC])     
+    @UsePermission(AgentPermission(True))
     @UsePipe(DocumentFriendlyPipe,before=False)
+    @UseHandler(MiniServiceHandler,DataSourceHandler)
     @LockService(LLMService,lockType='reader',as_manager=False)
-    @BaseHTTPRessource.HTTPRoute('/{agent}/',methods=[HTTPMethod.GET])
-    async def read_agent(self,agent:str,request:Request,response:Response,profile:str=Depends(get_agent),authPermission:AuthPermission=Depends(get_auth_permission)):
-        agent = await self.mongooseService.get(AgentModel,agent,True)
+    @UsePipe(SanitizePathParameterPipe({},profile=True,agent=True))
+    @LockService(RemoteAgentMiniService,lockType='reader',as_manager=False)
+    @BaseHTTPRessource.HTTPRoute('/{agent:path}/',methods=[HTTPMethod.GET])
+    async def read_agent(self,agent:str,request:Request,response:Response,mongoFilter:Optional[MongoFindFilter],profile:str=Depends(get_agent),source:SourceMode=Depends(source_mode_query), authPermission:AuthPermission=Depends(get_auth_permission)):
+        match source:
+            case 'database':
+                if agent != '':
+                    return await self.mongooseService.get(AgentModel,agent,True)
+                else:
+                    agents = await self.mongooseService.find(AgentModel,mongoFilter.mapping,**mongoFilter.model_dump(exclude={'mapping'}))
+                    agents = filter(lambda a: AgentPermission.predicate(a.id,authPermission),agents)
+                    return list(agents)
+            case 'memory':
+                if agent != '':
+                    async with self.remoteAgentService.MiniServiceStore.lock(agent) as service:
+                        return service.agent_model
+                else:
+                    agents = []
+                    async for a in self.remoteAgentService.MiniServiceStore.aiter(predicate=lambda a: AgentPermission.predicate(a.miniService_id,authPermission)):
+                        agents.append(a.agent_model)
+                    return agents
+            case _:
+                raise DataSourceNotSupportedError(source,['database','memory'])
          
     @UsePipe(MerchantPipe(-1))
     @Throttle(normal=(200,80))
@@ -127,15 +171,29 @@ class AgentsRessource(BaseHTTPRessource):
     @UseHandler(CostHandler,RedisHandler,AgentHandler)
     @LockService(LLMService,lockType='reader',as_manager=False)
     @UseInterceptor(DataCostInterceptor(CostConstant.AGENT_CREDIT,'refund'))
-    @BaseHTTPRessource.HTTPRoute('/s/{agent}/',methods=[HTTPMethod.DELETE])
+    @BaseHTTPRessource.HTTPRoute('/{agent}/',methods=[HTTPMethod.DELETE])
     async def delete_agent(self,agent:str,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],profile:str=Depends(get_agent),authPermission:AuthPermission=Depends(get_auth_permission)):
         agentModel = await self.mongooseService.get(AgentModel,agent,True)
+
+        agentModels = await self.mongooseService.find_all(AgentModel)
+        toolModels = await self.mongooseService.find_all(ToolModel)
+        agentTools = set([t.id for t in toolModels if isinstance(t,SubAgentToolModel) and (agentModel.id in t.agents)])
+
+        for a in agentModels:
+            if (intersection:=set(a.tools).intersection(agentTools)):
+                raise AgentDependencyError(intersection,'affected')
+        
+        async def transaction():
+            async with self.mongooseService.transaction(AGENTIC_CREDS,3,2) as (session,context):
+                await self.mongooseService.delete(agentModel,session=session)
+                for tool in filter(lambda tool: tool.id in agentTools,toolModels):
+                    tool.agents = list(set(tool.agents).difference([agentModel.id]))
+                    await tool.update_meta(session=session)
 
         merchant.safe_payment(
             None,
             None,
-            self.mongooseService.delete,
-            agentModel
+            transaction
         )
         broker.propagate(StateProtocol(name=RemoteAgentService,to_build=True,to_destroy=True))
         return agentModel
@@ -167,13 +225,6 @@ class AgentsRessource(BaseHTTPRessource):
         await agentModel.update_meta()
         broker.propagate(MiniStateProtocol(name=RemoteAgentService,to_build=True,to_destroy=True,id=agent))
         return agentModel
-
-    @UseRoles([Role.PUBLIC])        
-    @UsePipe(DocumentFriendlyPipe,before=False)
-    @LockService(LLMService,lockType='reader',as_manager=False)
-    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.GET])
-    async def get_all_agent(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
-        ...
 
     @UseRoles([Role.PUBLIC])        
     @Throttle(uniform=(30,60))

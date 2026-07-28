@@ -387,6 +387,22 @@ class AgentMiniService(BaseMiniService):
     ############################                                          ###################################
     #########################################################################################################
 
+    async def fetch_state(self):
+        ...
+
+    async def fetch_graph(self):
+        ...
+        
+    async def fetch_interrupts(self):
+        ...
+    
+    async def interrupts(self):
+        ...
+    
+    #########################################################################################################
+    ############################                                          ###################################
+    #########################################################################################################
+
     def _verify_status(self,_raise=False):
         if self.service_status not in acceptable_service:
             raise AgentNotAvailableError(self.service_status,self.reason,self.miniService_id)

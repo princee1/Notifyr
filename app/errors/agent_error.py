@@ -1,6 +1,13 @@
-from typing import Iterable
+from typing import Iterable, Literal
 from app.definition._error import BaseError
 from app.definition._service import ServiceStatus
+
+
+class SubAgentContainsSubAgentError(BaseError):
+    def __init__(self, agentId:str,subagentTool:str):
+        super().__init__(agentId)
+        self.agentId = agentId
+        self.subagentTool = subagentTool
 
 class AgentToolDoesNotExistError(BaseError):
     
@@ -28,7 +35,17 @@ class SemanticAgentAlreadyExistError(BaseError):
 class SemanticToolAlreadyExistError(BaseError):
     ...
 
-class DependencyAgentError(BaseError):
+class AgentDependencyError(BaseError):
+    def __init__(self, agentNotResolved:set[str],mode:Literal['needed','affected'],agent:str=None):
+        super().__init__(agentNotResolved,agent)
+        self.agentNotResolved = agentNotResolved
+        self.agent=agent
+        self.mode = mode 
+
+class AgentCircularDependencyError(BaseError):
+    ...
+
+class AgentDependencyCantBeResolvedError(BaseError):
     ...
 
 class AgentNotAvailableError(BaseError):

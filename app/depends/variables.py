@@ -52,3 +52,10 @@ force_update_query: Callable[[Request],bool]=get_query_params('force','false',Tr
 DeleteMode = Literal['hard','soft']
 
 delete_mode_query:Callable[[Request],DeleteMode] = get_query_params('mode','soft',False,raise_except=True,checker=_wrap_checker('mode',lambda v: v in get_args(DeleteMode),choices=list(get_args(DeleteMode))))
+
+# ----------------------------------------------                                    ---------------------------------- #
+
+SourceMode = Literal['cache','memory','database']
+sources_choices = list(get_args(SourceMode))
+
+source_mode_query:Callable[[Request],SourceMode] = get_query_params('source','soft',False,raise_except=True,checker=_wrap_checker('source',lambda v: v in sources_choices,choices=sources_choices))

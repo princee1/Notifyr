@@ -422,6 +422,6 @@ class FileDataIngestQuery(ToPydanticModelInterface):
 
 class EmbeddingSimilarity:
 
-    def __init__(self,mode:DeleteMode=Depends(delete_mode_query),threshold:int=Query(alias='threshold',default=0.7,ge=-1,le=1)):
+    def __init__(self,mode:DeleteMode=Depends(source_mode_query),threshold:int=Query(alias='threshold',default=0.7,ge=-1,le=1)):
         self.mode = mode
         self.threshold = threshold

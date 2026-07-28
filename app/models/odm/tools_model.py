@@ -269,6 +269,24 @@ class MCPToolModel:
 ##################################################                                                 #################################
 ####################################################################################################################################
 
+class SubAgentToolModel(ToolModel):
+    agents:List[str] = Field(default_factory=list,min_length=1,max_length=10)
+    mode:Literal['normal','handoff','router'] = 'normal'
+
+    @field_validator('agents')
+    def parse_agents(cls,v):
+        return list(set(v))
+
+    @model_validator(mode='after')
+    def validate_agents(self):
+        if self.mode == 'normal' and len(self.agents) > 1:
+            raise ValueError('Theres only one agents when using an agent as a tool')
+        return self
+
+####################################################################################################################################
+##################################################                                                 #################################
+####################################################################################################################################
+
 class CacheEvictionConfig(BaseModel):
     ...
 

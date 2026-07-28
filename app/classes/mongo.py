@@ -1,7 +1,8 @@
 from datetime import datetime
-from typing import ClassVar, List, Self, TypedDict,Optional, Any, Callable
+from typing import ClassVar, Dict, List, Self, TypedDict,Optional, Any, Callable
 import operator
 import uuid
+from aiohttp_retry import Tuple
 from pydantic import BaseModel, Field
 from typing_extensions import Literal
 from app.definition._error import BaseError
@@ -83,7 +84,7 @@ class BaseDocument(Document):
     _collection:ClassVar[Optional[str]] = None
     _primary_key:ClassVar[str]  = 'alias'
 
-    async def update_meta(self):
+    async def update_meta(self,*args,**kwargs):
         self.last_modified =  datetime.utcnow().isoformat()
         self.version+=1
         await self.save()
@@ -100,3 +101,11 @@ class BaseDocument(Document):
 
     class Settings:
         abstract=True
+
+SortDirection = Literal[1,-1]
+
+class MongoFindFilter(BaseModel):
+    limit:Optional[int]
+    skip:Optional[int]
+    sort:Optional[List[Tuple[str,SortDirection]]]
+    mapping:Optional[Dict[str,str|dict]]

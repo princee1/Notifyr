@@ -489,6 +489,13 @@ class MiniServiceStore(Generic[TMS]):
     def __iter__(self):
         return iter(self._store_.items())
 
+    async def aiter(self,mode:ServiceLockType='reader',predicate:Callable[[TMS],bool] = lambda s:True):
+        for id,service in self:
+            if not predicate(service):
+                continue
+            async with service.lock(mode):
+                yield service
+
     def __len__(self):
         return len(self._store_)    
 

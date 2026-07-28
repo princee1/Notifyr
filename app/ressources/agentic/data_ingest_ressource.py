@@ -35,7 +35,7 @@ from app.models.file_model import  FileResponseUploadModel, UploadError
 from app.data_ingest_tasks import DATA_TASK_REGISTRY_NAME
 from app.utils.constant import AgenticConstant, ArqDataTaskConstant, CostConstant
 from app.utils.toolbox import RunInThreadPool
-from app.depends.variables import DeleteMode, force_update_query, delete_mode_query
+from app.depends.variables import force_update_query
 
 
 @UseHandler(ArqHandler,ServiceAvailabilityHandler)

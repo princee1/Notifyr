@@ -9,7 +9,7 @@ from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import DeleteDocumentIngestUpdatePipe, update_status_upon_no_metadata_pipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe,LockService
 from app.depends.dependencies import get_auth_permission
-from app.depends.variables import DeleteMode,delete_mode_query
+from app.depends.variables import DeleteMode,source_mode_query
 from app.interface.delete_ingest import DeleteIngestDocumentInterface
 from app.manager.broker_manager import Broker
 from app.manager.merchant_manager import Merchant
@@ -71,7 +71,7 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @LockService(RedisService,RemoteAgentService,ArqIngestTaskService,lockType='reader')
     @UseHandler(AgenticHandler,CostHandler,ArqHandler,GatewayHandler,RedisHandler,DataIngestHandler)
     @BaseHTTPRessource.HTTPRoute('/{collection_name}/',methods=[HTTPMethod.DELETE],response_model=DeleteCollectionModel)
-    async def delete_collection(self, request:Request,response:Response,collection_name:str,cost:Annotated[DeleteDocumentIngestCost,Depends(DeleteDocumentIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],broker:Annotated[Broker,Depends(Broker)],mode:DeleteMode = Depends(delete_mode_query), autPermission:AuthPermission=Depends(get_auth_permission)):
+    async def delete_collection(self, request:Request,response:Response,collection_name:str,cost:Annotated[DeleteDocumentIngestCost,Depends(DeleteDocumentIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],broker:Annotated[Broker,Depends(Broker)],mode:DeleteMode = Depends(source_mode_query), autPermission:AuthPermission=Depends(get_auth_permission)):
         """Delete all results and delete all enqueued job matching the collection_name filtered by the task_name """
 
         meta,jobs_done,jobs_queue,errors =  await self.delete_section('vector_config','collection_name',collection_name)

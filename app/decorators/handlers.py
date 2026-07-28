@@ -11,6 +11,7 @@ import hvac
 from minio import S3Error, ServerError
 import requests
 from app.errors.agent_error import *
+from app.errors.depends_error import DataSourceNotSupportedError
 from app.errors.ingest_error import AgenticDatabaseNotAllowedError, IngestConfigNotPresentError, TaskIngestNameNotValidError
 from app.errors.agentic_error import *
 from app.errors.llm_error import LLMProviderDoesNotExistError, LLMModelNotPermittedError, LLMModelMaxTokenExceededError, LLMRateLimiterError, LLMConfigNotConfiguredError
@@ -1271,22 +1272,45 @@ class AgentHandler(Handler):
         try:
             return await function(*args,**kwargs)
         except AgentToolDoesNotExistError as e:
-            ...
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={'message': 'One or more tools do not exist for the agent.',
+                    'agent': getattr(e, 'id', None),'missing_tools': list(getattr(e, 'tools', []))}) from e
+
+        except SubAgentContainsSubAgentError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={'message': 'A sub-agent cannot contain another sub-agent when nested sub-agents are not allowed.',
+                    'agent': getattr(e, 'agentId', None),'subagent_tool': getattr(e, 'subagentTool', None)}) from e
         
         except SemanticAgentAlreadyExistError as e:
-            ...
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                detail={'message': 'A semantically equivalent agent already exists.',
+                    'agent': getattr(e, 'agent_id', None),'existing_agent': getattr(e, 'agent', None),
+                    'similarity_coefficient': getattr(e, 'coef', None)}) from e
         
         except SemanticToolAlreadyExistError as e:
-            ...
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                detail={'message': 'A semantically equivalent tool already exists.',
+                    'error': str(e)}) from e
                 
         except AgentOnlyAsSubAgentError as e:
-            ...
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={'message': 'This agent can only be executed as a sub-agent.',
+                    'agent': getattr(e, 'agentId', None)}) from e
 
-        except DependencyAgentError as e:
-            ...
+        except AgentDependencyError as e:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                detail={'message': 'Agent dependency validation failed.',
+                    'dependency_mode': getattr(e, 'mode', None),'missing_or_affected_agents': list(getattr(e, 'agentNotResolved', [])),
+                    'agent': getattr(e, 'agent', None)}) from e
         
         except AgentNotAvailableError as e:
-            ...
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={'message': 'The requested agent is not available.','status': str(getattr(e, 'status', None)),
+                    'reason': getattr(e, 'reason', None),'agent': getattr(e, 'who', None)}) from e
 
 class AgenticHandler(Handler):
 
@@ -1347,3 +1371,11 @@ class AgenticHandler(Handler):
 
         except AgenticRemoteCallError as e:
             ...
+
+class DataSourceHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await super().handle(function, *args, **kwargs)
+        except DataSourceNotSupportedError as e:
+            raise  

@@ -1,7 +1,7 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends
 from app.container import Get
-from app.definition._router import MINI_SERVICE_HANDLER_DETAILS, SERVICE_HANDLER_DETAILS, HandlerDetails, auth_depends, exception_handler, get_instance_id,service_yielder
+from app.definition._router import MINI_SERVICE_HANDLER_DETAILS, SERVICE_HANDLER_DETAILS, HandlerDetails, auth_depends, exception_handler, get_instance_id, lock_service_wrapper,service_yielder
 from app.services.agent.agent_service import AgentMiniService, AgentService
 from app.services.database.mongoose_service import MongooseService
 from app.utils.constant import AgenticConstant
@@ -31,6 +31,7 @@ def ConversationRouter():
     @exception_handler(AGENT_HANDLER_DETAILS)
     @exception_handler(SERVICE_HANDLER_DETAILS)
     @exception_handler(MINI_SERVICE_HANDLER_DETAILS)
+    @lock_service_wrapper(MongooseService)
     async def fetch_chat(agent:Annotated[AgentMiniService,Depends(agent_yielder)],instance_id:str=Depends(get_instance_id)):
         agent._verify_status(True)
 
@@ -38,6 +39,7 @@ def ConversationRouter():
     @exception_handler(AGENT_HANDLER_DETAILS)
     @exception_handler(SERVICE_HANDLER_DETAILS)
     @exception_handler(MINI_SERVICE_HANDLER_DETAILS)
+    @lock_service_wrapper(MongooseService)
     async def delete_chat(agent:Annotated[AgentMiniService,Depends(agent_yielder)],instance_id:str=Depends(get_instance_id)):
         agent._verify_status(True)
 
@@ -45,13 +47,23 @@ def ConversationRouter():
     @exception_handler(AGENT_HANDLER_DETAILS)
     @exception_handler(SERVICE_HANDLER_DETAILS)
     @exception_handler(MINI_SERVICE_HANDLER_DETAILS)
+    @lock_service_wrapper(MongooseService)
     async def fetch_graph(agent:Annotated[AgentMiniService,Depends(agent_yielder)],instance_id:str=Depends(get_instance_id)):
+        agent._verify_status(True)
+    
+    @router.delete('/state/{service}')
+    @exception_handler(AGENT_HANDLER_DETAILS)
+    @exception_handler(SERVICE_HANDLER_DETAILS)
+    @exception_handler(MINI_SERVICE_HANDLER_DETAILS)
+    @lock_service_wrapper(MongooseService)
+    async def fetch_state(agent:Annotated[AgentMiniService,Depends(agent_yielder)],instance_id:str=Depends(get_instance_id)):
         agent._verify_status(True)
         
     @router.get('/interrupts/{service}')
     @exception_handler(AGENT_HANDLER_DETAILS)
     @exception_handler(SERVICE_HANDLER_DETAILS)
     @exception_handler(MINI_SERVICE_HANDLER_DETAILS)
+    @lock_service_wrapper(MongooseService)
     async def fetch_interrupts(agent:Annotated[AgentMiniService,Depends(agent_yielder)],instance_id:str=Depends(get_instance_id)):
         agent._verify_status(True)
     
@@ -59,6 +71,7 @@ def ConversationRouter():
     @exception_handler(AGENT_HANDLER_DETAILS)
     @exception_handler(SERVICE_HANDLER_DETAILS)
     @exception_handler(MINI_SERVICE_HANDLER_DETAILS)
+    @lock_service_wrapper(MongooseService)
     async def resume_interrupts(agent:Annotated[AgentMiniService,Depends(agent_yielder)],instance_id:str=Depends(get_instance_id)):
         agent._verify_status(True)
     
@@ -66,5 +79,6 @@ def ConversationRouter():
     @exception_handler(AGENT_HANDLER_DETAILS)
     @exception_handler(SERVICE_HANDLER_DETAILS)
     @exception_handler(MINI_SERVICE_HANDLER_DETAILS)
+    @lock_service_wrapper(MongooseService)
     async def memory(agent:Annotated[AgentMiniService,Depends(agent_yielder)],instance_id:str=Depends(get_instance_id)):
         agent._verify_status(True)

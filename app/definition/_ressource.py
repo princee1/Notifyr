@@ -1073,7 +1073,7 @@ def PingService(services: list[S | dict], infinite_wait=False,is_manager=False,w
     
     return decorator
 
-def LockService(*services: Type[S], lockType: ServiceLockType = 'writer',infinite_wait:bool=False,as_manager:bool = False,miniLockType:Literal['reader', 'writer'] =None,**add_kwargs):
+def LockService(*services: Type[S], lockType: ServiceLockType = 'writer',infinite_wait:bool=False,as_manager:bool = False,miniLockType:Literal['reader', 'writer'] =None,allow_empty=False,**add_kwargs):
     if lockType not in get_args(ServiceLockType):
         raise TypeError
     
@@ -1081,7 +1081,7 @@ def LockService(*services: Type[S], lockType: ServiceLockType = 'writer',infinit
         miniLockType = lockType
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, LockService, services,lockType=lockType,infinite_wait=infinite_wait,as_manager=as_manager,miniLockType=miniLockType,**add_kwargs)
+        cls = common_class_decorator(func, LockService, services,lockType=lockType,infinite_wait=infinite_wait,as_manager=as_manager,miniLockType=miniLockType,allow_empty=allow_empty,**add_kwargs)
         if cls != None:
             return cls
 
@@ -1101,7 +1101,10 @@ def LockService(*services: Type[S], lockType: ServiceLockType = 'writer',infinit
                             if as_manager and isinstance(_service,BaseMiniServiceManager):
 
                                 profile = kwargs.get('profile',None)
-                                if profile == None:
+                                if profile == '' and allow_empty:
+                                    return await Helper.return_result(f,a,k)
+                                    
+                                if not profile:
                                     raise ProfileNotSpecifiedError
                                 if profile not in _service.MiniServiceStore:
                                     raise ProfileTypeNotMatchRequest(profile,add_kwargs.get('motor_fallback',False))

@@ -1,13 +1,14 @@
-from typing import Annotated, Literal, Type
+from typing import Annotated, Literal, Optional, Type
 from beanie import Document
 from fastapi import Depends,Request, Response,status
 from pydantic import ConfigDict
 from app.classes.auth_permission import AuthPermission, Role
+from app.classes.mongo import MongoFindFilter
 from app.container import InjectInMethod,Get
-from app.decorators.handlers import AsyncIOHandler, CostHandler, MiniServiceHandler, MotorErrorHandler, ProfileHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler, VaultHandler,CeleryControlHandler
+from app.decorators.handlers import AsyncIOHandler, CostHandler, DataSourceHandler, MiniServiceHandler, MotorErrorHandler, ProfileHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler, VaultHandler,CeleryControlHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, ProfilePermission
-from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe
+from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe, SanitizePathParameterPipe
 from app.definition._cost import DataCost
 from app.definition._ressource import BaseHTTPRessource, ClassMetaData, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseInterceptor, UseLimiter, LockService, UseHandler, UsePermission, UsePipe, UseRoles
 from app.definition._service import MiniStateProtocol, StateProtocol
@@ -15,6 +16,7 @@ from app.depends.dependencies import get_auth_permission
 from app.depends.funcs_dep import get_profile
 from app.classes.profiles import ErrorProfileMap, ProfilModelValues, BaseProfileModel, ErrorProfileModel
 from app.errors.db_error import DocumentSingletonLimitReachedError
+from app.errors.depends_error import DataSourceNotSupportedError
 from app.manager.broker_manager import Broker
 from app.manager.merchant_manager import Merchant
 from app.services.worker.celery_service import CeleryService, ChannelMiniService
@@ -27,6 +29,7 @@ from app.classes.profiles import  ProfileModelRequestBodyError, ProfileModelType
 from app.services.vault_service import VaultService
 from app.services.worker.task_service import TaskService
 from app.utils.constant import CostConstant
+from app.depends.variables import SourceMode,source_mode_query
 from app.utils.helper import subset_model
 
 PROFILE_PREFIX = 'profile'
@@ -179,26 +182,35 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
         broker.propagate(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
         return None
-
-    @UseRoles([Role.PUBLIC])
-    @UsePipe(DocumentFriendlyPipe,before=False)
-    @LockService(ProfileService,lockType='reader',as_manager=False,motor_fallback=True)
-    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.GET])
-    async def read_profiles(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
-        profiles =  await self.mongooseService.find_all(self.Model)
-        profiles = filter(lambda p: p.profile_id in authPermission['allowed_profiles'],profiles)
-        profiles = list(profiles)
-        return profiles
     
     @UseRoles([Role.PUBLIC])
-    @UseHandler(MiniServiceHandler)
-    @UsePermission(ProfilePermission)
+    @UsePermission(ProfilePermission(True))
     @UsePipe(DocumentFriendlyPipe,before=False)
-    @LockService(ProfileService,lockType='reader',as_manager=True,motor_fallback=True)
-    @BaseHTTPRessource.HTTPRoute('/s/{profile}/',methods=[HTTPMethod.GET])
-    async def read_profile(self,profile:str,request:Request, response:Response, authPermission:AuthPermission=Depends(get_auth_permission)):
-        return await self.mongooseService.get(self.Model,profile,True)
-        
+    @UseHandler(MiniServiceHandler,DataSourceHandler)
+    @UsePipe(SanitizePathParameterPipe({},profile=True))
+    @LockService(ProfileService,lockType='reader',as_manager=False,motor_fallback=True)
+    @BaseHTTPRessource.HTTPRoute('/{profile:path}',methods=[HTTPMethod.GET])
+    async def read_profile(self,profile:str,request:Request, response:Response,mongoFilter:Optional[MongoFindFilter],source:SourceMode=Depends(source_mode_query), authPermission:AuthPermission=Depends(get_auth_permission)):
+        match source:
+            case 'database':
+                if profile != '':
+                    return await self.mongooseService.get(self.Model,profile,True)
+                else:
+                    profiles = await self.mongooseService.find(self.Model,mongoFilter.mapping,**mongoFilter.model_dump(exclude={'mapping'}))
+                    profiles = filter(lambda p: ProfilePermission.predicate(p.id,authPermission),profiles)
+                    return list(profiles)
+            case 'memory':
+                if profile != '':
+                    async with self.profileService.MiniServiceStore.lock(profile) as service:
+                        return service.model
+                else:
+                    profiles = []
+                    async for p in self.profileService.MiniServiceStore.aiter(predicate=lambda p: ProfilePermission.predicate(p.miniService_id,authPermission)):
+                        profiles.append(p.model)
+                    return profiles
+            case _:
+                raise DataSourceNotSupportedError(source,['database','memory'])
+
     @UseRoles([Role.PUBLIC])
     @Throttle(normal=(400,120))
     @UsePermission(ProfilePermission)

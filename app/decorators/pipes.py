@@ -1,6 +1,6 @@
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 import json
-from typing import Any, Callable, Coroutine, Iterable, Literal, Optional, Type, get_args
+from typing import Any, Callable, Coroutine, Iterable, Literal, Optional, Type, TypedDict, get_args
 from beanie import Document
 from fastapi import HTTPException, Request, Response,status
 from app.classes.auth_permission import AuthPermission, TokensModel
@@ -832,3 +832,37 @@ class GraphRelationshipPipe(Pipe):
                 raise NoEdgesCustomSchemaError()
         
         return {}
+
+
+class SParams(TypedDict):
+    strip:bool
+    slash:bool
+    space:bool
+class SanitizePathParameterPipe(Pipe):
+
+    def __init__(self,params:SParams, service:bool = False,agent:bool=False,profile:bool=False):
+        super().__init__(True)
+        self.service = service
+        self.agent = agent
+        self.profile = profile
+        self.params = params
+
+    def sanitize(self,text:str):
+        if self.params.get('strip',True):
+            text = text.strip()
+        if self.params.get('slash',True):
+            text = text.replace('/','')
+        if self.params.get('space',True):
+            text = text.replace(' ','')
+        return text
+
+    async def pipe(self,service:str=None,agent:str=None,profile:str=None):
+        data = {}
+        if service != None:
+            data['service'] = self.sanitize(service)
+        if agent != None:
+            data['agent'] = self.sanitize(agent)
+        if profile != None:
+            data['profile'] = self.sanitize(profile)
+        return data
+    

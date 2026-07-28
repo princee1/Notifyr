@@ -186,6 +186,7 @@ class NotifyrAgentState(AgentState):
     memory:Dict[str,Any]
     policy:Dict[str,Any]
     guest:Optional[Dict]
+    ressources:Optional[List[str]]
     sessions: Dict[str,SessionState]
     complexity: float
     blocked:bool

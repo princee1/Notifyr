@@ -232,7 +232,9 @@ class ConfigService(_service.BaseService):
         self.APS_ACTIVATED:bool = ConfigService.parseToBool(self.getenv('APS_ACTIVATED','true'),True)
         self.APS_JOBSTORE:Literal['redis','mongodb','memory'] = self.getenv('APS_JOBSTORE','redis')
 
-        # LANGCHAIN MULTIMODAL COUNT#
+        # LANGCHAIN CONFIG#
+        self.ALLOWED_TWO_LEVEL_SUBAGENT:bool = ConfigService.parseToBool(self.getenv('ALLOWED_TWO_LEVEL_AGENT','false'),False)
+
 
     def verify(self):
         if self.S3_CRED_TYPE not in ['MINIO','AWS']:

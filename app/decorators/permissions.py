@@ -286,27 +286,46 @@ class BalancerPermission(Permission):
 
 class ProfilePermission(Permission):
 
-    async def permission(self,authPermission:AuthPermission,profile:str):
+    def __init__(self,allow_empty:bool=False):
+        super().__init__()
+        self.allow_empty = allow_empty
 
-        if profile not in authPermission['allowed_profiles']:
+    async def permission(self,authPermission:AuthPermission,profile:str):
+        if profile == '' and self.allow_empty:
+            return True
+
+        if not self.predicate(profile,authPermission):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail='Profile Is not allowed to be used'
             )
         
         return True
-    
+
+    @staticmethod
+    def predicate(profile:str,authPermission:AuthPermission):
+        return profile in authPermission['allowed_profiles']
 
 class AgentPermission(Permission):
+    def __init__(self,allow_empty:bool=False):
+        super().__init__()
+        self.allow_empty = allow_empty
+
 
     async def permission(self,authPermission:AuthPermission,agent:str):
+        if agent == '' and self.allow_empty:
+            return True
         
-        if agent not in authPermission['allowed_agents']:
+        if not self.predicate(agent,authPermission):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail='Agent Is not allowed to be used'
             )
         return True
+
+    @staticmethod
+    async def predicate(agent:str,authPermission:AuthPermission):
+        return agent in authPermission['allowed_agents']
 
 
 class TaskCostPermission(Permission):
