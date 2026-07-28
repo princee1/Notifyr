@@ -1166,63 +1166,6 @@ class LLMHandler(Handler):
                 }
             )
 
-class AgenticHandler(Handler):
-
-    async def handle(self, function, *args, **kwargs):
-        try:
-            return await super().handle(function, *args, **kwargs)
-        
-        except AgenticServerDisconnectedError as e:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail={
-                    "message": str(e),
-                    "error": "agentic_server_disconnected"
-                }
-            )
-        
-        except AgenticServerConnectionRefusedError as e:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail={'We cant connect to agentic node...'}
-            )
-
-        except AgenticStreamDoneError as e:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail={
-                    "message": str(e),
-                    "error": "agentic_stream_done"
-                }
-            )
-        
-        except AgenticBadResponseError as e:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail={
-                    "message": str(e),
-                    "error": "agentic_bad_response"
-                }
-            )
-        
-        except AgenticGrpcIdleError as e:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail={
-                    "message": str(e),
-                    "error": "agentic_grpc_idle"
-                }
-            )
-        
-        except AgenticGrpcShutdownError as e:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail={
-                    "message": str(e),
-                    "error": "agentic_grpc_shutdown"
-                }
-            )
-
 class GrpcHandler(Handler):
     async def handle(self, function, *args, **kwargs):
         try:
@@ -1335,6 +1278,72 @@ class AgentHandler(Handler):
         
         except SemanticToolAlreadyExistError as e:
             ...
-        
+                
+        except AgentOnlyAsSubAgentError as e:
+            ...
+
         except DependencyAgentError as e:
+            ...
+        
+        except AgentNotAvailableError as e:
+            ...
+
+class AgenticHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await super().handle(function, *args, **kwargs)
+        
+        except AgenticServerDisconnectedError as e:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "message": str(e),
+                    "error": "agentic_server_disconnected"
+                }
+            )
+        
+        except AgenticServerConnectionRefusedError as e:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={'We cant connect to agentic node...'}
+            )
+
+        except AgenticStreamDoneError as e:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "message": str(e),
+                    "error": "agentic_stream_done"
+                }
+            )
+        
+        except AgenticBadResponseError as e:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail={
+                    "message": str(e),
+                    "error": "agentic_bad_response"
+                }
+            )
+        
+        except AgenticGrpcIdleError as e:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "message": str(e),
+                    "error": "agentic_grpc_idle"
+                }
+            )
+        
+        except AgenticGrpcShutdownError as e:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "message": str(e),
+                    "error": "agentic_grpc_shutdown"
+                }
+            )
+
+        except AgenticRemoteCallError as e:
             ...

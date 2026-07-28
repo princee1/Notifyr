@@ -96,12 +96,6 @@ def extract_max_tokens(agentModel:AgentModel, llmModel:LLMProfileModel):
 ############################                                          ###################################
 #########################################################################################################
 
-class AgentNotAvailableError(BaseError):
-    def __init__(self,status:ServiceStatus,reason:str,who:str=None):
-        self.status = status
-        self.reason = reason
-        self.who = who
-
 class AgentInputFormatNotSupportedError(BaseError):
     ...
 
@@ -142,6 +136,7 @@ class AgentModelRetryExceedError(BaseError):
         super().__init__()
         self.exc = exc
         self.attempted = attempted
+
 
 #########################################################################################################
 ############################                                          ###################################

@@ -98,6 +98,7 @@ class AgentsRessource(BaseHTTPRessource):
         await self.mongooseService.primary_key_constraint(agentModel,True)
         await self.mongooseService.exists_unique(agentModel,True)
         # TODO check cross needed agent
+        
         await self.lookup_tools(agentModel)
         if similarity.mode == 'hard':
             embedding = await self.semantic_lookup(cost.request_id,cost.issuer,agentModel)
@@ -122,8 +123,8 @@ class AgentsRessource(BaseHTTPRessource):
     @UsePipe(MerchantPipe(-1))
     @Throttle(normal=(200,80))
     @UsePermission(AdminPermission)
-    @UseHandler(CostHandler,RedisHandler,AgentHandler)
     @UsePipe(DocumentFriendlyPipe,before=False)
+    @UseHandler(CostHandler,RedisHandler,AgentHandler)
     @LockService(LLMService,lockType='reader',as_manager=False)
     @UseInterceptor(DataCostInterceptor(CostConstant.AGENT_CREDIT,'refund'))
     @BaseHTTPRessource.HTTPRoute('/s/{agent}/',methods=[HTTPMethod.DELETE])
@@ -177,9 +178,9 @@ class AgentsRessource(BaseHTTPRessource):
     @UseRoles([Role.PUBLIC])        
     @Throttle(uniform=(30,60))
     @UsePermission(AgentPermission)
-    @UseHandler(LLMHandler,AgenticHandler,GrpcHandler)
     @LockService(LLMService,lockType='reader',as_manager=False)
     @UsePipe(MiniServiceInjectorPipe(RemoteAgentService,'agent'))
+    @UseHandler(LLMHandler,AgenticHandler,GrpcHandler,AgentHandler)
     @UseLimiter('100/hour',cost={'Admin':1,'User':3},key_func='private')
     @LockService(RemoteAgentService,lockType='reader',as_manager=True,miniLockType='reader')
     @PingService([{'cls':RemoteAgentService,'kwargs':{'grpc':True}}],is_manager=True,infinite_wait=True)
@@ -188,6 +189,7 @@ class AgentsRessource(BaseHTTPRessource):
         message = Message(agent=agent,thread=authPermission['client_id'],**prompt.model_dump(exclude_none=True))
         user = User(authPermission['client_id'],'guest',None)
         session = Session(request_id,...,'live-chat',[])
+
         prompt_request = message_to_request(message,session,user)
         answer = await agent.Prompt(prompt_request)
         reply = answer_to_reply(answer)
@@ -195,15 +197,14 @@ class AgentsRessource(BaseHTTPRessource):
     
     @UseRoles([Role.PUBLIC])
     @Throttle(uniform=(30,60))
-    @UseHandler(LLMHandler,AgenticHandler,GrpcHandler)
     @UsePipe(MiniServiceInjectorPipe(RemoteAgentService,'agent'))
+    @UseHandler(LLMHandler,AgenticHandler,GrpcHandler,AgentHandler)
     @UseLimiter('100/hour',cost={'Admin':1,'User':3},key_func='private')
     @UsePermission(ClientTypesPermission([ClientType.User,ClientType.Admin]),AgentPermission)
     @LockService(RemoteAgentService,lockType='reader',as_manager=True,miniLockType='reader')
     @PingService([{'cls':RemoteAgentService,'kwargs':{'grpc':True}}],is_manager=True,infinite_wait=True)
     @BaseHTTPRessource.HTTPRoute('/stream/prompt/{agent}/',methods=[HTTPMethod.POST],mount=False,response_class=EventSourceResponse)
     async def stream_prompt_playground(self,request:Request,response:Response,prompt:PromptPlaygroundModel,agent:Annotated[RemoteAgentMiniService,Depends(get_agent)],profile:str=Depends(get_agent),request_id:str = Depends(get_request_id),last_event_id: Annotated[int | None, Header()] = None,authPermission:AuthPermission= Depends(get_auth_permission))->AsyncIterable[ServerSentEvent]:
-        
         message = Message(agent=agent,thread=authPermission['client_id'],**prompt.model_dump(exclude_none=True))
         user = User(authPermission['client_id'],'guest',None)
         session = Session(request_id,...,'live-chat',[])
@@ -216,7 +217,7 @@ class AgentsRessource(BaseHTTPRessource):
                 asyncio.sleep(0.05)
 
             reply = answer_to_reply(answer)
-            yield ServerSentEvent(data=reply,event='[STREAM]')
+            yield ServerSentEvent(data=reply,event='[STREAM]',comment=f'streaming chat at {i}')
         
         yield ServerSentEvent(raw_data=None,event='[DONE]',comment='streaming done')
             

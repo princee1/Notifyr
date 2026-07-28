@@ -1,5 +1,6 @@
 from typing import Iterable
 from app.definition._error import BaseError
+from app.definition._service import ServiceStatus
 
 class AgentToolDoesNotExistError(BaseError):
     
@@ -8,6 +9,13 @@ class AgentToolDoesNotExistError(BaseError):
         self.id = id
         self.tools = tools
 
+class AgenticRemoteCallError(BaseError):
+    ...
+
+class AgentOnlyAsSubAgentError(BaseError):
+    def __init__(self, agentId):
+        super().__init__(agentId)
+        self.agentId = agentId
 
 class SemanticAgentAlreadyExistError(BaseError):
     
@@ -22,3 +30,9 @@ class SemanticToolAlreadyExistError(BaseError):
 
 class DependencyAgentError(BaseError):
     ...
+
+class AgentNotAvailableError(BaseError):
+    def __init__(self,status:ServiceStatus,reason:str,who:str=None):
+        self.status = status
+        self.reason = reason
+        self.who = who

@@ -8,6 +8,7 @@ from app.classes.cost_definition import InsufficientCreditsError, InvalidPurchas
 from app.classes.prompt import PromptToken
 from app.definition import _service
 from app.definition._tool import Tool, dynamic_tool_selection, handle_tool_errors
+from app.errors.agent_error import AgentNotAvailableError, AgentOnlyAsSubAgentError
 from app.errors.llm_error import LLMProviderDoesNotExistError
 from app.errors.service_error import BuildFailureError, BuildOkError, MiniServiceDoesNotExistsError
 from app.grpc.agent_interceptor import AgentServerInterceptor, HandlerType
@@ -393,11 +394,17 @@ class AgentMiniService(BaseMiniService):
             if _raise :
                 raise AgentNotAvailableError(self.service_status,self.reason,self.miniService_id)
             return self.reason
+        if not self.is_main_agent:
+            raise AgentOnlyAsSubAgentError(self.miniService_id)
+        
         return None
 
     #########################################################################################################
     ############################                                          ###################################
     #########################################################################################################
+    @property
+    def is_main_agent(self):
+        return self.agent_model.type == 'main-agent'
 
     @property
     def agent_name(self)->str:
@@ -433,6 +440,9 @@ class AgentService(BaseMiniServiceManager[AgentMiniService],agent_pb2_grpc.Agent
             
             except AgentInputFormatNotSupportedError as e:
                 context.abort(grpc.StatusCode.INVALID_ARGUMENT,...)
+
+            except AgentOnlyAsSubAgentError as e:
+                context.abort(grpc.StatusCode.UNAVAILABLE,...)
             
             except AgentContextDoesNotExistError as e:
                 context.abort(grpc.StatusCode.INVALID_ARGUMENT,)

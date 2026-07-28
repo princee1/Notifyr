@@ -7,6 +7,7 @@ import aiohttp
 from aiohttp import ClientError, ClientConnectorError, ClientResponseError, ClientTimeout
 from json import JSONDecodeError
 from app.classes.secrets import ChaCha20SecretsWrapper
+from app.errors.agent_error import AgentNotAvailableError, AgentOnlyAsSubAgentError
 from app.errors.agentic_error import *
 from pydantic import ValidationError
 from app.definition import _service
@@ -75,21 +76,29 @@ class RemoteAgentMiniService(BaseMiniService):
                 self.agent_model:AgentModel = AgentValidationModel.model_construct(**m)
         except ValidationError as e:
             raise BuildFailureError()
+        
+    @property
+    def is_main_agent(self):
+        return self.agent_model.type == 'main-agent'
 
-    def SilentFail(mode:Literal['direct','generator']):
+    def PreRequise(mode:Literal['direct','generator']):
 
         def decorator(func:Callable):
             @functools.wraps(func)
             def swrapper(self:Self,request:agent_message.PromptRequest|Callable[...,agent_message.PromptRequest])->agent_message.PromptAnswer:
                 if self.service_status not in acceptable_service_status:
-                    return
+                    raise AgentNotAvailableError(self.service_status,self.reason,self.miniService_id)
+                if not self.is_main_agent:
+                    raise AgentOnlyAsSubAgentError(self.miniService_id)
                 return func(self,request) 
 
             @functools.wraps(func)
             async def awrapper(self:Self,request:agent_message.PromptRequest)->agent_message.PromptAnswer:
                 async with self.lock('reader'):
                     if self.service_status not in acceptable_service_status:
-                        return
+                        raise AgentNotAvailableError(self.service_status,self.reason,self.miniService_id)
+                    if not self.is_main_agent:
+                        raise AgentOnlyAsSubAgentError(self.miniService_id)
                     await self.costService.check_enough_credits(CostConstant.TOKEN_CREDIT,max(self.agent_model.generation.max_tokens or 15600*3,self.depService.model.max_output_tokens or 15600*3))
                     return await func(self,request)
 
@@ -99,25 +108,25 @@ class RemoteAgentMiniService(BaseMiniService):
     
     if APP_MODE == ApplicationMode.worker:
 
-        @SilentFail('direct')
+        @PreRequise('direct')
         def Prompt(self, request:agent_message.PromptRequest):
             request = request.to_proto()
             reply = self.remoteAgentService.stub.Prompt(request)
             return agent_message.PromptAnswer.from_proto(reply)
 
-        @SilentFail('direct')
+        @PreRequise('direct')
         def Completion(self,):
             ...
 
     elif APP_MODE == ApplicationMode.server:
 
-        @SilentFail('direct')
+        @PreRequise('direct')
         async def Prompt(self, request:agent_message.PromptRequest):
             request = request.to_proto()
             reply = await self.remoteAgentService.stub.Prompt(request)
             return agent_message.PromptAnswer.from_proto(reply)
 
-        @SilentFail('generator')
+        @PreRequise('generator')
         async def PromptStream(self, request:agent_message.PromptRequest):
             request = request.to_proto()
             replies = self.remoteAgentService.stub.PromptStream(request)
@@ -125,25 +134,25 @@ class RemoteAgentMiniService(BaseMiniService):
                 reply = agent_message.PromptAnswer.from_proto(reply)
                 yield reply
 
-        @SilentFail('direct')
+        @PreRequise('direct')
         async def StreamPrompt(self, request_generator:AsyncGenerator):
             reply = await self.remoteAgentService.stub.StreamPrompt(request_generator)
             return agent_message.PromptAnswer.from_proto(reply)
         
-        @SilentFail('generator')
+        @PreRequise('generator')
         async def S2SPrompt(self, request_generator:AsyncGenerator):
             replies = self.remoteAgentService.stub.S2SPrompt(request_generator)
             async for reply in replies:
                 reply = agent_message.PromptAnswer.from_proto(reply)
                 yield reply
 
-        @SilentFail('direct')
+        @PreRequise('direct')
         async def Completion(self,request:agent_message.PromptRequest):
             request = request.to_proto()
             reply = await self.remoteAgentService.stub.Completion(request)
             return agent_message.PromptAnswer.from_proto(reply)
 
-        @SilentFail('generator')
+        @PreRequise('generator')
         async def S2SBatch(self,request_generator:AsyncGenerator):
             ...
 
