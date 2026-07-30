@@ -46,7 +46,7 @@ def bootstrap_agent_app()->FastAPI:
         graphitiService.start()
 
         redisService.register_consumer(callbacks_stream=Callbacks_Stream,callbacks_sub=Callbacks_Sub)
-        await agentService.init_mcp_server()
+        await agentService.init_mcp_client()
         agentService._builder(False,build_state=AGENT_BUILD_CREATE_STATE,force_sync_verify=True)
         
         await agentService.serve()

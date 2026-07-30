@@ -114,7 +114,7 @@ def service_yielder(s_cls:Type[BaseMiniServiceManager],ping:bool=False,m:str=Non
         async with s.lock('reader',service,'reader') as mini:
             if ping:
                 await s.pingService(True,None,service,True)
-            if m != None and (method:=getattr(mini,method,None)) and callable(method):
+            if m != None and (method:=getattr(mini,m,None)) and callable(method):
                 if asyncio.iscoroutinefunction(method):
                     await method(True)
                 else:

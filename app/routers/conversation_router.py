@@ -75,10 +75,4 @@ def ConversationRouter():
     async def resume_interrupts(agent:Annotated[AgentMiniService,Depends(agent_yielder)],instance_id:str=Depends(get_instance_id)):
         agent._verify_status(True)
     
-    @router.post('/memory/{service}')
-    @exception_handler(AGENT_HANDLER_DETAILS)
-    @exception_handler(SERVICE_HANDLER_DETAILS)
-    @exception_handler(MINI_SERVICE_HANDLER_DETAILS)
-    @lock_service_wrapper(MongooseService)
-    async def memory(agent:Annotated[AgentMiniService,Depends(agent_yielder)],instance_id:str=Depends(get_instance_id)):
-        agent._verify_status(True)
+    

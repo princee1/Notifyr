@@ -42,7 +42,7 @@ def answer_to_reply(answer:agent_message.PromptAnswer)->Reply:
     return Reply(**answer.export())
 
 def iterator_factory(callback:AsyncGenerator[Any,Message],session:Session,user:User,wait=0.2,limit=3):
-    @wraps
+    @wraps(callback)
     async def request_generator():
         async for message in callback():
             request = message_to_request(message,session,user,limit)
@@ -73,6 +73,7 @@ class ChatService(BaseService):
         ...
     
     async def fetch_chat(self,user:User,thread:Thread):
+        # directly use mongooseService
         ...
 
     async def delete_chat(self,user:User,thread:Thread):
@@ -86,6 +87,7 @@ class ChatService(BaseService):
     
     async def fetch_memory(self,user:User,thread:Thread):
         ...
+        # directly use mongooseService
     
     async def stream_answer(self,generator:AsyncGenerator[Any,Message],_session:Session,_user:User,_agent:str,*args,_wait=0.5,**kwargs):
         generator = partial(generator,*args,**kwargs,wait=_wait)

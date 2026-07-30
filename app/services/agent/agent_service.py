@@ -729,7 +729,7 @@ class AgentService(BaseMiniServiceManager[AgentMiniService],agent_pb2_grpc.Agent
                     clientServices
                 )
         
-    async def init_mcp_server(self):
+    async def init_mcp_client(self):
         mcp_connections = {}
         stateful = []
         stateless = []
@@ -770,7 +770,7 @@ class AgentService(BaseMiniServiceManager[AgentMiniService],agent_pb2_grpc.Agent
             self.mcp_tools[id] = tools
 
     async def async_verify_dependency(self):
-        await self.init_mcp_server()
+        await self.init_mcp_client()
     
     #########################################################################################################
     ############################                                          ###################################
