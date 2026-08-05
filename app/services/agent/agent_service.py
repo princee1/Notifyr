@@ -54,6 +54,7 @@ from langchain_core.rate_limiters import InMemoryRateLimiter
 from app.classes import conversation
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
+from app.interface.agentic_interface import AgenticInterface,acceptable_service
 
 AVOID_RE_VALIDATE_BUILD_STATE = -100
 AVOID_RECREATE_AGENT_BUILD_STATE = -435
@@ -69,14 +70,13 @@ API_SECRET_KEY = 'API_KEY'
 InterruptConfig = Dict
 
 factory_include = ('temperature','model','timeout')
-acceptable_service = {ServiceStatus.AVAILABLE,ServiceStatus.WORKS_ALMOST_ATT,ServiceStatus.PARTIALLY_AVAILABLE}
 answer_exclude = {'token'}
 
 C = TypeVar('C',BaseModel)
 
 
 @MiniService(mirror=RemoteAgentMiniService,links=[LinkDep(LLMMiniService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)])
-class AgentMiniService(BaseMiniService):
+class AgentMiniService(AgenticInterface,BaseMiniService):
 
     def __init__(self,
                 configService:ConfigService,
@@ -399,33 +399,6 @@ class AgentMiniService(BaseMiniService):
     async def interrupts(self):
         ...
     
-    #########################################################################################################
-    ############################                                          ###################################
-    #########################################################################################################
-
-    def _verify_status(self,_raise=False):
-        if self.service_status not in acceptable_service:
-            raise AgentNotAvailableError(self.service_status,self.reason,self.miniService_id)
-        if self.service_status != ServiceStatus.AVAILABLE:
-            if _raise :
-                raise AgentNotAvailableError(self.service_status,self.reason,self.miniService_id)
-            return self.reason
-        if not self.is_main_agent:
-            raise AgentOnlyAsSubAgentError(self.miniService_id)
-        
-        return None
-
-    #########################################################################################################
-    ############################                                          ###################################
-    #########################################################################################################
-    @property
-    def is_main_agent(self):
-        return self.agent_model.type == 'main-agent'
-
-    @property
-    def agent_name(self)->str:
-        return f"agent:{self.agent_model.alias}#{self.agent_model.id}"
-
 @Service(is_manager=True,mirror=RemoteAgentService,links=[
     LinkDep(ProfileService,to_build=True,build_state=RECREATE_AGENT_WITH_OUTBOUND_BUILD_STATE),
     LinkDep(LLMService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE),
@@ -445,6 +418,10 @@ class AgentService(BaseMiniServiceManager[AgentMiniService],agent_pb2_grpc.Agent
 
         @functools.wraps(function)
         async def handler(self:Self,request:Any|list[Any],context):
+            if context == None:
+                async with self.lock('reader',None):
+                    return await function(self,request,context)
+
             try:
                 async with self.lock('reader',None):
                     if self.service_status not in acceptable_service:

@@ -25,6 +25,7 @@ from app.models.ingest_model import DataIngestModel
 from app.models.otp_model import OTPModel
 from app.models.security_model import ClientORM, GroupClientORM
 from app.models.sms_model import SMSCustomSchedulerModel
+from app.services.agent.remote_agent_service import RemoteAgentService
 from app.services.custom_service import CustomService, NoEdgesCustomSchemaError, NoEntitiesCustomSchemaError
 from app.services.worker.celery_service import CeleryService, ChannelMiniService
 from app.services.config_service import ConfigService
@@ -711,6 +712,13 @@ class MiniServiceInjectorPipe(Pipe):
             return {
                 self.key: self.service.MiniServiceStore.get(profile)
                 }
+
+class RemoteAgentInjectorPipe(MiniServiceInjectorPipe):
+        
+        def __init__(self):
+            super().__init__(RemoteAgentService, 'agent', None)
+
+        def pipe(self, agent:str): return super().pipe(agent)
 
 class DataClassToDictPipe(Pipe):
 

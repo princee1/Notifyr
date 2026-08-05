@@ -135,17 +135,17 @@ class OnGoingCallRessource(BaseHTTPRessource):
         @UseInterceptor(TaskCostInterceptor,KeepAliveResponseInterceptor)
         @UseHandler(CostHandler,AsyncIOHandler,ReactiveHandler,StreamDataParserHandler,RedisHandler)
         @BaseHTTPRessource.Get('/otp/', cost_definition=CostConstant.phone_digit_otp)
-        async def enter_digit_otp(self, twilio:Annotated[TwilioAccountMiniService,Depends(profile_query)],otpModel: GatherDtmfOTPModel, request: Request, response: Response,cost:Annotated[SimpleTaskCost,Depends(SimpleTaskCost)], keepAliveConn: Annotated[KeepAliveManager, Depends(KeepAliveManager)],profile:str=Depends(profile_query), authPermission=Depends(get_auth_permission)):
+        async def enter_digit_otp(self, twilio:Annotated[TwilioAccountMiniService,Depends(profile_query)],otpModel: GatherDtmfOTPModel, request: Request, response: Response,cost:Annotated[SimpleTaskCost,Depends(SimpleTaskCost)], keepAlive: Annotated[KeepAliveManager, Depends(KeepAliveManager)],profile:str=Depends(profile_query), authPermission=Depends(get_auth_permission)):
 
-            rx_id = keepAliveConn.create_subject('HTTP')
-            keepAliveConn.register_lock()
-            keepAliveConn.set_stream_parser(StreamSequentialDataParser(['completed','dtmf-result']))
+            rx_id = keepAlive.create_subject('HTTP')
+            keepAlive.register_lock()
+            keepAlive.set_stream_parser(StreamSequentialDataParser(['completed','dtmf-result']))
             
-            result = self.callService.gather_dtmf(otpModel, rx_id, keepAliveConn.x_request_id)
+            result = self.callService.gather_dtmf(otpModel, rx_id, keepAlive.x_request_id)
             call_details = otpModel.model_dump(exclude={'otp', 'content','service','instruction'})
-            call_results = await self.callService.send_template_voice_call(result, call_details,subject_id=keepAliveConn.rx_subject.subject_id,twilio_tracking=None,twilio_profile=twilio.miniService_id)
+            call_results = await self.callService.send_template_voice_call(result, call_details,subject_id=keepAlive.rx_subject.subject_id,twilio_tracking=None,twilio_profile=twilio.miniService_id)
 
-            return await keepAliveConn.wait_for(call_results, 'otp_result')
+            return await keepAlive.wait_for(call_results, 'otp_result')
         
         @PingService([ProfileService,TwilioService,CallService],is_manager=True)
         @LockService(AssetService,ProfileService,TwilioService,lockType='reader',check_status=False,as_manager=True)
@@ -157,23 +157,23 @@ class OnGoingCallRessource(BaseHTTPRessource):
         @UsePermission(TaskCostPermission())
         @UseHandler(AsyncIOHandler,ReactiveHandler,StreamDataParserHandler,CostHandler,RedisHandler)
         @BaseHTTPRessource.HTTPRoute('/authenticate/', methods=[HTTPMethod.GET], mount=False,cost_definition=CostConstant.phone_auth)
-        async def voice_authenticate(self, request: Request,twilio:Annotated[TwilioAccountMiniService,Depends(profile_query)], otpModel:GatherSpeechOTPModel, response: Response, contact: Annotated[ContactORM, Depends(get_contacts)],cost:Annotated[CallCost,Depends(CallCost)], keepAliveConn: Annotated[KeepAliveManager, Depends(KeepAliveManager)],profile:str=Depends(profile_query), authPermission=Depends(get_auth_permission)):
+        async def voice_authenticate(self, request: Request,twilio:Annotated[TwilioAccountMiniService,Depends(profile_query)], otpModel:GatherSpeechOTPModel, response: Response, contact: Annotated[ContactORM, Depends(get_contacts)],cost:Annotated[CallCost,Depends(CallCost)], keepAlive: Annotated[KeepAliveManager, Depends(KeepAliveManager)],profile:str=Depends(profile_query), authPermission=Depends(get_auth_permission)):
 
             if contact.phone != otpModel.to:
                 raise HTTPException(status_code=400,detail='Contact phone number mismatch')
                 
-            rx_id = keepAliveConn.create_subject('HTTP')
-            keepAliveConn.register_lock()
-            keepAliveConn.set_stream_parser(StreamContinuousDataParser(['phrase-result','voice-result']))
+            rx_id = keepAlive.create_subject('HTTP')
+            keepAlive.register_lock()
+            keepAlive.set_stream_parser(StreamContinuousDataParser(['phrase-result','voice-result']))
 
             call_details = otpModel.model_dump(exclude={'otp', 'content','service','instruction'})
 
             call_details['record'] = True
             
-            result = self.callService.gather_speech(otpModel,rx_id,keepAliveConn.x_request_id)
+            result = self.callService.gather_speech(otpModel,rx_id,keepAlive.x_request_id)
             call_results = await self.callService.send_template_voice_call(result, call_details,rx_id,twilio_profile=twilio.miniService_id)
 
-            return await keepAliveConn.wait_for(call_results,'otp_result')
+            return await keepAlive.wait_for(call_results,'otp_result')
 
 
     @UseLimiter(limit_value='50/day')

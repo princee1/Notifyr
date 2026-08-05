@@ -1,5 +1,6 @@
 from time import perf_counter,time
 from typing import Annotated, Any
+from warnings import deprecated
 from fastapi import Depends
 from app.container import Get
 from app.services.logger_service import LoggerService
@@ -20,10 +21,12 @@ class KeepAliveManager:
         self.x_request_id = x_request_id
         self.keep_alive = keep_alive
 
+        self.value_as_is = False
+        self.yielder = False
+
         self.value = {}
         self.error = None
         self.subscription:dict[str,Disposable] = {}
-
 
         self.start_time = perf_counter()
         self.rx_subject = None
@@ -36,6 +39,13 @@ class KeepAliveManager:
 
     def set_stream_parser(self,parser):
         self.parser = parser
+
+    def set_config(self,yielder:bool=None,value_as_is:bool=None):
+        if yielder != None:
+            self.yielder = yielder
+
+        if value_as_is != None:
+            self.value_as_is = value_as_is
 
     def register_subject(self,subject_id:str,only_subject:bool):
         subscription = self.reactiveService.subscribe(
@@ -72,22 +82,27 @@ class KeepAliveManager:
 
     def on_next(self, v: dict):
         try:
-            state = v['state']
-            if state in self.parser.state:
-                value = {state:v['data']}
-                self.value.update(value)
-
-            self.parser.up_state(state)
+            if not self.value_as_is:
+                state = v['state']
+                if state in self.parser.state:
+                    value = {state:v['data']}
+                    self.value.update(value)
+                self.parser.up_state(state)
+            else:
+                self.parser.up_state(v)
 
             self.on_error(None)
         except Exception as e:
             self.on_error(e)
 
     def on_error(self, e: Exception):
+        if e == None:
+            return
         self.process_time = perf_counter() - self.start_time
         self.error = e
-        if self.error !=None:
-            setattr(self.error, 'process_time', self.process_time)
+        setattr(self.error, 'process_time', self.process_time)
+        if self.rx_subject:
+            self.rx_subject.on_completed()
 
     def on_complete(self,):
         self.parser._completed = True
@@ -138,11 +153,15 @@ class KeepAliveManager:
                 
                 if self.parser.completed:
                     break
+
                 rx_sub.lock_lock(self.x_request_id)
 
                 delta = self._compute_delta(current_timeout, current_time)
                 current_time= time()
                 current_timeout -=delta 
+
+                if self.yielder:
+                    yield self.parser.current_state
 
             key = 'value' if coerce == None else coerce
             return {

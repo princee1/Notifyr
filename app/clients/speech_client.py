@@ -14,3 +14,8 @@ class BaseSpeechProvider:
     
     async def transcribe(self):
         ...
+
+
+
+def SpeechFactory()->BaseSpeechProvider:
+    ...

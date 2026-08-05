@@ -1,5 +1,5 @@
 from app.definition._error import BaseError
-from typing import Any, Literal,TypedDict
+from typing import Any, Callable, Literal,TypedDict
 
 
 class StreamData(TypedDict):
@@ -28,10 +28,13 @@ class StreamDataParser:
         self.state = state
         self._completed =False
 
-
     @property
     def completed(self):
         return self._completed
+
+    @property
+    def current_state(self):
+        return self.state
 
 class StreamContinuousDataParser(StreamDataParser):
     
@@ -58,3 +61,23 @@ class StreamSequentialDataParser(StreamContinuousDataParser):
         if self.state[-1] != state:
             raise SequentialStateError(state)
         self.state.pop()
+
+
+class StreamBufferDataParser(StreamDataParser):
+
+    def __init__(self,callback:Callable[[list[dict]],bool]):
+        super().__init__([])
+        self.callback = callback
+
+    def up_state(self,state:dict):
+        self.state.append(state)
+
+    @property
+    def completed(self):
+        return self.callback(self.state)
+    
+    @property
+    def current_state(self):
+        buffer = self.state
+        self.state = []
+        return buffer

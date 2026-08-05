@@ -15,6 +15,7 @@ from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMi
 from app.errors.service_error import BuildFailureError, BuildOkError, BuildSkipError, BuildWarningError, MiniServiceDoesNotExistsError, ServiceNotAvailableError
 from app.errors.agentic_error import AgenticServerDisconnectedError, AgenticStreamDoneError, AgenticBadResponseError, AgenticGrpcIdleError, AgenticGrpcShutdownError
 from app.grpc.agent_interceptor import  AgentClientInterceptor,AgentClientAsyncInterceptor
+from app.interface.agentic_interface import AgenticInterface
 from app.models.odm.agents_model import AgentModel, AgentValidationModel
 from app.services.agent.llm_service import LLMMiniService, LLMService
 from app.services.config_service import ConfigService, WorkerService
@@ -59,7 +60,7 @@ class AgenticHTTPState(Enum):
 
 
 @MiniService(links=[LinkDep(LLMMiniService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)])
-class RemoteAgentMiniService(BaseMiniService):
+class RemoteAgentMiniService(AgenticInterface,BaseMiniService):
     
     def __init__(self,configService:ConfigService,costService:CostService,remoteAgentService:'RemoteAgentService',llmProviderMiniService:LLMMiniService,agentModel:dict):
         self.depService = llmProviderMiniService
@@ -76,11 +77,15 @@ class RemoteAgentMiniService(BaseMiniService):
                 self.agent_model:AgentModel = AgentValidationModel.model_construct(**m)
         except ValidationError as e:
             raise BuildFailureError()
-        
-    @property
-    def is_main_agent(self):
-        return self.agent_model.type == 'main-agent'
 
+    async def pingService(self, infinite_wait, data, profile = None, as_manager = False, **kwargs):
+        if kwargs.get('status',False):
+            self._verify_status(True)
+
+    @property
+    def agent_name(self):
+        return f"remote-{super().agent_name}"
+        
     def PreRequise(mode:Literal['direct','generator']):
 
         def decorator(func:Callable):

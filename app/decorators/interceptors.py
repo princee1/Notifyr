@@ -28,11 +28,16 @@ class RegisterBackgroundTaskInterceptor(Interceptor):
 
 class KeepAliveResponseInterceptor(Interceptor):
 
-    def intercept_before(self):
-        ...
+    def __init__(self,yielder:bool=None,value_as_is:bool=None):
+        super().__init__()
+        self.yielder = yielder
+        self.value_as_is = value_as_is
 
-    def intercept_after(self,result:Any|Response, keepAliveConn:KeepAliveManager,request:Request):
-        keepAliveConn.dispose()
+    def intercept_before(self,keepAlive:KeepAliveManager):
+        keepAlive.set_config(self.yielder,self.value_as_is)
+
+    def intercept_after(self,result:Any|Response, keepAlive:KeepAliveManager,request:Request):
+        keepAlive.dispose()
 
 class ResponseCacheInterceptor(Interceptor):
 

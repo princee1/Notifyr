@@ -13,11 +13,12 @@ from app.decorators.guards import LLMProviderGuard
 from app.decorators.handlers import AgentHandler, AgenticHandler, DataSourceHandler, LLMHandler, AsyncIOHandler, CostHandler, GrpcHandler, MiniServiceHandler, MotorErrorHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, AgentPermission, ClientTypesPermission, JWTRouteHTTPPermission
-from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe, SanitizePathParameterPipe
+from app.decorators.pipes import RemoteAgentInjectorPipe, DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe, SanitizePathParameterPipe
 from app.definition._cost import DataCost
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles, LockService
 from app.definition._service import MiniStateProtocol, StateProtocol
 from app.depends.class_dep import EmbeddingSimilarity
+from app.depends.utility_dep import get_agent
 from app.depends.variables import SourceMode,source_mode_query
 from app.errors.agent_error import AgentDependencyError, AgentToolDoesNotExistError, SemanticAgentAlreadyExistError, SubAgentContainsSubAgentError
 from app.errors.depends_error import DataSourceNotSupportedError
@@ -52,13 +53,7 @@ base_attr = {'id','revision_id','created_at','last_modified','version'}
 class AgentsRessource(BaseHTTPRessource):
     
     UpdateAgentModel:Type[AgentModel] = subset_model(AgentModel,f'Update{AgentModel.__name__}',__config__=ConfigDict(extra="forbid"),exclude=set(AgentModel._unique_indexes).union(base_attr))
-
-    class AgentInjectorPipe(MiniServiceInjectorPipe):
-        def pipe(self, agent:str): return super().pipe(agent)
     
-    def get_agent(agent:str):
-        return agent
-
     @InjectInMethod()
     def __init__(self,remoteAgentService:RemoteAgentService,mongooseService:MongooseService,customService:CustomService,configService:ConfigService): 
         super().__init__()
@@ -170,6 +165,7 @@ class AgentsRessource(BaseHTTPRessource):
     @UsePipe(DocumentFriendlyPipe,before=False)
     @UseHandler(CostHandler,RedisHandler,AgentHandler)
     @LockService(LLMService,lockType='reader',as_manager=False)
+    @LockService(RemoteAgentService,lockType='reader',as_manager=False)
     @UseInterceptor(DataCostInterceptor(CostConstant.AGENT_CREDIT,'refund'))
     @BaseHTTPRessource.HTTPRoute('/{agent}/',methods=[HTTPMethod.DELETE])
     async def delete_agent(self,agent:str,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],profile:str=Depends(get_agent),authPermission:AuthPermission=Depends(get_auth_permission)):
@@ -203,6 +199,7 @@ class AgentsRessource(BaseHTTPRessource):
     @UsePipe(DocumentFriendlyPipe,before=False)
     @UseHandler(PydanticHandler,LLMHandler,AgentHandler)
     @LockService(LLMService,lockType='reader',as_manager=False)
+    @LockService(RemoteAgentService,lockType='reader',as_manager=False)
     @BaseHTTPRessource.HTTPRoute('/{agent}/',methods=[HTTPMethod.PUT])
     async def update_agent(self,agent:str,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],embeddingLookup:Annotated[EmbeddingSimilarity,Depends(EmbeddingSimilarity)],body: dict = Body(...),request_id:str=Depends(get_request_id),profile:str=Depends(get_agent),authPermission:AuthPermission=Depends(get_auth_permission)):
         
@@ -229,12 +226,12 @@ class AgentsRessource(BaseHTTPRessource):
     @UseRoles([Role.PUBLIC])        
     @Throttle(uniform=(30,60))
     @UsePermission(AgentPermission)
+    @UsePipe(RemoteAgentInjectorPipe)
     @LockService(LLMService,lockType='reader',as_manager=False)
-    @UsePipe(MiniServiceInjectorPipe(RemoteAgentService,'agent'))
     @UseHandler(LLMHandler,AgenticHandler,GrpcHandler,AgentHandler)
     @UseLimiter('100/hour',cost={'Admin':1,'User':3},key_func='private')
     @LockService(RemoteAgentService,lockType='reader',as_manager=True,miniLockType='reader')
-    @PingService([{'cls':RemoteAgentService,'kwargs':{'grpc':True}}],is_manager=True,infinite_wait=True)
+    @PingService([{'cls':RemoteAgentService,'kwargs':{'grpc':True,'status':True}}],is_manager=True,infinite_wait=True)
     @BaseHTTPRessource.HTTPRoute('/prompt/{agent}/',methods=[HTTPMethod.POST],mount=False,response_model=Reply)
     async def prompt_playground(self,request:Request,agent:Annotated[RemoteAgentMiniService,Depends(get_agent)],prompt:PromptPlaygroundModel, response:Response,profile:str=Depends(get_agent),request_id:str = Depends(get_request_id),authPermission:AuthPermission= Depends(get_auth_permission)):
         message = Message(agent=agent,thread=authPermission['client_id'],**prompt.model_dump(exclude_none=True))
@@ -248,12 +245,12 @@ class AgentsRessource(BaseHTTPRessource):
     
     @UseRoles([Role.PUBLIC])
     @Throttle(uniform=(30,60))
-    @UsePipe(MiniServiceInjectorPipe(RemoteAgentService,'agent'))
+    @UsePipe(RemoteAgentInjectorPipe)
     @UseHandler(LLMHandler,AgenticHandler,GrpcHandler,AgentHandler)
     @UseLimiter('100/hour',cost={'Admin':1,'User':3},key_func='private')
     @UsePermission(ClientTypesPermission([ClientType.User,ClientType.Admin]),AgentPermission)
     @LockService(RemoteAgentService,lockType='reader',as_manager=True,miniLockType='reader')
-    @PingService([{'cls':RemoteAgentService,'kwargs':{'grpc':True}}],is_manager=True,infinite_wait=True)
+    @PingService([{'cls':RemoteAgentService,'kwargs':{'grpc':True,'status':True}}],is_manager=True,infinite_wait=True)
     @BaseHTTPRessource.HTTPRoute('/stream/prompt/{agent}/',methods=[HTTPMethod.POST],mount=False,response_class=EventSourceResponse)
     async def stream_prompt_playground(self,request:Request,response:Response,prompt:PromptPlaygroundModel,agent:Annotated[RemoteAgentMiniService,Depends(get_agent)],profile:str=Depends(get_agent),request_id:str = Depends(get_request_id),last_event_id: Annotated[int | None, Header()] = None,authPermission:AuthPermission= Depends(get_auth_permission))->AsyncIterable[ServerSentEvent]:
         message = Message(agent=agent,thread=authPermission['client_id'],**prompt.model_dump(exclude_none=True))
