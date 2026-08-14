@@ -291,7 +291,7 @@ create_default_token(){
   fi
   echo "Creating default keys and API keys..."
 
-  TOKENS="JWT_SECRET_KEY ON_TOP_SECRET_KEY CONTACTS_HASH_KEY CONTACT_JWT_SECRET_KEY CLIENT_PASSWORD_HASH_KEY RSA_SECRET_PASSWORD API_ENCRYPT_TOKEN WS_SECRET_JWT_KEY"
+  TOKENS="JWT_SECRET_KEY ON_TOP_SECRET_KEY CONTACTS_HASH_KEY CONTACT_JWT_SECRET_KEY CHAT_JWT_SECRET_KEY CLIENT_PASSWORD_HASH_KEY RSA_SECRET_PASSWORD API_ENCRYPT_TOKEN WS_SECRET_JWT_KEY"
 
   ARGS=""
   for token in $TOKENS
@@ -420,6 +420,12 @@ setup_database_config(){
       default_ttl="35d" \
       max_ttl="35d" \
       creation_statements='["~*","&*", "+@string", "+@hash", "+@list", "+@set", "+@sortedset","+@transaction", "+@stream","+@keyspace", "+@pubsub", "-@admin", "-@dangerous", "-@connection", "+PING","+SELECT","+SCAN","+INFO","+KEYS"]'
+
+    vault write notifyr-database/roles/app-live-chat-redis-ntfr-role \
+      db_name="redis-notifyr" \
+      default_ttl="35d" \
+      max_ttl="35d" \
+      creation_statements='["~notifyr/live-chat/*","&notifyr/live-chat/*", "+@string", "+@hash", "+@list", "+@set", "+@sortedset","+@transaction", "+@stream","+@keyspace", "+@pubsub", "-@admin", "-@dangerous", "-@connection", "+PING","+SELECT","+SCAN","+INFO","+KEYS"]'
 
     vault write notifyr-database/roles/agentic-redis-ntfr-role \
       db_name="redis-notifyr" \

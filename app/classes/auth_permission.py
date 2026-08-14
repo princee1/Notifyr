@@ -184,7 +184,11 @@ class WSPermission(TypedDict):
     created_at:float
     expired_at:float
     salt:str
-    
+
+
+class ChatPermission(TypedDict):
+    ...
+
 class WSPathNotFoundError(BaseError):
     ...
 

@@ -19,4 +19,6 @@ class LiveChatService(BaseService):
     def build(self, build_state = DEFAULT_BUILD_STATE):
         ...
 
-    
+
+    def create_live_chat_session(self):
+        ...

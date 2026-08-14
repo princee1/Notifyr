@@ -110,13 +110,13 @@ async def get_request_id(request: Request):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not retrieve request id")
     return request.state.request_id
 
-def get_query_params(name,default=None,parse=False,return_none=False,raise_except=False,checker:Callable[[Any],bool]=None)->Callable[[Request],str|None]:
+def get_query_params(name,default=None,parse=False,return_none=False,raise_except=False,checker:Callable[[Any],bool]=None,strict=True)->Callable[[Request],str|None]:
     """ return_none: only if parsing was failed choose wether to return None or the string
     """
     def depends(request:Request):
         value = request.query_params.get(name,default)
         if parse and value != None:
-            value = parse_value(value,return_none)
+            value = parse_value(value,return_none,'strict' if strict else 'complied')
         
         if value == None and raise_except:
             raise HTTPException(400,detail=f'Query {name} not properly specified',headers=FastAPIConstant.OO_SCOPE_HEADERS)

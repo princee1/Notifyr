@@ -15,7 +15,7 @@ import jwt
 import base64
 from fastapi import HTTPException, Request, status
 import time
-from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission, Scope, WSPermission
+from app.classes.auth_permission import AuthPermission, ChatPermission, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission, Scope, WSPermission
 from random import randint, random
 from app.utils.helper import generateId, b64_encode, b64_decode
 import os
@@ -126,6 +126,9 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
             operation_id=operation_id, expired_at=expired_at, created_at=now, run_id=run_id, salt=salt)
         return self._encode_token(permission, self.vaultService.WS_JWT_SECRET_KEY,False)
 
+    def encode_live_chat_token(self,):
+        ...
+
     def encode_contact_token(self, contact_id: str, expiration: float, scope: ContactPermissionScope):
         now = time.time()
         expiration = now + expiration
@@ -151,7 +154,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
             if secret_key == None:
                 secret_key = self.vaultService.JWT_SECRET_KEY
             else:
-                secret_key = self.vaultService.tokens(secret_key, self.vaultService.JWT_SECRET_KEY)
+                secret_key = self.vaultService.tokens.get(secret_key, self.vaultService.JWT_SECRET_KEY)
 
             token = self._decode_value(token, self.vaultService.ON_TOP_SECRET_KEY)
             decoded = jwt.decode(token, secret_key,algorithms=self.vaultService.JWT_ALGORITHM)
@@ -238,6 +241,12 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         except KeyError as e:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail='Data missing')
+
+    def verify_chat_permission(self,token:str)->ChatPermission:
+        token = self._decode_token(token, 'CONTACT_JWT_SECRET_KEY')
+        permission: ContactPermission = ContactPermission(**token)
+
+        return permission
 
     def read_generation_id(self):
         data=self.vaultService.generation_engine.read('',self.gen_id_path)

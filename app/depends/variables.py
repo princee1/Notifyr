@@ -42,6 +42,10 @@ wait_timeout_query:Callable[[Request],int|float] = get_query_params('timeout','-
 
 # ----------------------------------------------                                    ---------------------------------- #
 
+def binary_callable_factory(name:str)->Callable[[Request],bool]:
+    return get_query_params(name,'true',True,False,True)
+# ----------------------------------------------                                    ---------------------------------- #
+
 profile_query:Callable[[Request],str] = get_query_params('profile','main',raise_except=True)
 # ----------------------------------------------                                    ---------------------------------- #
 

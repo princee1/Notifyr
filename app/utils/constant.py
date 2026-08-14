@@ -337,6 +337,7 @@ class RedisConstant:
     CACHE_DB=3
     CONFIG_DB=4
     AGENTIC_DB=5
+    LIVE_CHAT_DB=6
 
 ########################                     ########################################
 

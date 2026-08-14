@@ -157,10 +157,7 @@ class JWTContactPermission(Permission):
         self.scope = scope
 
 
-    def permission(self,contact:ContactORM,contactPermission:ContactPermission,token:str):
-
-        if contact.auth_token != token:
-            raise HTTPException(status=403,detail="Token not issued for this user")
+    def permission(self,contact:ContactORM,contactPermission:ContactPermission):
         
         if contact.contact_id != contactPermission['contact_id']:
             raise HTTPException(status=403,detail="Token not issued for this user") # NOTE seems non-necessary but fuck it 
@@ -172,6 +169,24 @@ class JWTContactPermission(Permission):
             raise HTTPException(status=403,detail="")
         
         return True
+
+class JWTNonRequiredContactPermission(JWTContactPermission):
+
+    def __init__(self, scope:ContactPermissionScope,accept_guest:bool=True):
+        super().__init__(scope)
+        self.accept_guest = accept_guest
+
+    def permission(self, contact:ContactORM=None, contactPermission:ContactPermission = None):
+        if contact == None and contactPermission == None:
+            if self.accept_guest:
+                return True
+
+            raise HTTPException(403,detail='guest contact are not allowed')
+
+        if not all([contact,contactPermission]):
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED,f'Value missing: contact->{bool(contact)} & permission->{bool(contactPermission)}')
+
+        return super().permission(contact, contactPermission)
     
 class JWTRefreshTokenPermission(Permission):
 
@@ -327,7 +342,6 @@ class AgentPermission(Permission):
     async def predicate(agent:str,authPermission:AuthPermission):
         return agent in authPermission['allowed_agents']
 
-
 class TaskCostPermission(Permission):
     """
     Do you have positive units?
@@ -368,3 +382,5 @@ class TaskCostPermission(Permission):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Retry not allowed by pricing policy")
 
         return True
+
+

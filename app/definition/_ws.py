@@ -13,8 +13,8 @@ from app.utils.constant import HTTPHeaderConstant
 from app.depends.dependencies import get_bearer_token
 from app.utils.helper import APIFilterInject
 
-from pydantic import BaseModel
-from typing import Any, Callable, Optional, Type,TypeVar,Union,TypedDict,Literal, get_args
+from pydantic import BaseModel, ValidationError
+from typing import Any, Callable, List, Optional, Type,TypeVar,Union,TypedDict,Literal, get_args
 from app.utils.prettyprint import PrettyPrinter_
 from app.utils.helper import generateId
 
@@ -101,6 +101,10 @@ class WebsocketMessageTypeError(Exception):
 
 class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
 
+    ManagerClass:Type[WSConnectionManager]
+    Endpoints:List[str] = []
+    EndpointCallable:List[str] = []
+
     @staticmethod
     async def _create_ws_answer(func,args,kwargs):
         answer = APIFilterInject(func)(*args,**kwargs)
@@ -108,12 +112,14 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
             answer = await answer
         return answer
 
-    @staticmethod
-    def WSEndpoint(path:str,type_:str | bytes | dict | BaseModel |BaseProtocol |None |NoneType =str,name:str = None,path_conn_manager:str=None,set_protocol_key:str=None,handler:HandlerType='current',prefix="ws/"):
+    @classmethod
+    def WSEndpoint(cls,path:str,type_:WebsocketMessage =str,name:str = None,path_conn_manager:str=None,set_protocol_key:str=None,handler:HandlerType='current',prefix="ws/"):
 
-        # if type_!= None and not isinstance(type_,(str, bytes,dict,BaseModel,BaseProtocol,NoneType)):
-        #     raise WebsocketMessageTypeError
+        if type_!= None and not isinstance(type_,(str, bytes,dict,BaseModel,BaseProtocol,NoneType)):
+            raise WebsocketMessageTypeError
         path = prefix+path
+
+        cls.Endpoints.append(path)
 
         def decorator(func:Callable):
             if not hasattr(func,'meta'):
@@ -121,7 +127,9 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
             
             func.meta['path'] = path
             func.meta['name'] = name
-            func.meta['operation_id'] = BaseWebSocketRessource.build_operation_id(path,name)
+            func.meta['operation_id'] = cls.build_operation_id(path,name)
+
+            cls.EndpointCallable.append(func.__name__)
 
             @functools.wraps(func)
             async def wrapper(*args,**kwargs):         
@@ -129,13 +137,13 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
                 self: BaseWebSocketRessource = args[0]
                 manager = self.connection_manager[path_conn_manager_]
                 
-                websocket:WebSocket= APIFilterInject(BaseWebSocketRessource._websocket_injector)(*args,**kwargs)
+                websocket:WebSocket= APIFilterInject(cls._websocket_injector)(*args,**kwargs)
 
                 kwargs_star = kwargs.copy()
                 kwargs_star['operation_id'] = func.meta['operation_id']
                 kwargs_star['manager'] = manager
 
-                flag,reason = APIFilterInject(BaseWebSocketRessource.on_connect)(*args,**kwargs_star)
+                flag,reason = APIFilterInject(cls.on_connect)(*args,**kwargs_star)
 
                 if not flag:
                     await websocket.close(status.WS_1002_PROTOCOL_ERROR,reason=f'Auth Token Not Present or not valid: {reason}')
@@ -145,18 +153,15 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
                 try:
                     while True:
                         if type_ == str:
-                            message:str = await websocket.receive_text()
-                            kwargs_star['message'] = message
+                            kwargs_star['message'] = await websocket.receive_text()
                             answer = await self._create_ws_answer(func,args,kwargs_star)
                             await websocket.send_text(answer)
                         elif type_ == bytes:
-                            message:bytes = await websocket.receive_bytes()
-                            kwargs_star['message'] = message
+                            kwargs_star['message'] = await websocket.receive_bytes()
                             answer = await self._create_ws_answer(func,args,kwargs_star)
                             await websocket.send_bytes(answer)
                         elif type_ == dict:
-                            message:dict = await websocket.receive_json()
-                            kwargs_star['message'] = message
+                            kwargs_star['message'] = await websocket.receive_json()
                             answer = await self._create_ws_answer(func,args,kwargs_star)
                             await websocket.send_json(answer)
                         elif type_ == BaseModel:
@@ -164,7 +169,9 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
                             try:
                                 message = type_(**message)
                                 message = message.model_dump_json()
-                            except:
+                            except ValidationError as e:
+                                ...
+                            except Exception:
                                 message= {
                                     'error':True
                                 }
@@ -197,7 +204,6 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
                         else:
                             await self._create_ws_answer(func,args,kwargs_star)
                             
-
                 except WebSocketDisconnect:
                     ...
                 except RuntimeError:
@@ -205,7 +211,7 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
                 except Exception:
                     ...
                 finally:
-                    APIFilterInject(BaseWebSocketRessource.on_disconnect)(*args,**kwargs_star)
+                    await APIFilterInject(cls.on_disconnect)(*args,**kwargs_star)
                     await manager.disconnect(websocket)
                     
             return wrapper
@@ -246,7 +252,7 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
         
     def _register_protocol(self,):
          
-         for attr in dir(self.__class__):
+         for attr in self.EndpointCallable:
             method = getattr(self, attr)
             if callable(method) and hasattr(method,'meta'):
                 if 'protocol_name' in method.meta:
@@ -257,7 +263,7 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
                     self.ws_endpoints.append(method)
 
                     path = method.meta['path']
-                    self.connection_manager[path] = WSConnectionManager()
+                    self.connection_manager[path] = self.ManagerClass()
     
     def _websocket_injector(self,websocket:WebSocket):
         """
@@ -288,7 +294,7 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
         
         return True,''
      
-    def on_disconnect(self,websocket:WebSocket):
+    async def on_disconnect(self,websocket:WebSocket):
         ...
     
     async def on_shutdown(self):
@@ -304,10 +310,15 @@ class BaseWebSocketRessource(EventInterface,metaclass = WSRessMetaClass):
 W = TypeVar('W', bound=BaseWebSocketRessource)
 
 
-def WebSocketRessource(cls:Type[W])->Type[Union[W,BaseWebSocketRessource]]:
-    class Factory(cls,BaseWebSocketRessource):
-        ...
-    return type(cls.__name__, (cls, BaseWebSocketRessource), dict(Factory.__dict__))
+def WebSocketRessource(managerCls:Type[WSConnectionManager]=WSConnectionManager):
+
+    def decorator(cls:Type[W])->Type[Union[W,BaseWebSocketRessource]]:
+        var = {'ManagerCls':managerCls}
+        class Factory(cls,BaseWebSocketRessource):
+            ...
+        return type(cls.__name__, (cls, BaseWebSocketRessource), {**dict(Factory.__dict__),**var},)
+
+    return decorator
     
 
 def WSGuard():

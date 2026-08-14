@@ -10,7 +10,7 @@ from app.models.orm.link_model import LinkORM
 from app.models.security_model import BlacklistORM, ChallengeORM, ClientORM, GroupClientORM, PolicyMappingORM, PolicyORM
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService, SecurityService
-from app.depends.dependencies import get_auth_permission, get_query_params, get_request_id, wrapper_auth_permission
+from app.depends.dependencies import get_auth_permission, get_contact_token, get_query_params, get_request_id, wrapper_auth_permission
 from tortoise.exceptions import OperationalError
 
 from app.utils.helper import filter_paths
@@ -152,7 +152,7 @@ def Get_Contact(skip_permission:bool,raise_file:bool):
     return get_contacts
 
 
-def get_contact_permission(token: str = Query(None)) -> ContactPermission:
+def get_contact_permission(token:str=Depends(get_contact_token)) -> ContactPermission:
 
     jwtAuthService: JWTAuthService = Get(JWTAuthService)
     if token == None:

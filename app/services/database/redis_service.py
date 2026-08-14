@@ -33,6 +33,7 @@ NOTIFYR_HOST = 'redis'
 CELERY_BACKEND_CREDS='celery-backend'
 CELERY_BROKER_CREDS='celery-broker'
 AGENTIC_CREDS='agentic'
+LIVE_CHAT_CREDS='live-chat'
 
 AGENTIC_APP_MODE_CRED = {ApplicationMode.arq,ApplicationMode.agentic,ApplicationMode.server}
 
@@ -48,7 +49,7 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         self.workerService = workerService
         self.to_shutdown = False
         self.callbacks = CALLBACKS_CONFIG.copy()
-        self.db:Dict[Literal['celery','limiter','events','cache','config','agentic',0,1,2,3,4,5],Redis] = {}
+        self.db:Dict[Literal['celery','limiter','events','cache','config','agentic','live-chat',0,1,2,3,4,5,6],Redis] = {}
 
         self.consumer_name = f'notifyr-consumer={self.workerService.INSTANCE_ID}'
 
@@ -244,6 +245,9 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         if CAPABILITIES['agentic'] and APP_MODE in AGENTIC_APP_MODE_CRED:
             self.add_credentials(VaultConstant.REDIS_ROLE,AGENTIC_CREDS,suffix='agentic')
 
+        if CAPABILITIES['chat'] and CAPABILITIES['live']:
+            self.add_credentials(VaultConstant.REDIS_ROLE,LIVE_CHAT_CREDS,suffix='app-live-chat')
+
     def create_redis_instance(self):
         
         self.redis_celery = Redis(host=self.configService.REDIS_HOST,db=RedisConstant.CELERY_DB,username=self.db_user(CELERY_BACKEND_CREDS),password=self.db_password(CELERY_BACKEND_CREDS))
@@ -254,6 +258,9 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         if CAPABILITIES['agentic'] and APP_MODE in AGENTIC_APP_MODE_CRED:
             self.redis_agentic = Redis(host=NOTIFYR_HOST,db=RedisConstant.AGENTIC_DB,decode_responses=True,username=self.db_user(AGENTIC_CREDS),password=self.db_password(AGENTIC_CREDS))        
 
+        if CAPABILITIES['chat'] and CAPABILITIES['live']:
+            self.redis_live_chat = Redis(host=NOTIFYR_HOST,db=RedisConstant.LIVE_CHAT_DB,decode_responses=True,username=self.db_user(LIVE_CHAT_CREDS),password=self.db_password(LIVE_CHAT_CREDS))
+            
         if APP_MODE == ApplicationMode.beat or APP_MODE == ApplicationMode.worker:
             self.redis_events = SyncRedis(host=NOTIFYR_HOST,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
         else:
@@ -277,6 +284,10 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
             self.db['agentic']=self.redis_agentic
             self.db[RedisConstant.AGENTIC_DB]= self.redis_agentic
 
+        if CAPABILITIES['chat'] and CAPABILITIES['live']:
+            self.db['live-chat'] = self.redis_live_chat
+            self.db[RedisConstant.LIVE_CHAT_DB] = self.redis_live_chat
+
     def revoke_lease(self,name:CredentialName=None):
         if self.configService.BROKER_PROVIDER == 'redis':
             if name == None or name == CELERY_BROKER_CREDS:
@@ -284,6 +295,12 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
 
         if name == None or name == CELERY_BACKEND_CREDS:
             super().revoke_lease(CELERY_BACKEND_CREDS)
+
+        if (CAPABILITIES['agentic'] and APP_MODE in AGENTIC_APP_MODE_CRED) and (name == None or name ==AGENTIC_CREDS):
+            super().revoke_lease(AGENTIC_CREDS)
+
+        if (CAPABILITIES['chat'] and CAPABILITIES['live'] (name == None or name ==LIVE_CHAT_CREDS) ):
+            super().revoke_lease(LIVE_CHAT_CREDS)
         
         if name == None or name == 'default':
             super().revoke_lease()

@@ -190,7 +190,7 @@ class ContactSecurityRessource(BaseHTTPRessource):
         @UsePermission(JWTContactPermission('update'))
         @UseGuard(RegisteredContactsGuard)
         @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.PUT],dependencies=[Depends(verify_twilio_token)])
-        async def update_raw_contact_security(self, contact: Annotated[ContactORM, Depends(get_contacts)],token:str=Depends(get_contact_token),contactPermission=Depends(get_contact_permission), authPermission=Depends(get_auth_permission)):
+        async def update_raw_contact_security(self, contact: Annotated[ContactORM, Depends(get_contacts)],contactPermission=Depends(get_contact_permission), authPermission=Depends(get_auth_permission)):
             # TODO update token permission after use
             ...
 
@@ -198,14 +198,14 @@ class ContactSecurityRessource(BaseHTTPRessource):
         @UseGuard(RegisteredContactsGuard)
         @UsePermission(JWTContactPermission('update'))
         @BaseHTTPRessource.HTTPRoute('/token/{contact_id}',[HTTPMethod.GET],dependencies=[Depends(verify_twilio_token)])
-        async def verify_token(self,contact: Annotated[ContactORM, Depends(get_contacts)],token:str=Depends(get_contact_token),contactPermission=Depends(get_contact_permission),authPermission=Depends(get_auth_permission)):
+        async def verify_token(self,contact: Annotated[ContactORM, Depends(get_contacts)],contactPermission=Depends(get_contact_permission),authPermission=Depends(get_auth_permission)):
             return
 
         @UsePermission(JWTContactPermission('create'))
         @UseGuard(RegisteredContactsGuard)
         @PingService([TwilioService])
         @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.POST])
-        async def request_create_contact_security(self,contact: Annotated[ContactORM, Depends(get_contacts)],token:str=Depends(get_contact_token), contactPermission=Depends(get_contact_permission), authPermission=Depends(get_auth_permission)):
+        async def request_create_contact_security(self,contact: Annotated[ContactORM, Depends(get_contacts)], contactPermission=Depends(get_contact_permission), authPermission=Depends(get_auth_permission)):
             # TODO Request from the user
             # TODO hash the token before sending
             ...
@@ -213,7 +213,7 @@ class ContactSecurityRessource(BaseHTTPRessource):
     @UsePermission(JWTContactPermission('update'))
     @UseGuard(RegisteredContactsGuard)
     @BaseHTTPRessource.HTTPRoute('/{contact_id}',[HTTPMethod.PATCH])
-    async def request_update_contact_security(self,contact: Annotated[ContactORM, Depends(get_contacts)],token:str=Depends(get_contact_token),forgot:bool=Query(False), contactPermission=Depends(get_contact_permission),  authPermission=Depends(get_auth_permission)):
+    async def request_update_contact_security(self,contact: Annotated[ContactORM, Depends(get_contacts)],forgot:bool=Query(False), contactPermission=Depends(get_contact_permission),  authPermission=Depends(get_auth_permission)):
         # TODO request from the user
         # TODO hash the token before sending
         ...

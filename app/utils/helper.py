@@ -319,12 +319,11 @@ def strict_parseToValue(value: str):
     except ValueError:
         return None
 
-
-def parse_value(value,return_none=False) -> Any | str:
+def parse_value(value,return_none=False,mode:Literal['strict','complied']='strict') -> Any | str:
     """
     Parse a string value into the appropriate Python type.
     """
-    parsed_value = strict_parseToBool(value)
+    parsed_value = strict_parseToBool(value) if mode == 'strict' else parseToBool(value)
     if parsed_value is not None:
         return parsed_value
 
