@@ -1,11 +1,14 @@
 
 from typing import Callable, Literal,get_args
 from fastapi import Depends, Query, Request, Response
-from app.container import GetDependsFunc
+from app.container import GetDependsFunc,Get
+from app.services import ConfigService
 from app.depends.dependencies import get_query_params
 from app.utils.constant import VariableConstant
 from app.utils.globals import CAPABILITIES
 
+configService = Get(ConfigService)
+mcp_configuration = lambda:configService.MCP_ENABLED
 
 # Helper: predicate -> validator that returns None when OK, or an error message including valid choices
 def _wrap_checker(name: str, predicate: Callable[[object], bool], choices: list | None = None, msg: str | None = None) -> Callable[[object], str | None]:

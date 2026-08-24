@@ -1,5 +1,5 @@
-from typing import Callable, List, Literal,Dict,NotRequired, Optional, Self
-from pydantic import BaseModel, field_validator, model_validator
+from typing import Any, Callable, List, Literal,Dict,NotRequired, Optional, Self
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing_extensions import TypedDict
 from enum import Enum
 
@@ -27,6 +27,8 @@ class Role(Enum):
     CUSTOM ='CUSTOM'
     MFA_OTP ='MFA_OTP'
     CHAT = 'CHAT'
+    EMAIL = 'EMAIL'
+    MESSAGE = 'MESSAGE'
     RESULT = 'RESULT'
     REFRESH = 'REFRESH'
     CONTACTS = 'CONTACTS'
@@ -36,6 +38,8 @@ class Role(Enum):
     LINK = "LINK"
     ASSETS = "ASSETS"
     PROFILE ="PROFILE"
+    MCP = "MCP"
+    AGENT = "AGENT"
 
 class Scope(Enum):
     SoloDolo = 'SoloDolo'
@@ -66,6 +70,8 @@ class FuncMetaData(TypedDict):
     limit_obj:dict
     limit_exempt:bool=False
     default_role:bool =True
+    as_tool:bool = False
+    tags:list[str]
     cost_definition:SimpleTaskCostDefinition
     cost_definition_name:str
 
@@ -83,6 +89,10 @@ class AssetsPermission(TypedDict):
     files: list[str] = []
     dirs: set[str] = []
         
+class MCPPermissionDef(TypedDict):
+    tags: list[str]|set[str]
+    operations: list[str]|set[str]
+
 class AuthPermission(TypedDict):
     generation_id: str
     client_username: str
@@ -99,6 +109,7 @@ class AuthPermission(TypedDict):
     allowed_profiles:List[str]=[]
     allowed_agents:List[str]=[]
     allowed_blogs: List[str] = []
+    allowed_mcp: Optional[MCPPermissionDef] = None
     challenge: str
     scope:str
     salt:str
@@ -131,11 +142,21 @@ class RoutePermissionModel(BaseModel):
                 raise ValueError('Custom Routes must have at least one routes')
         return self
 
+class MCPPermissionModel(BaseModel):
+    tags:List[str] = Field(default_factory=list, description="List of tags that the user is allowed to access",max_length=20)
+    operations:List[str] = Field(default_factory=list, description="List of operations that the user is allowed to access",max_length=20)
+
+    @model_validator(mode='after')
+    def check_model(self)->Self:
+        if not self.tags and not self.operations:
+            raise ValueError('MCPPermission must have at least one tag or operation')
+        return self
 
 class PolicyModel(BaseModel):
-    allowed_profiles:List[str]=[]
-    allowed_agents:List[str] = []
-    allowed_routes: Dict[str, RoutePermissionModel] = {}
+    allowed_profiles:List[str]=Field(default_factory=list)
+    allowed_agents:List[str] = Field(default_factory=list)
+    allowed_routes: Dict[str, RoutePermissionModel] = Field(default_factory=dict)
+    allowed_mcp: Optional[MCPPermissionModel] = None
     allowed_assets: List[str] =[]
     allowed_blog: List[str] = []
     roles: Optional[List[Role]] = [Role.PUBLIC]
@@ -212,5 +233,31 @@ def MustHaveRoleSuchAs(*role:Role):
     def verify(authPermission:AuthPermission):
         permissionRoles = authPermission['roles']
         return len(roles.intersection(permissionRoles)) == roles_size
+
+    return verify
+
+def MustHaveWhen(role:Role,condition:Callable[[AuthPermission,FuncMetaData],bool]=None,configuration:Callable[[],bool]=None):
+
+    def verify(authPermission:AuthPermission=None,func_meta:FuncMetaData=None):
+        if configuration and not configuration():
+            return True
+
+        if condition is not None:
+            if not condition(func_meta):
+                return False
+            
+        return role in authPermission['roles']
+        
+
+    verify.need_metadata = True
+    return verify
+
+
+def BypassRole(role:Role):
+
+    def verify(authPermission:AuthPermission):
+        return role in authPermission['roles']
+
+    verify.bypass = True
 
     return verify

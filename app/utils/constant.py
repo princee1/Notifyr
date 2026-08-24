@@ -577,3 +577,6 @@ class Crawl4AIConstant:
     INGEST_PARENT_DIR ='crawl4ai'
     CRAWL_CACHE_DIR = '.crawl_cache'
     RESEARCH_CACHE_DIR = '.research_cache'
+
+class MCPConstant:
+    API_TOKEN_NAME=''

@@ -92,6 +92,7 @@ fake-useragent==2.2.0
 Faker==40.1.0
 fastapi==0.135.0
 fastapi-cache2==0.2.2
+fastapi-mcp==0.4.0
 fastavro==1.12.1
 fastjsonschema==2.21.2
 fastuuid==0.14.0
@@ -349,6 +350,7 @@ threadpoolctl==3.6.0
 tiktoken==0.12.0
 tinycss2==1.4.0
 tokenizers==0.22.1
+tomli==2.4.1
 torch==2.9.1
 torchvision==0.24.1
 tornado==6.4.2

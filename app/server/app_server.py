@@ -2,6 +2,9 @@
 Contains the FastAPI app
 """
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.security import APIKeyHeader
+from starlette import status
+from app.classes.secrets import ChaCha20SecretsWrapper
 from app.container import Get, CONTAINER
 from app.definition._error import ServerFileError
 from app.callback import Callbacks_Stream,Callbacks_Sub
@@ -21,14 +24,15 @@ from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.vault_service import VaultService
 from app.services.worker.task_service import TaskService
 from app.services.config_service import ConfigService, WorkerService
+from app.utils.constant import MCPConstant
 from app.utils.prettyprint import PrettyPrinter_
-from fastapi import Request, Response, FastAPI
+from fastapi import Depends, HTTPException, Request, Response, FastAPI
 from typing import Callable,Literal
 import uvicorn
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 import datetime as dt
-from app.definition._ressource import RESSOURCES, BaseHTTPRessource, ClassMetaData
+from app.definition._ressource import RESSOURCES, BaseHTTPRessource, ClassMetaData, TOOLS
 from app.interface.events import EventInterface
 import traceback
 from fastapi_cache import FastAPICache
@@ -38,7 +42,8 @@ from app.utils.toolbox import RunInThreadPool
 # from fastapi_cache.backends.inmemory import InMemoryBackend
 # from fastapi_cache.backends.memcached import MemcachedBackend
 
-from ..meta.server_meta import *
+from fastapi_mcp import FastApiMCP, AuthConfig as MCPAuthConfig
+from app.meta import server_meta,mcp_meta
 from .middleware import MIDDLEWARE
 from app.definition._service import PROCESS_SERVICE_REPORT
 from app.models.odm.communication_model import *
@@ -85,11 +90,12 @@ class AppServer(EventInterface):
         self.pretty_printer = PrettyPrinter_
         self.configService: ConfigService = Get(ConfigService)
         self.costService: CostService = Get(CostService)
+        self.vaultService:VaultService = Get(VaultService)
         
-        self.app = FastAPI(title=TITLE,
-                           summary=SUMMARY,
-                           description=DESCRIPTION,
-                           version=VERSION,
+        self.app = FastAPI(title=server_meta.TITLE,
+                           summary=server_meta.SUMMARY,
+                           description=server_meta.DESCRIPTION,
+                           version=server_meta.VERSION,
                            on_shutdown=self.shutdown_hooks,
                            on_startup=self.startup_hooks,
                            )
@@ -100,6 +106,7 @@ class AppServer(EventInterface):
         self.add_middlewares()
         self.add_ressources()
         self.set_httpMode()
+        self.setup_mcp()
 
     def add_exception_handlers(self):
         self.app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -176,6 +183,39 @@ class AppServer(EventInterface):
     def add_middlewares(self):
         for middleware in sorted(MIDDLEWARE.values(), key=lambda x: x.priority.value, reverse=True):
             self.app.add_middleware(middleware)
+
+    def setup_mcp(self):
+        if not self.configService.MCP_ENABLED:
+            return
+        
+        auth_key = self.vaultService.secrets_engine.read('internal','MCP')['API_KEY']
+        mcp_api_key = ChaCha20SecretsWrapper(auth_key)
+        mcp_api_token_scheme = APIKeyHeader(name=MCPConstant.API_TOKEN_NAME)
+
+        def mcp_auth(request:Request, token:str=Depends(mcp_api_token_scheme)):
+            if mcp_api_key.to_plain() != token:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail='MCP is not allowed for this user')
+            request.state.from_mcp_user = True
+            return True
+        
+        included_tools= set()
+
+        for ress_type in SERVER_RESSOURCES:
+            included_tools.update(*TOOLS.get(ress_type.__name__,[]))
+        
+        mcp = FastApiMCP(
+            self.app,
+            name=mcp_meta.MCP_SERVER_NAME,
+            description=mcp_meta.MCP_DESCRIPTION,
+            describe_all_responses=True,
+            describe_full_response_schema=True,
+            auth_config=MCPAuthConfig(dependencies=[Depends(mcp_auth)],),
+            #include_tags=[],
+            include_routes=included_tools,
+            )
+        
+        mcp.mount_http()
+        mcp.mount_sse()
             
     @register_hook('startup')
     async def on_startup(self):

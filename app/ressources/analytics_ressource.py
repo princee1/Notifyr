@@ -17,9 +17,7 @@ class AnalyticsRessource(BaseHTTPRessource):
 
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.OPTIONS])
     def analytics_options(self):
-        return {
-
-        }
+        return {}
     
     @BaseHTTPRessource.Get('/email/', mount=False)
     async def fetch_email_analytics(self, request: Request, authPermission=Depends(get_auth_permission)):

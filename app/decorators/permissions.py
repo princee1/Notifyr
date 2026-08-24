@@ -8,6 +8,7 @@ from app.models.email_model import BaseEmailSchedulerModel
 from app.models.security_model import ChallengeORM, ClientORM
 from app.definition._utils_decorator import Permission
 from app.container import InjectInMethod, Get
+from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.cost_service import CostService
 
@@ -50,8 +51,14 @@ class JWTRouteHTTPPermission(Permission):
         roles_excluded =func_meta['excludes']
 
         for options in func_meta['options']:
+            if getattr(options,'need_metadata',False) and not options(authPermission,func_meta):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Role details not allowed")
+
             if not options(authPermission):
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Role details not allowed")
+
+            if getattr(options,'bypass',False):
+                break
                     
         if len(roles_excluded.intersection(auth_roles)) > 0:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Role not allowed")
@@ -368,3 +375,33 @@ class TaskCostPermission(Permission):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Retry not allowed by pricing policy")
 
         return True
+
+
+class MCPPermission(Permission):
+
+    @InjectInMethod
+    def __init__(self,configService:ConfigService):
+        self.configService = configService
+
+    def permission(self,func_meta:FuncMetaData,authPermission:AuthPermission,request:Request):
+        if not self.configService.MCP_ENABLED:
+            return True
+
+        if not getattr(request.state, 'from_mcp_user', False):
+            return True
+
+        if not func_meta.get('as_tool',False):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail='Function is not available as a tool')
+    
+        if not (operation_id:=func_meta.get('operation_id',None)):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail='Function is not available as a tool')
+
+        if operation_id in set(authPermission.get('allowed_mcp',{}).get('operations',[])):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail='MCP is not allowed for this user')
+
+        return True
+    
+        # if not (intersection := set(func_meta.get('tags',[])).intersection(authPermission.get('mcp_tags',[]))):
+        #     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail='MCP is not allowed for this user')
+
+        # return True

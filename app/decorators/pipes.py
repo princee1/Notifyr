@@ -840,11 +840,13 @@ class SParams(TypedDict):
     space:bool
 class SanitizePathParameterPipe(Pipe):
 
-    def __init__(self,params:SParams, service:bool = False,agent:bool=False,profile:bool=False):
+    def __init__(self,params:SParams, service:bool = False,agent:bool=False,profile:bool=False,template:bool=False):
         super().__init__(True)
         self.service = service
         self.agent = agent
         self.profile = profile
+        self.template = template
+
         self.params = params
 
     def sanitize(self,text:str):
@@ -856,7 +858,7 @@ class SanitizePathParameterPipe(Pipe):
             text = text.replace(' ','')
         return text
 
-    async def pipe(self,service:str=None,agent:str=None,profile:str=None):
+    async def pipe(self,service:str=None,agent:str=None,profile:str=None,template:str=None):
         data = {}
         if service != None:
             data['service'] = self.sanitize(service)
@@ -864,5 +866,7 @@ class SanitizePathParameterPipe(Pipe):
             data['agent'] = self.sanitize(agent)
         if profile != None:
             data['profile'] = self.sanitize(profile)
+        if template!=None:
+            data['template'] = self.sanitize(template)
         return data
     

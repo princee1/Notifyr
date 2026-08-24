@@ -104,6 +104,9 @@ async def get_client_from_request(request:Request):
     if not hasattr(request.state, "client") or request.state.client is None:
         raise HTTPException(status_code=401, detail="Unauthorized")
     return request.state.client
+
+def is_mcp_request(request:Request):
+    return getattr(request.state,'from_mcp_user',False)
         
 async def get_request_id(request: Request):
     if not hasattr(request.state, "request_id") or request.state.request_id is None:

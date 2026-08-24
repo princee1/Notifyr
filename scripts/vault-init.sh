@@ -306,11 +306,14 @@ create_default_token(){
   local dashboard_api_key="dashboard:$(pwgen -s 70 1)"
   local balancer_exchange_token="balancer_exchange:$(pwgen -s 80 1)"
   local agentic_api_key="agentic:$(pwgen -s 70 1)"
+  local mcp_api_key="mcp:$(pwgen -s 60 1)"
+
 
   vault kv put notifyr-secrets/internal/DMZ API_KEY="$dmz_api_key"
   vault kv put notifyr-secrets/internal/BALANCER API_KEY="$balancer_exchange_token"
   vault kv put notifyr-secrets/internal/DASHBOARD API_KEY="$dashboard_api_key"
   vault kv put notifyr-secrets/internal/AGENTIC API_KEY="$agentic_api_key"
+  vault kv put notifyr-secrets/internal/MCP API_KEY="$mcp_api_key"
 
   echo -n "$dmz_api_key" > "$VAULT_SECRETS_DIR/dmz-api-key.txt"
   echo -n "$dashboard_api_key" > "$VAULT_SECRETS_DIR/dashboard-api-key.txt"
