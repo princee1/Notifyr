@@ -144,7 +144,7 @@ class AgentsRessource(BaseHTTPRessource):
     @UsePipe(SanitizePathParameterPipe({},profile=True,agent=True))
     @LockService(RemoteAgentService,lockType='reader',as_manager=False)
     @UseRoles([Role.PUBLIC],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
-    @BaseHTTPRessource.HTTPRoute('/{agent:path}/',methods=[HTTPMethod.GET],as_tool=True,operation_id='read_agent_information')
+    @BaseHTTPRessource.HTTPRoute('/{agent:path}/',methods=[HTTPMethod.GET],to_mcp_tool=True,operation_id='read_agent_information')
     async def read_agent(self,agent:str,request:Request,response:Response,mongoFilter:Optional[MongoFindFilter],profile:str=Depends(get_agent),source:SourceMode=Depends(source_mode_query), authPermission:AuthPermission=Depends(get_auth_permission)):
         match source:
             case 'database':

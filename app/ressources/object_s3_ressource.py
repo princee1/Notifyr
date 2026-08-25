@@ -234,7 +234,7 @@ class S3ObjectRessource(BaseHTTPRessource):
     @LockService(VaultService,ObjectS3Service,AssetService,lockType='reader',check_status=False)
     @UseInterceptor(ResponseCacheInterceptor('cache',MinioResponseCache,raise_default_exception=False),mount=False)
     @UseGuard(GlobalsTemplateGuard('We cannot read the object globals.json at this route please use refer to properties/global route'))
-    @BaseHTTPRessource.HTTPRoute('/{template:path}/',methods=[HTTPMethod.GET],response_model=ObjectS3ResponseModel,operation_id='read_template_content_and_information',as_tool=True)
+    @BaseHTTPRessource.HTTPRoute('/{template:path}/',methods=[HTTPMethod.GET],response_model=ObjectS3ResponseModel,operation_id='read_template_content_and_information',to_mcp_tool=True)
     async def read_object(self,request:Request,response:Response,backgroundTasks:BackgroundTasks,objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],source:SourceMode=Depends(source_mode_query),template='',is_mcp:bool=Depends(is_mcp_request),authPermission:AuthPermission=Depends(get_auth_permission)):
 
         match source:

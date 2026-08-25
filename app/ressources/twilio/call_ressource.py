@@ -74,7 +74,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         @UsePermission(ProfilePermission,MCPPermission,TaskCostPermission,JWTAssetObjectPermission('phone'))
         @UseRoles([Role.MFA_OTP,Role.TWILIO],options=[MustHave(Role.ASSETS),MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
         @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio','main'),to_otp_path,force_task_manager_attributes_pipe,TwilioPhoneNumberPipe('otp',True), TemplateParamsPipe('phone', 'xml'),TemplateValidationInjectionPipe('phone','','',False))
-        @BaseHTTPRessource.Post('/otp/{template:path}',cost_definition=CostConstant.phone_otp,operation_id=mcp_operation_id,as_tool=True)
+        @BaseHTTPRessource.Post('/otp/{template:path}',cost_definition=CostConstant.phone_otp,operation_id=mcp_operation_id,to_mcp_tool=True)
         async def voice_relay_otp(self,twilio:Annotated[TwilioAccountMiniService,Depends(profile_query)], template: Annotated[PhoneTemplate,Depends(get_template)], otpModel: OTPModel, request: Request,response:Response,cost:Annotated[SimpleTaskCost,Depends(SimpleTaskCost)],taskManager: Annotated[TaskManager, Depends(TaskManager)],profile:str=Depends(profile_query), wait_timeout: int | float = Depends(wait_timeout_query),authPermission=Depends(get_auth_permission)):
             
             _, body = template.build(otpModel.content, ...,True)
@@ -93,7 +93,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         @LockService(AssetService,ProfileService,TwilioService,CeleryService,lockType='reader',check_status=False,as_manager=True)
         @UseRoles([Role.MFA_OTP,Role.TWILIO],options=[MustHave(Role.ASSETS),MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
         @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio'),MiniServiceInjectorPipe(CeleryService,'channel'),CeleryTaskPipe,RegisterSchedulerPipe,TemplateParamsPipe('phone', 'xml'),ContentIndexPipe(),TemplateValidationInjectionPipe('phone','data','index',True),ContactToInfoPipe('phone','to'), TwilioPhoneNumberPipe('default'))
-        @BaseHTTPRessource.HTTPRoute('/template/{profile}/{template:path}/', methods=[HTTPMethod.POST], cost_definition=CostConstant.phone_twiml,operation_id=mcp_operation_id,as_tool=True)
+        @BaseHTTPRessource.HTTPRoute('/template/{profile}/{template:path}/', methods=[HTTPMethod.POST], cost_definition=CostConstant.phone_twiml,operation_id=mcp_operation_id,to_mcp_tool=True)
         async def voice_template(self,profile:str,twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],channel:Annotated[ChannelMiniService,Depends(get_profile)],template: Annotated[PhoneTemplate,Depends(get_template)], scheduler: CallTemplateSchedulerModel,cost:Annotated[CallCost,Depends(CallCost)], request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)] ,taskManager: Annotated[TaskManager, Depends(TaskManager)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
             
             for content in scheduler.content:
@@ -119,7 +119,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         @UsePipe(TemplateParamsPipe('phone','xml',True))
         @UsePermission(MCPPermission,JWTAssetObjectPermission('sms','xml',accept_none_template=True))
         @UseRoles([Role.ADMIN,Role.TWILIO],options=[BypassRole(Role.ADMIN),MustHave(Role.ASSETS),MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
-        @BaseHTTPRessource.HTTPRoute('/template/{template:path}',methods=[HTTPMethod.OPTIONS],mcp_operation_id=mcp_operation_id,as_tool=True)
+        @BaseHTTPRessource.HTTPRoute('/template/{template:path}',methods=[HTTPMethod.OPTIONS],mcp_operation_id=mcp_operation_id,to_mcp_tool=True)
         def get_template_schema(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission),template:str='',wait_timeout: int | float = Depends(wait_timeout_query)):
             assetService = Get(AssetService)
             schemas = assetService.get_schema('phone')
@@ -187,7 +187,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseRoles([Role.RELAY,Role.TWILIO],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
     @LockService(ProfileService,TwilioService,CeleryService,lockType='reader',check_status=False,as_manager=True)
     @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio'),MiniServiceInjectorPipe(CeleryService,'channel'),CeleryTaskPipe,ContentIndexPipe,ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('default'))
-    @BaseHTTPRessource.HTTPRoute('/twiml/{profile}/', methods=[HTTPMethod.POST],  mount=False,cost_definition=CostConstant.phone_template,operation_id=mcp_operation_id,as_tool=True)
+    @BaseHTTPRessource.HTTPRoute('/twiml/{profile}/', methods=[HTTPMethod.POST],  mount=False,cost_definition=CostConstant.phone_template,operation_id=mcp_operation_id,to_mcp_tool=True)
     async def voice_twilio_twiml(self, scheduler: CallTwimlSchedulerModel,twilio:Annotated[TwilioAccountMiniService,Depends(profile_query)], channel:Annotated[ChannelMiniService,Depends(get_profile)],request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[CallCost,Depends(CallCost)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)], taskManager: Annotated[TaskManager, Depends(TaskManager)],profile:str=Depends(profile_query), authPermission=Depends(get_auth_permission)):
 
         for content in scheduler.content:
@@ -216,7 +216,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @PingService([ProfileService,TwilioService,CallService,CeleryService,TaskService],is_manager=True)
     @UseRoles([Role.RELAY,Role.TWILIO],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
     @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio'),MiniServiceInjectorPipe(CeleryService,'channel'),CeleryTaskPipe,ContentIndexPipe,ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('default'))
-    @BaseHTTPRessource.HTTPRoute('/custom/{profile}/', methods=[HTTPMethod.POST], cost_definition=CostConstant.phone_custom,as_tool=True,operation_id=mcp_operation_id)
+    @BaseHTTPRessource.HTTPRoute('/custom/{profile}/', methods=[HTTPMethod.POST], cost_definition=CostConstant.phone_custom,to_mcp_tool=True,operation_id=mcp_operation_id)
     async def voice_custom(self,profile:str,twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],channel:Annotated[ChannelMiniService,Depends(get_profile)], scheduler: CallCustomSchedulerModel, request: Request, response: Response,cost:Annotated[CallCost,Depends(CallCost)], broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager: Annotated[TaskManager, Depends(TaskManager)], authPermission=Depends(get_auth_permission)):
         for content in scheduler.content:
             details = content.model_dump(

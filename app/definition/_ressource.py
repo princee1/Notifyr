@@ -272,7 +272,7 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
 
     @staticmethod
     def HTTPRoute(path: str, methods: Iterable[HTTPMethod] | HTTPMethod = [HTTPMethod.POST],cost_definition:str=None, operation_id: str | OperationIDFactory = None, dependencies: Sequence[Depends]|List[Depends] = None, response_model: Any = None, response_description: str = "Successful Response",
-                  responses: Dict[int | str, Dict[str, Any]] | None = None,as_tool:bool=False,tags:List[str]=None,
+                  responses: Dict[int | str, Dict[str, Any]] | None = None,to_mcp_tool:bool=False,tags:List[str]=None,
                   deprecated: bool | None = None, mount: bool = True,response_class:type[Response] =None):
         
         def decorator(func: Callable):
@@ -295,7 +295,7 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
             func.meta['limit_exempt'] = False
             func.meta['shared'] = None
             func.meta['default_role'] = True
-            func.meta['as_tool'] = as_tool
+            func.meta['to_mcp_tool'] = to_mcp_tool
             func.meta['tags'] = _tags
             func.meta['cost_definition_name'] = cost_definition
             func.meta['cost_definition'] = {} if cost_definition == None else costService.fetch_definition(cost_definition)
@@ -305,7 +305,7 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
             if not is_mount:
                 return func
             
-            if as_tool:
+            if to_mcp_tool:
                 Helper.add_tool_callback(func)
 
             class_name = Helper.get_class_name_from_method(func)

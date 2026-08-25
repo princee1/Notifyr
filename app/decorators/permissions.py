@@ -390,7 +390,7 @@ class MCPPermission(Permission):
         if not getattr(request.state, 'from_mcp_user', False):
             return True
 
-        if not func_meta.get('as_tool',False):
+        if not func_meta.get('to_mcp_tool',False):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail='Function is not available as a tool')
     
         if not (operation_id:=func_meta.get('operation_id',None)):

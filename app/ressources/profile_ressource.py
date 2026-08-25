@@ -191,7 +191,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UsePermission(ProfilePermission(True),MCPPermission)
     @LockService(ProfileService,lockType='reader',as_manager=False,motor_fallback=True)
     @UseRoles([Role.PUBLIC],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
-    @BaseHTTPRessource.HTTPRoute('/{profile:path}',methods=[HTTPMethod.GET],as_tool=True,operation_id='get_profile_information')
+    @BaseHTTPRessource.HTTPRoute('/{profile:path}',methods=[HTTPMethod.GET],to_mcp_tool=True,operation_id='get_profile_information')
     async def read_profile(self,profile:str,request:Request, response:Response,mongoFilter:Optional[MongoFindFilter],source:SourceMode=Depends(source_mode_query), authPermission:AuthPermission=Depends(get_auth_permission)):
         match source:
             case 'database':
@@ -232,7 +232,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'service'),)
     @LockService(ProfileService,'reader',as_manager=True,miniLockType='reader')
     @UseRoles([Role.PUBLIC],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
-    @BaseHTTPRessource.HTTPRoute('/errors/{profile}/',methods=[HTTPMethod.GET],as_tool=True,operation_id='get_profile_errors')
+    @BaseHTTPRessource.HTTPRoute('/errors/{profile}/',methods=[HTTPMethod.GET],to_mcp_tool=True,operation_id='get_profile_errors')
     async def read_error(self,profile:str,error:ErrorProfileMap,service:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response, authPermission:AuthPermission=Depends(get_auth_permission)):
         return await service.fetch_errors(**error.model_dump())
 

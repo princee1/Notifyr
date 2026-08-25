@@ -70,7 +70,7 @@ class FuncMetaData(TypedDict):
     limit_obj:dict
     limit_exempt:bool=False
     default_role:bool =True
-    as_tool:bool = False
+    to_mcp_tool:bool = False
     tags:list[str]
     cost_definition:SimpleTaskCostDefinition
     cost_definition_name:str
