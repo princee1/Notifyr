@@ -457,9 +457,9 @@ services:
       - SKIP_FIX_PERMS=1
     volumes:
       - redis-data:/data
-      - ./scripts/redis-entrypoint.sh:/entrypoint.sh
-      - ./scripts/ncs-lib.lua:/functions/ncs-lib.lua
-      - ./scripts/credit-deduction.lua:/functions/credit-deduction.lua
+      - ./scripts/entrypoint/redis-entrypoint.sh:/entrypoint.sh
+      - ./scripts/credit/ncs-lib.lua:/functions/ncs-lib.lua
+      - ./scripts/credit/credit-deduction.lua:/functions/credit-deduction.lua
 
     networks:
       - data_net
@@ -477,8 +477,8 @@ services:
         target: /run/secrets/mongo-keyfile.txt
     volumes:
       - mongo-data:/data/db
-      - ./scripts/mongo-entrypoint.sh:/usr/local/bin/mongo-entrypoint.sh
-      - ./scripts/mongo-init.sh:/docker-entrypoint-initdb.d/mongo-init.sh
+      - ./scripts/entrypoint/mongo-entrypoint.sh:/usr/local/bin/mongo-entrypoint.sh
+      - ./scripts/init/mongo-init.sh:/docker-entrypoint-initdb.d/mongo-init.sh
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:?Mongo root user must be set}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?Mongo root password must be set}

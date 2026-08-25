@@ -25,7 +25,7 @@ COPY --from=builder /usr/bin/make /usr/bin/make
 
 COPY --from=builder Makefile Makefile
 
-COPY --chmod=755 ./scripts/spawn_celery_worker.sh ./spawn_celery_worker.sh
+COPY --chmod=755 ./scripts/celery/spawn_celery_worker.sh ./spawn_celery_worker.sh
 
 RUN pip install gevent
 
