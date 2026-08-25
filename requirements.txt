@@ -24,6 +24,7 @@ email-validator==2.3.0
 emoji==2.14.0
 fastapi==0.135.0
 fastapi-cache2==0.2.2
+fastapi-mcp==0.4.0
 flower==2.0.1
 grpcio==1.62.0
 grpcio-tools==1.62.0

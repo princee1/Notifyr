@@ -4,33 +4,34 @@ import zipfile
 from aiohttp_retry import List
 from fastapi import BackgroundTasks, Body, Depends, File, HTTPException, Query, Request, Response, UploadFile,status
 from fastapi.responses import StreamingResponse
-from app.classes.auth_permission import AuthPermission,Role, filter_asset_permission
+from app.classes.auth_permission import AuthPermission, MustHaveWhen,Role, filter_asset_permission
 from app.cost.file_cost import FileCost
 from app.cost.object_cost import ObjectCost
+from app.errors.depends_error import DataSourceNotSupportedError
 from app.manager.merchant_manager import Merchant
 from app.models.file_model import FileResponseUploadModel, UriMetadata
 from app.models.object_model import ObjectResponseUploadModel, ObjectS3ResponseModel
-from app.classes.template import Extension, HTMLTemplate, PhoneTemplate, SMSTemplate, TemplateNotFoundError
+from app.classes.template import Extension, HTMLTemplate, PhoneTemplate, SMSTemplate, Template, TemplateNotFoundError
 from app.container import Get, InjectInMethod
 from app.decorators.guards import GlobalsTemplateGuard, UploadFilesGuard
 from app.decorators.handlers import AsyncIOHandler, CostHandler, FileHandler, FileNamingHandler, RedisHandler, S3Handler, ServiceAvailabilityHandler, TemplateHandler, UploadFileHandler, VaultHandler
 from app.decorators.interceptors import DataCostInterceptor, ResponseCacheInterceptor
 from app.decorators.permissions import AdminPermission, JWTAssetObjectPermission, JWTRouteHTTPPermission
-from app.decorators.pipes import MerchantPipe, ObjectS3OperationResponsePipe, TemplateParamsPipe, ValidFreeInputTemplatePipe
+from app.decorators.pipes import MerchantPipe, ObjectS3OperationResponsePipe, SanitizePathParameterPipe, TemplateParamsPipe, ValidFreeInputTemplatePipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, LockService
 from app.definition._service import StateProtocol
 from app.depends.class_dep import ObjectsSearch
-from app.depends.dependencies import get_auth_permission
+from app.depends.dependencies import get_auth_permission, is_mcp_request
 from app.depends.res_cache import MinioResponseCache
 from app.manager.broker_manager import Broker
 from app.services.assets_service import EXTENSION_TO_ASSET_TYPE, AssetConfusionError, AssetService, AssetType, AssetTypeNotAllowedError
 from app.services.cost_service import CostService
-from app.services.database.object_service import ObjectS3Service,Object
+from app.services.database.object_service import ObjectNotFoundError, ObjectS3Service,Object
 from app.services.file.file_service import FileService
 from app.services.vault_service import VaultService
 from app.utils.constant import SECONDS_IN_AN_HOUR as HOUR, CostConstant, MinioConstant
 from app.utils.fileIO import ExtensionNotAllowedError, MultipleExtensionError
-from app.depends.variables import force_update_query
+from app.depends.variables import SourceMode, force_update_query, source_mode_query,mcp_configuration
 from app.utils.helper import b64_encode
 from app.utils.toolbox import RunInThreadPool
 
@@ -82,6 +83,7 @@ class S3ObjectRessource(BaseHTTPRessource):
         self.is_asset_pipe= TemplateParamsPipe(accept_none=False,inject_asset_routes=True)
         self.free_input_pipe = ValidFreeInputTemplatePipe(False,True)
         self.copy_interceptor = DataCostInterceptor(CostConstant.OBJECT_CREDIT)
+        self.single_object_read_input =  ValidFreeInputTemplatePipe(False,False)
 
     async def upload(self, file:UploadFile | dict,encrypt:bool=False):
         
@@ -224,44 +226,51 @@ class S3ObjectRessource(BaseHTTPRessource):
             
 
     @PingService([ObjectS3Service,VaultService])
-    @UseRoles(roles=[Role.PUBLIC])
+    @UsePipe(ObjectS3OperationResponsePipe,before=False)
+    @UsePipe(SanitizePathParameterPipe({},template=True))
+    @UsePermission(JWTAssetObjectPermission(accept_none_template=True))
     @UseHandler(S3Handler,VaultHandler,FileNamingHandler,TemplateHandler)
-    @UsePermission(JWTAssetObjectPermission)
-    @UsePipe(ObjectS3OperationResponsePipe,before=False)
-    @UseGuard(GlobalsTemplateGuard('We cannot read the object globals.json at this route please use refer to properties/global route'))
+    @UseRoles([Role.PUBLIC],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
     @LockService(VaultService,ObjectS3Service,AssetService,lockType='reader',check_status=False)
-    @UsePipe(ValidFreeInputTemplatePipe(False,False))
     @UseInterceptor(ResponseCacheInterceptor('cache',MinioResponseCache,raise_default_exception=False),mount=False)
-    @BaseHTTPRessource.HTTPRoute('/single/{template:path}',methods=[HTTPMethod.GET],response_model=ObjectS3ResponseModel)
-    async def read_object(self,template:str,request:Request,response:Response,backgroundTasks:BackgroundTasks,objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],authPermission:AuthPermission=Depends(get_auth_permission)):
-        ext = self.fileService.get_extension(template)
+    @UseGuard(GlobalsTemplateGuard('We cannot read the object globals.json at this route please use refer to properties/global route'))
+    @BaseHTTPRessource.HTTPRoute('/{template:path}/',methods=[HTTPMethod.GET],response_model=ObjectS3ResponseModel,operation_id='read_template_content_and_information',to_mcp_tool=True)
+    async def read_object(self,request:Request,response:Response,backgroundTasks:BackgroundTasks,objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],source:SourceMode=Depends(source_mode_query),template='',is_mcp:bool=Depends(is_mcp_request),authPermission:AuthPermission=Depends(get_auth_permission)):
 
-        if objectsSearch.assets and ext==Extension.HTML.value:
-            asset_routes = await self.is_asset_pipe.pipe(template)
-            template:HTMLTemplate = asset_routes[template]
-            content = template.content
+        match source:
+            case 'memory':
+                if template == '':
+                    temp = self.assetService.objects.copy()
+                    objects:list[Object] = []
+                    for o in temp:
+                        if self.fileService.file_matching(o.object_name,objectsSearch.match):
+                            objects.append(o)
+                else:
+                    self.single_object_read_input.pipe(template,objectsSearch)
+                    asset_routes = await self.is_asset_pipe.pipe(template)
+                    template:Template = asset_routes[template]
+                    content = template.content
+            case 'database':
+                if template == '' or not self.fileService.soft_is_file(template):
+                    template= template if (not template.endswith('/') or template == '') else f'{template}/'
+                    objects = await RunInThreadPool(self.objectS3Service.list_objects)(template,objectsSearch.recursive,objectsSearch.match,
+                                                                                       include_delete_marker=not is_mcp)
+                else:
+                    objects = await RunInThreadPool(self.objectS3Service.read_object)(template,objectsSearch.version_id) 
+                    content = objects.read().decode()
+                    objects.close()
+            case _:
+                raise DataSourceNotSupportedError(source,['database','memory'])
+
+        if template == '':
+            if not objects:
+                raise ObjectNotFoundError(f'Object not found with prefix: "{template}" and search params {objectsSearch}')
+            
+            objects = [o for o in objects if self.assetService._raw_verify_asset_permission(authPermission,o.object_name,_raise=False)]
+            return {'meta':objects}
         else:
-            objects = await RunInThreadPool(self.objectS3Service.read_object)(template,objectsSearch.version_id) 
-            content = objects.read().decode()
-            objects.close()
-
-        content = b64_encode(content)
-        return {'content':content}
-
-
-    @PingService([ObjectS3Service])
-    @UseRoles(roles=[Role.PUBLIC])
-    @UsePipe(ObjectS3OperationResponsePipe,before=False)
-    @LockService(ObjectS3Service,AssetService,lockType='reader',check_status=False)
-    @BaseHTTPRessource.HTTPRoute('/all/',methods=[HTTPMethod.GET])
-    def list_objects_stat(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
-        objects = self.assetService.objects.copy()
-        if authPermission != None:
-            filter_asset_permission(authPermission)
-            objects = [o for o in objects 
-                    if self.assetService._raw_verify_asset_permission(authPermission,o.object_name,_raise=False)
-                    ]
-        return {'meta':objects}
+            content = b64_encode(content)
+            return {'content':content}
 
                 
     @Throttle(normal=(300,200))
@@ -272,7 +281,7 @@ class S3ObjectRessource(BaseHTTPRessource):
     @UseGuard(GlobalsTemplateGuard,UploadFilesGuard(1,allowed_extensions=['.xml','.html','.css','.scss']))
     @UseHandler(S3Handler,VaultHandler,TemplateHandler,FileNamingHandler,CostHandler,UploadFileHandler,RedisHandler)
     @UsePipe(ValidFreeInputTemplatePipe(False,False,{'.xml','.html','.css','.scss'},{'email','phone','sms'}),MerchantPipe())
-    @BaseHTTPRessource.HTTPRoute('/modify/{template:path}',methods=[HTTPMethod.PUT],response_model=ObjectResponseUploadModel,mount=False)
+    @BaseHTTPRessource.HTTPRoute('/{template:path}',methods=[HTTPMethod.PUT],response_model=ObjectResponseUploadModel,mount=False)
     async def modify_object(self,template:str,request:Request,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[FileCost,Depends(FileCost)],merchant:Annotated[Merchant,Depends(Merchant)], objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],files:List[UploadFile]=File(...),authPermission:AuthPermission=Depends(get_auth_permission)):
         meta:Object = await self.objectS3Service.stat_objet(template,objectsSearch.version_id,True)
         encrypted = meta.metadata.get(MinioConstant.ENCRYPTED_KEY,False) if meta.metadata else False
@@ -309,7 +318,7 @@ class S3ObjectRessource(BaseHTTPRessource):
     @UseHandler(S3Handler,FileNamingHandler,CostHandler,RedisHandler)
     @UsePipe(ValidFreeInputTemplatePipe(False,False),pipe_restore,MerchantPipe())
     @LockService(ObjectS3Service,AssetService,lockType='reader',check_status=False)
-    @BaseHTTPRessource.HTTPRoute('/copy/{template:path}/to/{destination_template:path}',methods=[HTTPMethod.PATCH],response_model=ObjectS3ResponseModel,mount=False)
+    @BaseHTTPRessource.HTTPRoute('/{template:path}/to/{destination_template:path}/',methods=[HTTPMethod.PATCH],response_model=ObjectS3ResponseModel,mount=False)
     async def copy_object(self,template:str,request:Request,response:Response,destination_template:str,cost:Annotated[ObjectCost,Depends(ObjectCost)],merchant:Annotated[Merchant,Depends(Merchant)],broker:Annotated[Broker,Depends(Broker)],objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],move:bool = Query(False),restore:bool = Query(False),authPermission:AuthPermission=Depends(get_auth_permission)):
 
         self.free_input_pipe.pipe(destination_template,objectsSearch)

@@ -2,6 +2,7 @@ import asyncio
 from typing import Any, Callable
 
 from fastapi import HTTPException, Response
+from app.classes.auth_permission import FuncMetaData
 from app.utils.constant import SpecialKeyParameterConstant
 from app.utils.helper import APIFilterInject,AsyncAPIFilterInject, SkipCode
 from asgiref.sync import sync_to_async
@@ -120,6 +121,8 @@ class Interceptor(DecoratorObj):
         ...
     
     async def intercept(self,function:Callable,*args,**kwargs):
+        meta:FuncMetaData = getattr(function,SpecialKeyParameterConstant.FUNC_NAME_SPECIAL_KEY_PARAMETER,{})
+
         try:
             if self.filter_before_params:r = APIFilterInject(self.intercept_before)(*args,**kwargs) 
             else:r=self.intercept_before(*args,**kwargs)

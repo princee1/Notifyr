@@ -359,12 +359,14 @@ class CampaignQuery:
 
 class ObjectsSearch:
 
-    def __init__(self,recursive:bool=Query(True),match:str=Query(None),version_id:str=Query(None),assets:bool=Query(False)):
+    def __init__(self,recursive:bool=Query(True),match:str=Query(None),version_id:str=Query(None)):
         self.recursive = recursive
         self.match = match
         self.version_id = version_id
-        self.assets = assets
         self.is_file:bool = None
+
+    def __str__(self):
+        return f'ObjectsSearch(recursive={self.recursive},match={self.match},version_id={self.version_id},is_file={self.is_file})'
 
 
 class FileDataIngestQuery(ToPydanticModelInterface):

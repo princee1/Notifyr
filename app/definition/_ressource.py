@@ -2,12 +2,13 @@
 The `BaseResource` class initializes with a `container` attribute assigned from the `CONTAINER`
 instance imported from `container`.
 """
-from typing import Any, Callable, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, TypeVar, Type, TypedDict, get_args
+from typing import Any, Callable, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, TypeVar, Type, TypedDict, get_args, overload
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.datastructures import Default
 from pydantic import BaseModel
 from app.classes.cost_definition import SimpleTaskCostDefinition
+from app.classes.operation_id import OperationID
 from app.classes.profiles import ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
 from app.definition._ws import W
 from app.depends.dependencies import get_auth_permission
@@ -27,28 +28,23 @@ from app.classes.auth_permission import AuthPermission, ClientTypeLiteral, FuncM
 import asyncio
 from asgiref.sync import sync_to_async
 import warnings
+from app.classes.operation_id import OperationIDFactory,MCPOperationID,SimpleOperationID
 
 configService: ConfigService = Get(ConfigService)
 costService:CostService = Get(CostService)
 workerService:WorkerService = Get(WorkerService)
 
-RequestLimit = 0
-
-
 PING_SERVICE_TOUCH = 0.25
 STATUS_LOCK_TOUCH = 0.50
 PATH_SEPARATOR = "/"
 
-
 MIN_TIMEOUT = -1
 MS_TO_SEC = 1000
-
 
 class MountMetaData(TypedDict):
     app: StaticFiles
     name: str
     path: str
-
 
 class ClassMetaData(TypedDict):
     prefix: str
@@ -60,8 +56,6 @@ class ClassMetaData(TypedDict):
     ressource_id:str
     parent:list[Type]
     classname:str
-
-
 
 class NoFunctionProvidedWarning(UserWarning):
     pass
@@ -92,8 +86,29 @@ EVENTS: dict[str, set[str]] = {}
 """
 This variable contains the functions that will be an events listener
 """
+
+TOOLS:dict[str,set[str]] = {}
+"""
+This variable contains the functions that will used as an ai tools
+"""
 ################################################################                           #########################################################
 
+class HTTPMethod(Enum):
+    POST = 'POST'
+    GET = 'GET'
+    UPDATE = 'UPDATE'
+    DELETE = 'DELETE'
+    PUT = 'PUT'
+    PATCH = 'PATCH'
+    OPTIONS = 'OPTIONS'
+    HEAD = 'HEAD'
+
+    @staticmethod
+    def to_strs(methods: list[Any] | Any):
+        if isinstance(methods, HTTPMethod):
+            return [methods.value]
+        methods: list[HTTPMethod] = methods
+        return [method.value for method in methods]
 
 class Helper:
 
@@ -155,6 +170,14 @@ class Helper:
 
         DECORATOR_METADATA[class_name][func.__name__].append(
             (wrapper, priority.value + touch))
+
+    @staticmethod
+    def add_tool_callback(func:Callable):
+        class_name = Helper.get_class_name_from_method(func)
+        if class_name not in TOOLS:
+            TOOLS[class_name] = set()
+        
+        TOOLS[class_name].add(func.meta['operation_id'])
 
     @staticmethod
     def filter_type_function(functions, flag=True):
@@ -224,26 +247,9 @@ class Helper:
 
         excp_headers.update(response.headers)
         return excp_headers
+
+
 ################################################################                           #########################################################
-
-
-class HTTPMethod(Enum):
-    POST = 'POST'
-    GET = 'GET'
-    UPDATE = 'UPDATE'
-    DELETE = 'DELETE'
-    PUT = 'PUT'
-    PATCH = 'PATCH'
-    OPTIONS = 'OPTIONS'
-    HEAD = 'HEAD'
-
-    @staticmethod
-    def to_strs(methods: list[Any] | Any):
-        if isinstance(methods, HTTPMethod):
-            return [methods.value]
-        methods: list[HTTPMethod] = methods
-        return [method.value for method in methods]
-
 
 class HTTPExceptionParams(TypedDict):
     status_code: int
@@ -265,21 +271,20 @@ class HTTPRessourceMetaClass(type):
 class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
 
     @staticmethod
-    def _build_operation_id(route_name: str, prefix: str, method_name: list[HTTPMethod] | HTTPMethod, operation_id: str) -> str:
-        if operation_id != None:
-            return operation_id
-
-        m = HTTPMethod.to_strs(method_name) if isinstance(
-            method_name, list) else [method_name]
-        return route_name.replace(PATH_SEPARATOR, "_") + '_'.join(m)
-
-    @staticmethod
-    def HTTPRoute(path: str, methods: Iterable[HTTPMethod] | HTTPMethod = [HTTPMethod.POST],cost_definition:str=None, operation_id: str = None, dependencies: Sequence[Depends]|List[Depends] = None, response_model: Any = None, response_description: str = "Successful Response",
-                  responses: Dict[int | str, Dict[str, Any]] | None = None,
+    def HTTPRoute(path: str, methods: Iterable[HTTPMethod] | HTTPMethod = [HTTPMethod.POST],cost_definition:str=None, operation_id: str | OperationIDFactory = None, dependencies: Sequence[Depends]|List[Depends] = None, response_model: Any = None, response_description: str = "Successful Response",
+                  responses: Dict[int | str, Dict[str, Any]] | None = None,to_mcp_tool:bool=False,tags:List[str]=None,
                   deprecated: bool | None = None, mount: bool = True,response_class:type[Response] =None):
+        
         def decorator(func: Callable):
-            computed_operation_id = BaseHTTPRessource._build_operation_id(
-                path, None, methods, operation_id)
+            func_name = func.__name__
+            if isinstance(methods,HTTPMethod):
+                _methods = [methods]
+            _methods = HTTPMethod.to_strs()
+
+            operationId = SimpleOperationID(None,operation_id) if isinstance(operation_id,str) else operation_id
+            computed_operation_id = operationId(path,func_name,_methods)
+
+            _tags = list(set(tags or []))
 
             setattr(func, 'meta', FuncMetaData())
             func.meta['operation_id'] = computed_operation_id
@@ -290,6 +295,8 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
             func.meta['limit_exempt'] = False
             func.meta['shared'] = None
             func.meta['default_role'] = True
+            func.meta['to_mcp_tool'] = to_mcp_tool
+            func.meta['tags'] = _tags
             func.meta['cost_definition_name'] = cost_definition
             func.meta['cost_definition'] = {} if cost_definition == None else costService.fetch_definition(cost_definition)
 
@@ -298,7 +305,11 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
             if not is_mount:
                 return func
             
+            if to_mcp_tool:
+                Helper.add_tool_callback(func)
+
             class_name = Helper.get_class_name_from_method(func)
+
             kwargs = {
                 'path': path,
                 'endpoint': func.__name__,
@@ -306,11 +317,12 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
                 'dependencies': dependencies,
                 'summary': func.__doc__,
                 'response_model': response_model,
-                'methods': HTTPMethod.to_strs(methods),
+                'methods': _methods,
                 'response_description': response_description,
                 'response_class': response_class or  Default(JSONResponse),
                 'responses': responses,
                 'deprecated': deprecated,
+                'tags': func.meta['tags']
             }
             if class_name not in ROUTES:
                 ROUTES[class_name] = []
@@ -413,6 +425,7 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
         RESSOURCES[cls.__name__] = cls
         # ROUTES[cls.__name__] = []
         setattr(cls, 'meta', {})
+
         super().__init_subclass__()
 
     def __init__(self, dependencies=None, router_default_response: dict = None) -> None:
@@ -558,12 +571,12 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
     permission_function = Helper.filter_type_function(permission_function)
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, UsePermission, permission_function)
+        cls = common_class_decorator(func, UsePermission, permission_function,default_error=default_error,mount=mount)
         if cls != None:
             return cls
 
         class_name = Helper.get_class_name_from_method(func)
-        Helper.add_protected_route_metadata(class_name, func.meta['operation_id'])
+        Helper.add_protected_route_metadata(class_name, func.meta['operation_id'],)
 
         def wrapper(function: Callable):
 
@@ -619,7 +632,7 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
     return decorator
 
 
-def UseHandler(*handler_function: Callable[..., Exception | None | Any] | Type[Handler] | Handler, default_error: HTTPExceptionParams = None,mount=True):
+def UseHandler(*handler_function: Callable[..., Exception | None | Any] | Type[Handler] | Handler, default_error: HTTPExceptionParams = None,inject_meta=False,mount=True):
     # NOTE it is not always necessary to use this decorator, especially when the function is costly in computation
     if not mount:
         def decorator(func:Callable):
@@ -634,19 +647,19 @@ def UseHandler(*handler_function: Callable[..., Exception | None | Any] | Type[H
     handler_function = Helper.filter_type_function(handler_function)
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, UseHandler, handler_function,default_error=default_error,mount=mount)
+        cls = common_class_decorator(func, UseHandler, handler_function,default_error=default_error,mount=mount,inject_meta=inject_meta)
         if cls != None:
             return cls
 
         wrapper = Helper.stack_decorator(
-            handler_function, Handler, empty_decorator, default_error, HandlerDefaultException)
+            handler_function, Handler, empty_decorator, default_error, HandlerDefaultException,inject_meta)
 
         Helper.appends_funcs_callback(func, wrapper, DecoratorPriority.HANDLER)
         return func
     return decorator
 
 
-def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Guard, default_error: HTTPExceptionParams = None,mount=True):
+def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Guard, default_error: HTTPExceptionParams = None,inject_meta=False,mount=True):
     # INFO guards only purpose is to validate the request
     # NOTE:  be mindful of the order
     if not mount:
@@ -661,7 +674,7 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
     guard_function = Helper.filter_type_function(guard_function)
 
     def decorator(func: Callable | Type[R]) -> Callable | Type[R]:
-        cls = common_class_decorator(func, UseGuard, guard_function,default_error=default_error,mount=mount)
+        cls = common_class_decorator(func, UseGuard, guard_function,default_error=default_error,mount=mount,inject_meta=inject_meta)
         if cls != None:
             return cls
 
@@ -706,7 +719,7 @@ def UseGuard(*guard_function: Callable[..., tuple[bool, str]] | Type[Guard] | Gu
     return decorator
 
 
-def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]] | Any] | Type[Pipe] | Pipe, before: bool = True, default_error: HTTPExceptionParams = None,mount=True):
+def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]] | Any] | Type[Pipe] | Pipe, before: bool = True, default_error: HTTPExceptionParams = None,inject_meta=False,mount=True):
     """
     be mindful of the order which the pipes function will be called, the list can either be before or after, you can add another decorator, each function must return the same type of value
     """
@@ -725,7 +738,7 @@ def UsePipe(*pipe_function: Callable[..., tuple[Iterable[Any], Mapping[str, Any]
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(
-            func, UsePipe, pipe_function, before=before,default_error=default_error,mount=mount)
+            func, UsePipe, pipe_function, before=before,default_error=default_error,mount=mount,inject_meta=inject_meta)
         if cls != None:
             return cls
 
@@ -806,9 +819,10 @@ def UseInterceptor(*interceptor_function: Callable[[Iterable[Any], Mapping[str, 
     return decorator
 
 
-def UseRoles(roles: list[Role] = [], excludes: list[Role] = [], options: list[Callable] = []):  # TODO options
+def UseRoles(roles: list[Role] = [], excludes: list[Role] = [], options: list[Callable] = [],tags:list[Role]=[]):  # TODO options
+    
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, UseRoles, None, roles=roles)
+        cls = common_class_decorator(func, UseRoles, None, roles=roles, excludes=excludes, options=options)
         if cls != None:
             return cls
         roles_ = set(roles)
@@ -829,6 +843,8 @@ def UseRoles(roles: list[Role] = [], excludes: list[Role] = [], options: list[Ca
             roles_ = meta['roles']
             meta['excludes'].update(excludes_.difference(roles_))
             meta['options'].extend(options)
+            meta['tags'].extend([r.value for r in roles_ if r.value not in meta['tags']])
+            meta['tags'].extend([r.value for r in tags if r.value not in meta['tags']])
 
         return func
     return decorator

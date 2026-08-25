@@ -4,7 +4,7 @@ from fastapi import Body, Depends, Header, Request, Response,status
 from fastapi.responses import StreamingResponse
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import ConfigDict
-from app.classes.auth_permission import AuthPermission, ClientType, Role
+from app.classes.auth_permission import AuthPermission, ClientType, MustHaveWhen, Role
 from app.classes.conversation import Message, Reply, Session, User
 from app.classes.embeddings import EmbeddingModel, EmbeddingWrapper
 from app.classes.mongo import MongoFindFilter
@@ -12,7 +12,7 @@ from app.container import InjectInMethod
 from app.decorators.guards import LLMProviderGuard
 from app.decorators.handlers import AgentHandler, AgenticHandler, DataSourceHandler, LLMHandler, AsyncIOHandler, CostHandler, GrpcHandler, MiniServiceHandler, MotorErrorHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler
 from app.decorators.interceptors import DataCostInterceptor
-from app.decorators.permissions import AdminPermission, AgentPermission, ClientTypesPermission, JWTRouteHTTPPermission
+from app.decorators.permissions import AdminPermission, AgentPermission, ClientTypesPermission, JWTRouteHTTPPermission, MCPPermission
 from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe, SanitizePathParameterPipe
 from app.definition._cost import DataCost
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles, LockService
@@ -38,6 +38,8 @@ from app.utils.constant import AgenticConstant, CostConstant, LLMProviderConstan
 from app.utils.helper import subset_model
 from app.services  import RemoteAgentService
 from app.models.odm.llm_model import LLMProfileModel
+from app.classes.operation_id import MCPOperationID
+from app.depends.variables import mcp_configuration
 
 
 base_attr = {'id','revision_id','created_at','last_modified','version'}
@@ -134,15 +136,15 @@ class AgentsRessource(BaseHTTPRessource):
         )
         broker.propagate(StateProtocol(name=RemoteAgentService,to_build=True,to_destroy=True))
         return agentModel
-
-    @UseRoles([Role.PUBLIC])     
-    @UsePermission(AgentPermission(True))
+    
     @UsePipe(DocumentFriendlyPipe,before=False)
     @UseHandler(MiniServiceHandler,DataSourceHandler)
+    @UsePermission(AgentPermission(True),MCPPermission)
     @LockService(LLMService,lockType='reader',as_manager=False)
     @UsePipe(SanitizePathParameterPipe({},profile=True,agent=True))
-    @LockService(RemoteAgentMiniService,lockType='reader',as_manager=False)
-    @BaseHTTPRessource.HTTPRoute('/{agent:path}/',methods=[HTTPMethod.GET])
+    @LockService(RemoteAgentService,lockType='reader',as_manager=False)
+    @UseRoles([Role.PUBLIC],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
+    @BaseHTTPRessource.HTTPRoute('/{agent:path}/',methods=[HTTPMethod.GET],to_mcp_tool=True,operation_id='read_agent_information')
     async def read_agent(self,agent:str,request:Request,response:Response,mongoFilter:Optional[MongoFindFilter],profile:str=Depends(get_agent),source:SourceMode=Depends(source_mode_query), authPermission:AuthPermission=Depends(get_auth_permission)):
         match source:
             case 'database':
@@ -226,14 +228,14 @@ class AgentsRessource(BaseHTTPRessource):
         broker.propagate(MiniStateProtocol(name=RemoteAgentService,to_build=True,to_destroy=True,id=agent))
         return agentModel
 
-    @UseRoles([Role.PUBLIC])        
     @Throttle(uniform=(30,60))
-    @UsePermission(AgentPermission)
+    @UseRoles([Role.AGENT,Role.ADMIN])
     @LockService(LLMService,lockType='reader',as_manager=False)
     @UsePipe(MiniServiceInjectorPipe(RemoteAgentService,'agent'))
     @UseHandler(LLMHandler,AgenticHandler,GrpcHandler,AgentHandler)
     @UseLimiter('100/hour',cost={'Admin':1,'User':3},key_func='private')
     @LockService(RemoteAgentService,lockType='reader',as_manager=True,miniLockType='reader')
+    @UsePermission(ClientTypesPermission([ClientType.User,ClientType.Admin]),AgentPermission)
     @PingService([{'cls':RemoteAgentService,'kwargs':{'grpc':True}}],is_manager=True,infinite_wait=True)
     @BaseHTTPRessource.HTTPRoute('/prompt/{agent}/',methods=[HTTPMethod.POST],mount=False,response_model=Reply)
     async def prompt_playground(self,request:Request,agent:Annotated[RemoteAgentMiniService,Depends(get_agent)],prompt:PromptPlaygroundModel, response:Response,profile:str=Depends(get_agent),request_id:str = Depends(get_request_id),authPermission:AuthPermission= Depends(get_auth_permission)):
@@ -246,13 +248,13 @@ class AgentsRessource(BaseHTTPRessource):
         reply = answer_to_reply(answer)
         return reply
     
-    @UseRoles([Role.PUBLIC])
     @Throttle(uniform=(30,60))
+    @UseRoles([Role.AGENT,Role.ADMIN])
     @UsePipe(MiniServiceInjectorPipe(RemoteAgentService,'agent'))
     @UseHandler(LLMHandler,AgenticHandler,GrpcHandler,AgentHandler)
     @UseLimiter('100/hour',cost={'Admin':1,'User':3},key_func='private')
-    @UsePermission(ClientTypesPermission([ClientType.User,ClientType.Admin]),AgentPermission)
     @LockService(RemoteAgentService,lockType='reader',as_manager=True,miniLockType='reader')
+    @UsePermission(ClientTypesPermission([ClientType.User,ClientType.Admin]),AgentPermission)
     @PingService([{'cls':RemoteAgentService,'kwargs':{'grpc':True}}],is_manager=True,infinite_wait=True)
     @BaseHTTPRessource.HTTPRoute('/stream/prompt/{agent}/',methods=[HTTPMethod.POST],mount=False,response_class=EventSourceResponse)
     async def stream_prompt_playground(self,request:Request,response:Response,prompt:PromptPlaygroundModel,agent:Annotated[RemoteAgentMiniService,Depends(get_agent)],profile:str=Depends(get_agent),request_id:str = Depends(get_request_id),last_event_id: Annotated[int | None, Header()] = None,authPermission:AuthPermission= Depends(get_auth_permission))->AsyncIterable[ServerSentEvent]:

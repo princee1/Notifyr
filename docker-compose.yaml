@@ -171,6 +171,9 @@ services:
       - SECURITY_FLAG=${SECURITY_FLAG:-true}
       - INSTALL_DOCLING=${INSTALL_DOCLING:-false}
       - INSTALL_CRAWL4AI=${INSTALL_CRAWL4AI:-false}
+
+      - MCP_ENABLED=${MCP_ENABLED:-false}
+      - ALLOWED_TWO_LEVEL_AGENT=${ALLOWED_TWO_LEVEL_AGENT:-false}
     networks:
       - app_net
       - data_net

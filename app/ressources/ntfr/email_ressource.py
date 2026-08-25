@@ -1,7 +1,7 @@
 from typing import Annotated, Callable, Literal, get_args
 import aiohttp
 from aiohttp_retry import Tuple
-from app.classes.auth_permission import MustHave, Role
+from app.classes.auth_permission import BypassRole, MustHave, MustHaveWhen, Role
 from app.classes.email import MimeType, parse_mime_content
 from app.classes.mail_provider import get_email_provider_name
 from app.classes.template import CONTENT_HTML, CONTENT_TEXT, HTMLTemplate
@@ -10,10 +10,11 @@ from app.decorators.interceptors import RegisterBackgroundTaskInterceptor, TaskC
 from app.definition._service import BaseMiniService
 from app.definition._utils_decorator import Pipe
 from app.depends.class_dep import  EmailTracker
-from app.depends.funcs_dep import get_profile, get_template
+from app.depends.funcs_dep import get_agent, get_profile, get_template
 from app.interface.email import EmailSendInterface
 from app.manager.broker_manager import Broker
 from app.models.email_model import BaseEmailSchedulerModel, CustomEmailSchedulerModel, EmailTemplateSchedulerModel
+from app.services.agent.remote_agent_service import RemoteAgentMiniService, RemoteAgentService
 from app.services.worker.celery_service import CeleryService, ChannelMiniService
 from app.services.profile_service import ProfileService
 from app.services.setting_service import SettingService
@@ -31,9 +32,9 @@ from app.depends.variables import _wrap_checker, wait_timeout_query
 from app.services.worker.task_service import TaskService
 from app.utils.constant import CostConstant, StreamConstant
 from app.utils.globals import DIRECTORY_SEPARATOR,CAPABILITIES
-
 from app.services.assets_service import AssetService
-
+from app.depends.variables import mcp_configuration
+from app.classes.operation_id import MCPOperationID
 
 EMAIL_PREFIX = "email"
 
@@ -51,10 +52,10 @@ DEFAULT_RESPONSE = {
 @HTTPRessource(EMAIL_PREFIX)
 class EmailRessource(BaseHTTPRessource):
 
+    mcp_operation_id = MCPOperationID(EMAIL_PREFIX,action_word_map={'OPTIONS':'fetch','POST':'send'},parameter_relation_map={'template':'using','agent':'calling'})
     mime_type_query:Callable[[Request],str] = get_query_params('mime','both',raise_except=True,checker=_wrap_checker('mime', lambda v: v in get_args(MimeType), choices=list(get_args(MimeType))))
 
     #signature_query:Callable[[Request],str] = get_query_params("sign",None,False)
-
 
     @InjectInMethod()
     def __init__(self,emailReaderService:EmailReaderService, emailSender: EmailSenderService, configService: ConfigService, securityService: SecurityService,celeryService:CeleryService):
@@ -97,13 +98,13 @@ class EmailRessource(BaseHTTPRessource):
                 return {}
 
         @UseLimiter(limit_value="10/minutes")
-        @UseRoles([Role.PUBLIC])
-        @UsePermission(permissions.JWTAssetObjectPermission('email','html',accept_none_template=True))
-        @UsePipe(pipes.FilterAllowedSchemaPipe,before=False)
         @LockService(AssetService,lockType='reader')
+        @UsePipe(pipes.FilterAllowedSchemaPipe,before=False)
         @UsePipe(pipes.TemplateParamsPipe('email','html',True))
         @UseHandler(handlers.AsyncIOHandler,handlers.TemplateHandler)
-        @BaseHTTPRessource.HTTPRoute('/template/{template:path}',methods=[HTTPMethod.OPTIONS])
+        @UsePermission(permissions.JWTAssetObjectPermission('email','html',accept_none_template=True),permissions.MCPPermission)
+        @UseRoles([Role.ADMIN,Role.EMAIL],options=[BypassRole(Role.ADMIN),MustHave(Role.ASSETS),MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
+        @BaseHTTPRessource.HTTPRoute('/template/{template:path}',methods=[HTTPMethod.OPTIONS,],operation_id=mcp_operation_id,to_mcp_tool=True)
         def get_template_schema(self,request:Request,response:Response,template:str='',authPermission=Depends(get_auth_permission),wait_timeout: int | float = Depends(wait_timeout_query)):
             print(template)
             assetService = Get(AssetService)
@@ -113,18 +114,18 @@ class EmailRessource(BaseHTTPRessource):
             return schemas
 
         @UseLimiter(limit_value='1000/minutes')
-        @UseRoles([Role.MFA_OTP])
-        @UseInterceptor(RegisterBackgroundTaskInterceptor,TaskCostInterceptor(),inject_meta=True)
+        @UsePipe(pipes.OffloadedTaskResponsePipe,before=False)
+        @UseInterceptor(RegisterBackgroundTaskInterceptor,TaskCostInterceptor,inject_meta=True)
         @PingService([ProfileService,EmailSenderService,CeleryService,TaskService],is_manager=True)
-        @LockService(ProfileService,EmailSenderService,CeleryService,AssetService,lockType='reader',check_status=False,as_manager =True)
-        @UsePermission(permissions.TaskCostPermission(),permissions.JWTAssetObjectPermission('email'),permissions.JWTSignatureAssetPermission())
-        @UseHandler(handlers.AsyncIOHandler(),handlers.MiniServiceHandler,handlers.TemplateHandler(),handlers.CostHandler,handlers.ContactsHandler(),handlers.ProfileHandler,handlers.RedisHandler)
-        @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
         @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_template_mail']),guards.TrackGuard(),guards.CeleryBrokerGuard)
         @UsePipe(pipes.MiniServiceInjectorPipe(EmailSenderService,'email'),pipes.MiniServiceInjectorPipe(CeleryService,'channel'))
-        @UsePipe(pipes.TemplateSignatureQueryPipe(),TemplateSignatureValidationInjectionPipe(True),force_signature,pipes.RegisterSchedulerPipe,pipes.CeleryTaskPipe(),pipes.TemplateParamsPipe('email','html'),pipes.ContentIndexPipe(),pipes.TemplateValidationInjectionPipe('email','data',''),pipes.ContactToInfoPipe('email','meta.To'),)
-        @BaseHTTPRessource.HTTPRoute("/template/{profile}/{template:path}", responses=DEFAULT_RESPONSE,cost_definition=CostConstant.email_template)
-        async def send_emailTemplate(self,profile:str,email:Annotated[EmailSendInterface|BaseMiniService,Depends(get_profile)],channel:Annotated[ChannelMiniService,Depends(get_profile)],cost:Annotated[EmailCost,Depends(EmailCost)],template: Annotated[HTMLTemplate,Depends(get_template)], scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(TaskManager)],tracker:Annotated[EmailTracker,Depends(EmailTracker)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
+        @UseRoles([Role.MFA_OTP,Role.EMAIL],options=[MustHave(Role.ASSETS),MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
+        @LockService(ProfileService,EmailSenderService,CeleryService,AssetService,lockType='reader',check_status=False,as_manager =True)
+        @UseHandler(handlers.AsyncIOHandler,handlers.MiniServiceHandler,handlers.TemplateHandler,handlers.CostHandler,handlers.ContactsHandler,handlers.ProfileHandler,handlers.RedisHandler)
+        @UsePermission(permissions.ProfilePermission,permissions.MCPPermission,permissions.JWTAssetObjectPermission('email'),permissions.TaskCostPermission,permissions.JWTSignatureAssetPermission)
+        @UsePipe(pipes.TemplateSignatureQueryPipe,TemplateSignatureValidationInjectionPipe(True),force_signature,pipes.RegisterSchedulerPipe,pipes.CeleryTaskPipe,pipes.TemplateParamsPipe('email','html'),pipes.ContentIndexPipe,pipes.TemplateValidationInjectionPipe('email','data',''),pipes.ContactToInfoPipe('email','meta.To'),)
+        @BaseHTTPRessource.HTTPRoute("/template/{profile}/{template:path}", responses=DEFAULT_RESPONSE,cost_definition=CostConstant.email_template,operation_id=mcp_operation_id,to_mcp_tool=True)
+        async def send_email_template(self,profile:str,email:Annotated[EmailSendInterface|BaseMiniService,Depends(get_profile)],channel:Annotated[ChannelMiniService,Depends(get_profile)],cost:Annotated[EmailCost,Depends(EmailCost)],template: Annotated[HTMLTemplate,Depends(get_template)], scheduler: EmailTemplateSchedulerModel, request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(TaskManager)],tracker:Annotated[EmailTracker,Depends(EmailTracker)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
 
             signature:Tuple[str,str]|None = scheduler._signature
             for mail_content in scheduler.content:
@@ -153,19 +154,19 @@ class EmailRessource(BaseHTTPRessource):
 
             return taskManager.results
         
-
         @UseLimiter(limit_value='10/minutes')
-        @UseHandler(handlers.AsyncIOHandler(),handlers.MiniServiceHandler,handlers.CostHandler, handlers.ContactsHandler(),handlers.TemplateHandler(),handlers.ProfileHandler,handlers.RedisHandler())
+        @UsePipe(pipes.OffloadedTaskResponsePipe,before=False)
+        @UseInterceptor(RegisterBackgroundTaskInterceptor,TaskCostInterceptor,inject_meta=True)
         @PingService([ProfileService,EmailSenderService,CeleryService,TaskService],is_manager=True)
+        @UseRoles([Role.RELAY,Role.EMAIL],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
         @LockService(ProfileService,EmailSenderService,lockType='reader',check_status=False,as_manager =True)
-        @UsePermission(permissions.TaskCostPermission(),permissions.JWTSignatureAssetPermission())
-        @UsePipe(pipes.MiniServiceInjectorPipe(EmailSenderService,'email'),pipes.MiniServiceInjectorPipe(CeleryService,'channel'))
-        @UsePipe(pipes.OffloadedTaskResponsePipe(),before=False)
-        @UseInterceptor(RegisterBackgroundTaskInterceptor,TaskCostInterceptor(),inject_meta=True)
-        @UsePipe(pipes.TemplateSignatureQueryPipe,TemplateSignatureValidationInjectionPipe,force_signature,pipes.RegisterSchedulerPipe,pipes.CeleryTaskPipe,pipes.ContentIndexPipe,pipes.ContactToInfoPipe('email','meta.To'))
         @UseGuard(guards.CeleryTaskGuard(task_names=['task_send_custom_mail']),guards.TrackGuard(),guards.CeleryBrokerGuard)
-        @BaseHTTPRessource.HTTPRoute("/custom/{profile}/", responses=DEFAULT_RESPONSE,cost_definition=CostConstant.email_template)
-        async def send_customEmail(self,profile:str,email:Annotated[EmailSendInterface|BaseMiniService,Depends(get_profile)],channel:Annotated[ChannelMiniService,Depends(get_profile)],cost:Annotated[EmailCost,Depends(EmailCost)],scheduler: CustomEmailSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(TaskManager)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
+        @UsePipe(pipes.MiniServiceInjectorPipe(EmailSenderService,'email'),pipes.MiniServiceInjectorPipe(CeleryService,'channel'))
+        @UsePermission(permissions.ProfilePermission,permissions.TaskCostPermission,permissions.JWTSignatureAssetPermission,permissions.MCPPermission)
+        @UseHandler(handlers.AsyncIOHandler,handlers.MiniServiceHandler,handlers.CostHandler, handlers.ContactsHandler,handlers.TemplateHandler,handlers.ProfileHandler,handlers.RedisHandler)
+        @UsePipe(pipes.TemplateSignatureQueryPipe,TemplateSignatureValidationInjectionPipe,force_signature,pipes.RegisterSchedulerPipe,pipes.CeleryTaskPipe,pipes.ContentIndexPipe,pipes.ContactToInfoPipe('email','meta.To'))
+        @BaseHTTPRessource.HTTPRoute("/custom/{profile}/", responses=DEFAULT_RESPONSE,cost_definition=CostConstant.email_template,operation_id=mcp_operation_id,to_mcp_tool=True)
+        async def send_custom_email(self,profile:str,email:Annotated[EmailSendInterface|BaseMiniService,Depends(get_profile)],channel:Annotated[ChannelMiniService,Depends(get_profile)],cost:Annotated[EmailCost,Depends(EmailCost)],scheduler: CustomEmailSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(TaskManager)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
             signature:Tuple[str,str] = scheduler._signature
             
             for customEmail_content in scheduler.content:
@@ -200,14 +201,24 @@ class EmailRessource(BaseHTTPRessource):
                 meta = customEmail_content.meta.model_dump(mode='python',exclude=self.exclude_meta)
                 await taskManager.offload_task(len(To),0,index,email.sendCustomEmail,contents,meta,customEmail_content.images, customEmail_content.attachments,email_profile=email.miniService_id)
             return taskManager.results
-
     
-    @BaseHTTPRessource.HTTPRoute('/simple/{profile}/',methods=[HTTPMethod.POST])
-    async def send_simpleEmail(self,profile:str,email:Annotated[EmailSendInterface|BaseMiniService,Depends(get_profile)],channel:Annotated[ChannelMiniService,Depends(get_profile)],cost:Annotated[EmailCost,Depends(EmailCost)],scheduler: CustomEmailSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(TaskManager)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.HTTPRoute('/simple/{profile}/',methods=[HTTPMethod.POST],mount=False,operation_id=mcp_operation_id,to_mcp_tool=True)
+    async def send_simple_email(self,profile:str,email:Annotated[EmailSendInterface|BaseMiniService,Depends(get_profile)],channel:Annotated[ChannelMiniService,Depends(get_profile)],cost:Annotated[EmailCost,Depends(EmailCost)],scheduler: CustomEmailSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(TaskManager)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
         ...
-
+    
+    @LockService(RemoteAgentService,lockType='reader')
+    @PingService([ProfileService,EmailSenderService,CeleryService,TaskService],is_manager=True)
+    @LockService(ProfileService,EmailSenderService,lockType='reader',check_status=False,as_manager =True)
+    @UseRoles([Role.RELAY,Role.EMAIL],options=[MustHave(Role.AGENT),MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
+    @UsePipe(pipes.MiniServiceInjectorPipe(EmailSenderService,'email'),pipes.MiniServiceInjectorPipe(CeleryService,'channel'),pipes.MiniServiceInjectorPipe(RemoteAgentService,'agent'))
+    @UseHandler(handlers.AsyncIOHandler,handlers.MiniServiceHandler,handlers.CostHandler, handlers.ContactsHandler,handlers.ProfileHandler,handlers.RedisHandler,handlers.AgenticHandler)
+    @BaseHTTPRessource.HTTPRoute('/prompt/{profile}/{agent}/',methods=[HTTPMethod.POST],operation_id=mcp_operation_id,to_mcp_tool=True)
+    async def send_prompt_email(self,profile:str,agent:Annotated[RemoteAgentMiniService,Depends(get_agent)],email:Annotated[EmailSendInterface|BaseMiniService,Depends(get_profile)],channel:Annotated[ChannelMiniService,Depends(get_profile)],cost:Annotated[EmailCost,Depends(EmailCost)],scheduler: CustomEmailSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],taskManager: Annotated[TaskManager, Depends(TaskManager)],tracker:Annotated[EmailTracker,Depends(EmailTracker)], authPermission=Depends(get_auth_permission)):
+        async with agent.lock('reader',check_status=False):
+            ...
+    
     @BaseHTTPRessource.HTTPRoute('/otp/{profile}/',methods=[HTTPMethod.POST])
-    async def send_otpEmail(self,):
+    async def send_otp_email(self,):
         ...
             
     
@@ -246,8 +257,6 @@ class EmailRessource(BaseHTTPRessource):
         
         return tracking_link_callback,tracking_url
         
-
-    
     # @UseLimiter(limit_value='10/day')
     # @UseRoles([Role.PUBLIC])
     # @UseHandler(handlers.EmailRelatedHandler())

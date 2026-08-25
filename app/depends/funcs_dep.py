@@ -288,6 +288,9 @@ def get_template(template:str):
 def get_profile(profile:str):
     return profile
 
+def get_agent(agent:str):
+    return agent
+
 
 def GetPolicy(skipPermission:bool):
 

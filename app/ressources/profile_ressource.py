@@ -2,15 +2,15 @@ from typing import Annotated, Literal, Optional, Type
 from beanie import Document
 from fastapi import Depends,Request, Response,status
 from pydantic import ConfigDict
-from app.classes.auth_permission import AuthPermission, Role
+from app.classes.auth_permission import AuthPermission, MustHaveWhen, Role
 from app.classes.mongo import MongoFindFilter
 from app.container import InjectInMethod,Get
 from app.decorators.handlers import AsyncIOHandler, CostHandler, DataSourceHandler, MiniServiceHandler, MotorErrorHandler, ProfileHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler, VaultHandler,CeleryControlHandler
 from app.decorators.interceptors import DataCostInterceptor
-from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, ProfilePermission
+from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, MCPPermission, ProfilePermission
 from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe, SanitizePathParameterPipe
 from app.definition._cost import DataCost
-from app.definition._ressource import BaseHTTPRessource, ClassMetaData, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseInterceptor, UseLimiter, LockService, UseHandler, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import BaseHTTPRessource, ClassMetaData, HTTPMethod,HTTPRessource, HTTPStatusCode, PingService, Throttle, UseInterceptor, UseLimiter, LockService, UseHandler, UsePermission, UsePipe, UseRoles
 from app.definition._service import MiniStateProtocol, StateProtocol
 from app.depends.dependencies import get_auth_permission
 from app.depends.funcs_dep import get_profile
@@ -31,6 +31,8 @@ from app.services.worker.task_service import TaskService
 from app.utils.constant import CostConstant
 from app.depends.variables import SourceMode,source_mode_query
 from app.utils.helper import subset_model
+from app.depends.variables import mcp_configuration
+
 
 PROFILE_PREFIX = 'profile'
 
@@ -183,13 +185,13 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         broker.propagate(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
         return None
     
-    @UseRoles([Role.PUBLIC])
-    @UsePermission(ProfilePermission(True))
     @UsePipe(DocumentFriendlyPipe,before=False)
     @UseHandler(MiniServiceHandler,DataSourceHandler)
     @UsePipe(SanitizePathParameterPipe({},profile=True))
+    @UsePermission(ProfilePermission(True),MCPPermission)
     @LockService(ProfileService,lockType='reader',as_manager=False,motor_fallback=True)
-    @BaseHTTPRessource.HTTPRoute('/{profile:path}',methods=[HTTPMethod.GET])
+    @UseRoles([Role.PUBLIC],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
+    @BaseHTTPRessource.HTTPRoute('/{profile:path}',methods=[HTTPMethod.GET],to_mcp_tool=True,operation_id='get_profile_information')
     async def read_profile(self,profile:str,request:Request, response:Response,mongoFilter:Optional[MongoFindFilter],source:SourceMode=Depends(source_mode_query), authPermission:AuthPermission=Depends(get_auth_permission)):
         match source:
             case 'database':
@@ -223,13 +225,14 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         await channel.refresh_worker_state()
         broker.propagate(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
 
-    @UseRoles([Role.PUBLIC])
-    @UsePermission(ProfilePermission)
+    @Throttle(normal=(400,120))
     @UseHandler(MiniServiceHandler,RedisHandler)
     @UsePipe(DocumentFriendlyPipe(),before=False)
+    @UsePermission(ProfilePermission,MCPPermission)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'service'),)
     @LockService(ProfileService,'reader',as_manager=True,miniLockType='reader')
-    @BaseHTTPRessource.HTTPRoute('/errors/{profile}/',methods=[HTTPMethod.GET])
+    @UseRoles([Role.PUBLIC],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
+    @BaseHTTPRessource.HTTPRoute('/errors/{profile}/',methods=[HTTPMethod.GET],to_mcp_tool=True,operation_id='get_profile_errors')
     async def read_error(self,profile:str,error:ErrorProfileMap,service:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response, authPermission:AuthPermission=Depends(get_auth_permission)):
         return await service.fetch_errors(**error.model_dump())
 
