@@ -419,7 +419,7 @@ setup_database_config(){
       db_name="redis-notifyr" \
       default_ttl="35d" \
       max_ttl="35d" \
-      creation_statements='["~notifyr/credit:*","+@transaction", "+GET", "+SET", "+INCRBY", "+LPUSH", "+LTRIM", "+LRANGE", "+SELECT", "+FCALL","+EXISTS"]'
+      creation_statements='["~notifyr/credit:*","+@transaction", "+GET", "+SET", "+INCRBY", "+LPUSH", "+LTRIM", "+LRANGE", "+SELECT", "+FCALL", "+EVAL", "+EXISTS"]'
 
     vault write notifyr-database/roles/app-redis-ntfr-role \
       db_name="redis-notifyr" \
