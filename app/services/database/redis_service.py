@@ -392,6 +392,9 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
     async def rem(self,database:int|str,name:str,*keys:str,redis:Redis=None):
         return await redis.zrem(name,*keys)
 
+    def compute_url(self,host:str=NOTIFYR_HOST,port:int=6379,creds:CredentialName='default',db:int=None):
+        return f'redis://{self.db_user(creds)}:{self.db_password(creds)}@{host}:{port}/{db}'
+
     def compute_limiter_url(self):
         return f'redis://{self.db_user()}:{self.db_password()}@{NOTIFYR_HOST}:6379/{RedisConstant.LIMITER_DB}'
 
