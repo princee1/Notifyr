@@ -53,6 +53,8 @@ if [ "$TO_LOAD_FUNC" = "true" ]; then
 
     echo "[AUDIT] Loading Redis functions..."
     redis-cli -u "$URL" FUNCTION LOAD REPLACE "$(cat /functions/ncs-lib.lua)"
+    redis-cli -u "$URL" FUNCTION LOAD REPLACE "$(cat /functions/credit-deduction.lua)"
+
     echo "[AUDIT] Functions loaded successfully."
 
     echo "[AUDIT] Shutting down temporary Redis server..."
