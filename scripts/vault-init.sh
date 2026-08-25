@@ -252,7 +252,7 @@ set_credit_topup_token() {
   fi
   echo "Setting up Credit Vault Token..."
 
-  vault policy write credit-policy /vault/policies/credit-policy.hcl
+  vault policy write credit-policy /vault/policies/ncs-credit-policy.hcl
   
   local CREDIT_TOKEN=$(vault token create -policy=credit-policy -ttl=0 -orphan -format=json | jq -r .auth.client_token)
 
@@ -414,6 +414,12 @@ setup_database_config(){
       default_ttl="2h" \
       max_ttl="5h" \
       creation_statements='["~*","+@all"]'
+    
+    vault write notifyr-database/roles/app-credit-redis-ntfr-role \
+      db_name="redis-notifyr" \
+      default_ttl="35d" \
+      max_ttl="35d" \
+      creation_statements='["~notifyr/credit:*","+@transaction", "+GET", "+SET", "+INCRBY", "+LPUSH", "+LTRIM", "+LRANGE", "+SELECT", "+FCALL","+EXISTS"]'
 
     vault write notifyr-database/roles/app-redis-ntfr-role \
       db_name="redis-notifyr" \
@@ -433,7 +439,7 @@ setup_database_config(){
       max_ttl="5h" \
       creation_statements='["~*","+@all"]'
 
-    vault write notifyr-database/roles/credit-redis-ntfr-role \
+    vault write notifyr-database/roles/ncs-credit-redis-ntfr-role \
       db_name="redis-notifyr" \
       default_ttl="10m" \
       max_ttl="20m" \
@@ -561,7 +567,7 @@ create_database_config(){
         port=6379 \
         username="vaultadmin-redis" \
         password="$REDIS_NOTIFYR_PASSWORD" \
-        allowed_roles="admin-redis-ntfr-role, app-redis-ntfr-role, credit-redis-ntfr-role, agentic-redis-ntfr-role"
+        allowed_roles="admin-redis-ntfr-role, app-redis-ntfr-role, ncs-credit-redis-ntfr-role, agentic-redis-ntfr-role, app-credit-redis-ntfr-role"
     vault write -f notifyr-database/rotate-root/redis-notifyr
     
 

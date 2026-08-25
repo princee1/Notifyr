@@ -456,6 +456,8 @@ services:
       - redis-data:/data
       - ./scripts/redis-entrypoint.sh:/entrypoint.sh
       - ./scripts/ncs-lib.lua:/functions/ncs-lib.lua
+      - ./scripts/credit-deduction.lua:/functions/credit-deduction.lua
+
     networks:
       - data_net
 

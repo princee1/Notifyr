@@ -53,13 +53,13 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
             self.interval_built = True
         
 
-    def add_credentials(self,role:VaultConstant.NotifyrDynamicSecretsRole,name:CredentialName='default',suffix=None,strict=False):
+    def add_credentials(self,role:VaultConstant.NotifyrDynamicSecretsRole,name:CredentialName='default',prefix=None,strict=False):
         if name in self.creds:
             self.revoke_lease(name)
             if strict:
                 raise VaultCredentialAlreadyExistError(name)
 
-        cred = self.vaultService.database_engine.generate_credentials(role,suffix)
+        cred = self.vaultService.database_engine.generate_credentials(role,prefix)
         self.creds[name] = cred
         
     def get_credentials(self,name:CredentialName):

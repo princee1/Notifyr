@@ -33,6 +33,7 @@ NOTIFYR_HOST = 'redis'
 CELERY_BACKEND_CREDS='celery-backend'
 CELERY_BROKER_CREDS='celery-broker'
 AGENTIC_CREDS='agentic'
+CREDIT_CREDS='credit'
 
 AGENTIC_APP_MODE_CRED = {ApplicationMode.arq,ApplicationMode.agentic,ApplicationMode.server}
 
@@ -229,35 +230,35 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
                     raise ConnectionError(f"Redis at {tr.get_connection_kwargs().get('host',None)} ping failed")
                 tr.close()
         except Exception as e:
-            print(e)
-            print(e.args)
-            print(e.__class__)
             raise BuildFailureError(e.args)
     
     def generate_credentials(self):
         self.add_credentials(VaultConstant.REDIS_ROLE)
+        self.add_credentials(VaultConstant.REDIS_ROLE,CREDIT_CREDS,prefix='app-credit')
         self.add_credentials(VaultConstant.CELERY_BACKEND_ROLE,CELERY_BACKEND_CREDS)
 
         if self.configService.BROKER_PROVIDER == 'redis':
             self.add_credentials(VaultConstant.CELERY_BROKER_ROLE,CELERY_BROKER_CREDS)
         
         if CAPABILITIES['agentic'] and APP_MODE in AGENTIC_APP_MODE_CRED:
-            self.add_credentials(VaultConstant.REDIS_ROLE,AGENTIC_CREDS,suffix='agentic')
+            self.add_credentials(VaultConstant.REDIS_ROLE,AGENTIC_CREDS,prefix='agentic')
 
     def create_redis_instance(self):
-        
+
+        self.redis_cost = Redis(host=NOTIFYR_HOST,db=RedisConstant.COST_DB,decode_responses=True,username=self.db_user(CREDIT_CREDS),password=self.db_password(CREDIT_CREDS))
         self.redis_celery = Redis(host=self.configService.REDIS_HOST,db=RedisConstant.CELERY_DB,username=self.db_user(CELERY_BACKEND_CREDS),password=self.db_password(CELERY_BACKEND_CREDS))
+        
         self.redis_limiter = Redis(host=NOTIFYR_HOST,db=RedisConstant.LIMITER_DB,username=self.db_user(),password=self.db_password())
         self.redis_cache = Redis(host=NOTIFYR_HOST,db=RedisConstant.CACHE_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
         self.redis_config = Redis(host=NOTIFYR_HOST,db=RedisConstant.CONFIG_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
-        
+
         if CAPABILITIES['agentic'] and APP_MODE in AGENTIC_APP_MODE_CRED:
             self.redis_agentic = Redis(host=NOTIFYR_HOST,db=RedisConstant.AGENTIC_DB,decode_responses=True,username=self.db_user(AGENTIC_CREDS),password=self.db_password(AGENTIC_CREDS))        
 
         if APP_MODE == ApplicationMode.beat or APP_MODE == ApplicationMode.worker:
             self.redis_events = SyncRedis(host=NOTIFYR_HOST,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
         else:
-            self.redis_events=Redis(host=NOTIFYR_HOST,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
+            self.redis_events = Redis(host=NOTIFYR_HOST,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
         
         self.db.clear()
         self.db.update({
@@ -266,11 +267,13 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
             RedisConstant.EVENT_DB:self.redis_events,
             RedisConstant.CACHE_DB:self.redis_cache,
             RedisConstant.CONFIG_DB:self.redis_config,
+            RedisConstant.COST_DB:self.redis_cost,
             'celery':self.redis_celery,
             'limiter':self.redis_limiter,
             'events': self.redis_events,
             'cache':self.redis_cache,
             'config':self.redis_config,
+            'cost':self.redis_cost
         })
 
         if CAPABILITIES['agentic'] and APP_MODE in AGENTIC_APP_MODE_CRED:
@@ -388,7 +391,10 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
     @check_db
     async def rem(self,database:int|str,name:str,*keys:str,redis:Redis=None):
         return await redis.zrem(name,*keys)
-    
+
+    def compute_limiter_url(self):
+        return f'redis://{self.db_user()}:{self.db_password()}@{NOTIFYR_HOST}:6379/{RedisConstant.LIMITER_DB}'
+
     def compute_backend_url(self,db=RedisConstant.CELERY_DB)->str:
         return f"redis://{self.db_user(CELERY_BACKEND_CREDS)}:{self.db_password(CELERY_BACKEND_CREDS)}@{self.configService.REDIS_HOST}:6379/{db}"
 

@@ -332,11 +332,12 @@ class MinioConstant:
 class RedisConstant:
 
     EVENT_DB=0
+    COST_DB=1
     CELERY_DB=2
-    LIMITER_DB=1
     CACHE_DB=3
     CONFIG_DB=4
     AGENTIC_DB=5
+    LIMITER_DB=6
 
 ########################                     ########################################
 
