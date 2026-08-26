@@ -177,8 +177,10 @@ class MongooseDBConstant:
     STORE_COLLECTION = 'store'
 
     OUTBOUND_COLLECTION = 'outbound'
-    DATABASE_NAME = 'notifyr'
 
+    DATABASE_NAME = 'notifyr'
+    AGENTIC_DATABASE_NAME = 'agentic-notifyr'
+    TASK_DATABASE_NAME = 'app-notifyr'
 
     def __init__(self):
         available_collection = []
@@ -189,6 +191,10 @@ class MongooseDBConstant:
                 available_collection.append(x)
         
         self.available_collection = set(available_collection)
+
+class PostgresConstant:
+    DATABASE_NAME = 'notifyr'
+    SECURITY_DATABASE_NAME = 'security-notifyr'
             
 ########################                     ########################################
 

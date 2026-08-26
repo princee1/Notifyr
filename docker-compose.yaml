@@ -352,8 +352,6 @@ services:
 
       MINIO_VAULT_PASSWORD: ${MINIO_VAULT_PASSWORD:?Minio admin vault password must be set}
 
-      REDIS_NOTIFYR_PASSWORD: ${REDIS_NOTIFYR_PASSWORD:-vaultpass}
-
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?Rabbit mq user must be set}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?Rabbit mq password must be set}
 
@@ -452,7 +450,6 @@ services:
       - CELERY_EXTERNAL=${CELERY_EXTERNAL:-false}
       - REDIS_USER=${REDIS_USER:?Redis user must be set}
       - REDIS_PASSWORD=${REDIS_PASSWORD:?Redis password must be set}
-      - REDIS_NOTIFYR_PASSWORD=${REDIS_NOTIFYR_PASSWORD:-vaultpass}
       - DEFAULT_USER=on
       - SKIP_FIX_PERMS=1
     volumes:
@@ -460,7 +457,6 @@ services:
       - ./scripts/entrypoint/redis-entrypoint.sh:/entrypoint.sh
       - ./scripts/credit/ncs-lib.lua:/functions/ncs-lib.lua
       - ./scripts/credit/credit-deduction.lua:/functions/credit-deduction.lua
-
     networks:
       - data_net
 

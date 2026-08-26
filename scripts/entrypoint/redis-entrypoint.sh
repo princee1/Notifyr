@@ -5,7 +5,7 @@ ACL_FILE="/data/etc/.users/users.acl"
 mkdir -p "$(dirname "$ACL_FILE")"
 
 USER_NAME="vaultadmin-redis"
-USER_PASS="${REDIS_NOTIFYR_PASSWORD}"
+USER_PASS="vaultpass"
 URL="redis://$USER_NAME:$USER_PASS@localhost:6379/1"
 
 TO_LOAD_FUNC="false"

@@ -3,16 +3,15 @@ from tortoise import Tortoise
 from app.definition._service import DEFAULT_BUILD_STATE, LinkDep, Service
 from app.errors.service_error import BuildFailureError
 from app.services.config_service import ConfigService
-from app.services.database.base_db_service import TempCredentialsDatabaseService
+from app.services.database.base_db_service import CredentialName, TempCredentialsDatabaseService
 from app.services.file.file_service import FileService
 from app.services.vault_service import VaultService
-from app.utils.constant import VaultConstant, VaultTTLSyncConstant
+from app.utils.constant import PostgresConstant, VaultConstant, VaultTTLSyncConstant
 from app.utils.toolbox import RunInThreadPool
 
 
 @Service(links=[LinkDep(VaultService,to_build=True,to_destroy=True)])
 class TortoiseConnectionService(TempCredentialsDatabaseService):
-    DATABASE_NAME = 'notifyr'
 
     def __init__(self, configService: ConfigService,vaultService:VaultService,fileService:FileService):
         super().__init__(configService,fileService,vaultService,VaultTTLSyncConstant.POSTGRES_AUTH_TTL)
@@ -21,7 +20,7 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
         try:
             self.generate_credentials()
             conn = psycopg2.connect(
-                dbname=self.DATABASE_NAME,
+                dbname=PostgresConstant.DATABASE_NAME,
                 user=self.db_user(),
                 password=self.db_password(),
                 host=self.configService.POSTGRES_HOST,
@@ -41,10 +40,13 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
 
     def generate_credentials(self):
         self.add_credentials(VaultConstant.POSTGRES_ROLE)
-        
+
+    def compute_url(self,host:str,port:int=5432,creds:CredentialName='default',database=PostgresConstant.DATABASE_NAME):
+        return f'postgres://{self.db_user(creds)}:{self.db_password(creds)}@{host}:{port}/{database}'
+
     @property
     def postgres_uri(self):
-        return f"postgres://{self.db_user()}:{self.db_password()}@{self.configService.POSTGRES_HOST}:5432/{self.DATABASE_NAME}"
+        return self.compute_url(self.configService.POSTGRES_HOST)
         
     async def init_connection(self,close=False):
         if close:
@@ -60,5 +62,5 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
     async def _creds_rotator(self):
         await self.close_connections()
         await RunInThreadPool(self.generate_credentials)()
-        await self.init_connection(True)
+        await self.init_connection(False)
 

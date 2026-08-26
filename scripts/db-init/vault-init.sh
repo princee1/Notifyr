@@ -526,7 +526,7 @@ setup_database_config(){
 
 }
 
-create_database_config(){
+database_connection_config(){
   # This function sets up CONNECTION CONFIGURATIONS for all database engines
  
   # --- POSTGRES CONNECTION ---
@@ -569,7 +569,7 @@ create_database_config(){
         host="redis" \
         port=6379 \
         username="vaultadmin-redis" \
-        password="$REDIS_NOTIFYR_PASSWORD" \
+        password="vautlpass" \
         allowed_roles="admin-redis-ntfr-role, app-redis-ntfr-role, ncs-credit-redis-ntfr-role, agentic-redis-ntfr-role, app-credit-redis-ntfr-role"
     vault write -f notifyr-database/rotate-root/redis-notifyr
     
@@ -702,7 +702,7 @@ echo "*************************** SETUP DATABASE ROLES (Checkpoints: postgres_ro
 setup_database_config
 
 echo "*************************** CREATE DATABASE CONNECTIONS (Checkpoints: postgres_connection, mongodb_connection, redis_connection, minio_connection, rabbitmq_connection, neo4j_connection) *********************"
-create_database_config
+database_connection_config
 
 echo "*************************** CREATE AWS ENGINE *********************"
 # create_aws_config
