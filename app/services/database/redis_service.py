@@ -396,17 +396,15 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
     async def rem(self,database:int|str,name:str,*keys:str,redis:Redis=None):
         return await redis.zrem(name,*keys)
 
+    ############################################################################################################
+    ##############################                                                  ############################
+    ############################################################################################################
+
     def compute_url(self,host:str=HostConstant.REDIS_HOST,port:int=6379,creds:CredentialName='default',db:int=None):
         return f'redis://{self.db_user(creds)}:{self.db_password(creds)}@{host}:{port}/{db}'
 
-    def compute_limiter_url(self):
-        return f'redis://{self.db_user()}:{self.db_password()}@{NOTIFYR_HOST}:6379/{RedisConstant.LIMITER_DB}'
-
-    def compute_backend_url(self,db=RedisConstant.CELERY_DB)->str:
-        return f"redis://{self.db_user(CELERY_BACKEND_CREDS)}:{self.db_password(CELERY_BACKEND_CREDS)}@{self.configService.REDIS_HOST}:6379/{db}"
-
     def compute_broker_url(self)->str:
         if self.configService.CELERY_BROKER_PROVIDER == 'redis':
-            return f"redis://{self.db_user(CELERY_BROKER_CREDS)}:{self.db_user(CELERY_BROKER_CREDS)}@{self.configService.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}"
+            return self.compute_url(self.configService.REDIS_HOST,creds=CELERY_BROKER_CREDS,db=RedisConstant.CELERY_DB)
         else:
             return None

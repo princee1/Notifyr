@@ -49,11 +49,13 @@ class RabbitMQService(TempCredentialsDatabaseService,BrokerService):
             self.configService.CELERY_BROKER_PROVIDER = 'redis'
             raise BuildFailureError("Failed to connect to RabbitMQ with generated credentials. Ensure RabbitMQ is running and accessible.") from e
 
-    
+    def compute_url(self):
+        return f"amqp://{self.db_user()}:{self.db_password()}@{self.configService.RABBITMQ_HOST}:5672/{RabbitMQConstant.NOTIFYR_VIRTUAL_HOST}"
+        
     def compute_broker_url(self):
         if self.configService.CELERY_BROKER_PROVIDER == 'redis':
             return None
-        return f"amqp://{self.db_user()}:{self.db_password()}@{self.configService.RABBITMQ_HOST}:5672/{RabbitMQConstant.NOTIFYR_VIRTUAL_HOST}"
-    
+        return self.compute_url()
+
     async def _creds_rotator(self):
         await RunInThreadPool(self.generate_credentials)()

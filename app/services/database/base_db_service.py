@@ -142,6 +142,12 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
             return True
         
         return  time.time() - self.last_rotated < self.auth_ttl    
+    
+    def compute_url(self,host:str,database:str,name:CredentialName='default'):
+        ...
+
+    def generate_credentials(self):
+        ...
 
 
 class BrokerService:

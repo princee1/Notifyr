@@ -5,6 +5,7 @@ from app.classes.celery import CeleryTaskNameNotExistsError, TaskHeaviness
 from app.services.config_service import ConfigService
 from app.container import Get, build_container, Register
 from app.services import *
+from app.services.database.redis_service import CELERY_BACKEND_CREDS
 from app.utils.globals import APP_MODE, ApplicationMode,CAPABILITIES
 from app.utils.prettyprint import PrettyPrinter_
 from celery import Task
@@ -43,16 +44,15 @@ redisService  = Get(RedisService)
 vaultService = Get(VaultService)
 
 if configService.JOBSTORE_DB=='redis':
-    backend_url = redisService.compute_backend_url()
+    backend_url = redisService.compute_url(configService.REDIS_HOST,creds=CELERY_BACKEND_CREDS)
 else:
     from app.services.database.mongoose_service import MongooseService
     mongooseService = Register(MongooseService)
-
     backend_url = ...
 
 if APP_MODE != ApplicationMode.beat:
     rabbitmqService = Get(RabbitMQService)
-    broker_url = redisService.compute_broker_url() if configService.CELERY_BROKER_PROVIDER == 'redis' else rabbitmqService.compute_broker_url()
+    broker_url = redisService.compute_broker_url() or rabbitmqService.compute_broker_url()
 else:
     broker_url = None
 ##############################################           ##################################################
