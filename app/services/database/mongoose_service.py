@@ -12,7 +12,7 @@ from app.services.config_service import ConfigService
 from app.services.database.base_db_service import CredentialName, TempCredentialsDatabaseService
 from app.services.file.file_service import FileService
 from app.services.vault_service import VaultService
-from app.utils.constant import AgenticConstant, MongooseDBConstant, VaultConstant, VaultTTLSyncConstant
+from app.utils.constant import AgenticConstant, HostConstant, MongooseDBConstant, VaultConstant, VaultTTLSyncConstant
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import ConnectionFailure, OperationFailure
 
@@ -20,6 +20,7 @@ from app.utils.helper import subset_model
 from app.utils.toolbox import RunInThreadPool
 
 AGENTIC_CREDS='agentic'
+JOBS_CREDS='jobs'
 
 D = TypeVar('D',bound=BaseDocument)
 
@@ -52,10 +53,10 @@ class MongoClientStore:
         if mode == None or mode == 'async':
             self.clients[name]['async'] = AsyncIOMotorClient(uri)
     
-    def get_database(self,name:CredentialName,mode:ClientMode='async',database=MongooseDBConstant.DATABASE_NAME):
+    def get_database(self,name:CredentialName,mode:ClientMode='async',database=MongooseDBConstant.JOB_DATABASE_NAME):
         return self.get_client(name,mode)[database]
     
-    def get_collection(self,name:CredentialName,collection:str,mode:ClientMode='async',database=MongooseDBConstant.DATABASE_NAME):
+    def get_collection(self,name:CredentialName,collection:str,mode:ClientMode='async',database=MongooseDBConstant.JOB_DATABASE_NAME):
         return self.get_database(name,mode,database)[collection]
     
     def iterator(self,mode:ClientMode|None = None):
@@ -251,12 +252,14 @@ class MongooseService(TempCredentialsDatabaseService):
     def db_connection(self):
         # fetch fresh creds from Vault
         self.client_store.clear()
-        self.client_store.add_client('default',self.mongo_uri())
-        self.client_store.add_client(AGENTIC_CREDS,self.mongo_uri(AGENTIC_CREDS))
+        self.client_store.add_client('default',self.compute_url(HostConstant.MONGOOSE_HOST,MongooseDBConstant.DEFAULT_DATABASE_NAME))
+        self.client_store.add_client(AGENTIC_CREDS,self.compute_url(HostConstant.MONGOOSE_HOST,MongooseDBConstant.AGENTIC_DATABASE_NAME,AGENTIC_CREDS))
+        self.client_store.add_client(JOBS_CREDS,self.compute_url(self.configService.MONGO_HOST,MongooseDBConstant.JOB_DATABASE_NAME,name=JOBS_CREDS))
     
     def generate_credentials(self):
         self.add_credentials(VaultConstant.MONGO_ROLE,'default')
-        self.add_credentials(VaultConstant.MONGO_ROLE,AGENTIC_CREDS)
+        self.add_credentials(VaultConstant.MONGO_ROLE,AGENTIC_CREDS,prefix='agentic')
+        self.add_credentials(VaultConstant.MONGO_ROLE,JOBS_CREDS,suffix='jobs')
 
     async def _creds_rotator(self):
         self.close_connection()
@@ -269,6 +272,8 @@ class MongooseService(TempCredentialsDatabaseService):
             super().revoke_lease()
         if name == None or name == AGENTIC_CREDS:
             super().revoke_lease(AGENTIC_CREDS)
+        if name == None or name == JOBS_CREDS:
+            super().revoke_lease(JOBS_CREDS)
 
     def close_connection(self):
         try:
@@ -278,14 +283,19 @@ class MongooseService(TempCredentialsDatabaseService):
             ...
 
     async def init_connection(self,):
-        agentic_doc = [doc for doc in self._documents if doc in AgenticConstant.AGENTIC_COLLECTIONS ]
-        default_doc = [doc for doc in self._documents if doc not in AgenticConstant.AGENTIC_COLLECTIONS ]
+        agentic_doc = [doc for doc in self._documents if doc in MongooseDBConstant.AGENTIC_COLLECTIONS ]
+        default_doc = [doc for doc in self._documents if doc not in MongooseDBConstant.DEFAULT_COLLECTIONS ]
         
         default_db = self.client_store.get_database('default')
         agentic_db = self.client_store.get_database(AGENTIC_CREDS)
-
+    
         await init_beanie(database=agentic_db,document_models=agentic_doc,)
         await init_beanie(database=default_db,document_models=default_doc,)
+
+        if self.configService.JOBSTORE_DB == 'mongodb':
+            tasks_doc = [doc for doc in self._documents if doc not in MongooseDBConstant.JOB_COLLECTIONS ]
+            tasks_db = self.client_store.get_database(JOBS_CREDS)
+            await init_beanie(database=tasks_db,document_models=tasks_doc)
 
     def register_document(self,*documents):
         temp = set()
@@ -314,12 +324,24 @@ class MongooseService(TempCredentialsDatabaseService):
     ##################################################
     # Connection string
     ##################################################
-    def mongo_uri(self,name:CredentialName='default'):
+
+    def compute_url(self,host:str,database=MongooseDBConstant.JOB_DATABASE_NAME,name:CredentialName='default'):
         replica = self.configService.getenv('MONGO_REPLICA_NAME','notifyr-0')
-        return f"mongodb://{self.db_user(name)}:{self.db_password(name)}@{self.configService.MONGO_HOST}:27017/{MongooseDBConstant.DATABASE_NAME}?replicaSet={replica}"
+        return f"mongodb://{self.db_user(name)}:{self.db_password(name)}@{host}:27017/{database}?replicaSet={replica}"
     
     def get_credentials_name(self,model:Type[D]|D)->CredentialName:
-        return 'default' if model._collection not in AgenticConstant.AGENTIC_COLLECTIONS else AGENTIC_CREDS
+
+        if model._collection in MongooseDBConstant.DEFAULT_COLLECTIONS:
+            return 'default'
+
+        if model._collection in MongooseDBConstant.AGENTIC_COLLECTIONS:
+            return AGENTIC_CREDS
+
+        if model._collection in MongooseDBConstant.JOB_COLLECTIONS:
+            return JOBS_CREDS
+
+        raise MongoCollectionDoesNotExists(model._collection)
+
 
     ##################################################
     # Healthcheck

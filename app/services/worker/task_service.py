@@ -91,8 +91,8 @@ class TaskService(BaseService,SchedulerInterface):
                 ),
             'memory':MemoryJobStore(),
             'mongodb':MongoDBJobStore(
-                MongooseDBConstant.DATABASE_NAME,
-                collection=MongooseDBConstant.TASKS_COLLECTION,
+                MongooseDBConstant.JOB_DATABASE_NAME,
+                collection=MongooseDBConstant.APS_COLLECTION,
                 client=self.mongooseService.client_store.get_client('default','sync')
                 )
         }

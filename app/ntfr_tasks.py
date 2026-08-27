@@ -3,7 +3,7 @@ from typing import Any, Callable
 from celery import Celery
 from app.classes.celery import CeleryTaskNameNotExistsError, TaskHeaviness
 from app.services.config_service import ConfigService
-from app.container import Get, build_container
+from app.container import Get, build_container, Register
 from app.services import *
 from app.utils.globals import APP_MODE, ApplicationMode,CAPABILITIES
 from app.utils.prettyprint import PrettyPrinter_
@@ -41,11 +41,18 @@ TASK_REGISTRY: dict[str, dict[str, Any]] = {}
 configService: ConfigService = Get(ConfigService)
 redisService  = Get(RedisService)
 vaultService = Get(VaultService)
-backend_url = redisService.compute_backend_url()
+
+if configService.JOBSTORE_DB=='redis':
+    backend_url = redisService.compute_backend_url()
+else:
+    from app.services.database.mongoose_service import MongooseService
+    mongooseService = Register(MongooseService)
+
+    backend_url = ...
 
 if APP_MODE != ApplicationMode.beat:
     rabbitmqService = Get(RabbitMQService)
-    broker_url = redisService.compute_broker_url() if configService.BROKER_PROVIDER == 'redis' else rabbitmqService.compute_broker_url()
+    broker_url = redisService.compute_broker_url() if configService.CELERY_BROKER_PROVIDER == 'redis' else rabbitmqService.compute_broker_url()
 else:
     broker_url = None
 ##############################################           ##################################################
@@ -74,7 +81,7 @@ celery_app.conf.worker_soft_shutdown_timeout = 120.0
 celery_app.conf.worker_enable_soft_shutdown_on_idle = True
 celery_app.conf.task_create_missing_queues = True
 
-if configService.BROKER_PROVIDER == 'redis':
+if configService.CELERY_BROKER_PROVIDER == 'redis':
     celery_app.conf.visibility_timeout = configService.CELERY_VISIBILITY_TIMEOUT
     celery_app.conf.broker_transport_options = {
         'priority_steps': [1,2,3],

@@ -8,6 +8,8 @@ VAULT_SHARED_DIR=/vault/shared
 NOTIFYR_APP_ROLE="notifyr-app-role"
 NOTIFYR_DMZ_APP_ROLE="notifyr-dmz-role"
 
+VAULTPASS="vaultpass"
+
 SETUP_CONFIG_PATH="setup-config/data/initialization-status"
 
 ################################# ##############################################
@@ -364,35 +366,62 @@ setup_database_config(){
   if ! setup_config_kv2 "mongo_roles" "check"; then
     echo "Configuring Mongo roles..."
     vault write notifyr-database/roles/agentic-mongo-ntfr-role \
-      db_name="mongodb" \
-      creation_statements='{ "db": "notifyr", "roles": [
-      { "role": "readWrite", "db": "notifyr", "collection":"agent" },
-      { "role": "readWrite", "db": "notifyr", "collection":"chat" },
-      { "role": "readWrite", "db": "notifyr", "collection":"tool" },
-      { "role": "readWrite", "db": "notifyr", "collection":"store" },
-      { "role": "readWrite", "db": "notifyr", "collection":"chat_write" }]}' \
+      db_name="mongodb-notifyr" \
+      creation_statements='{ "db": "agentic-notifyr", "roles": [
+      { "role": "readWrite", "db": "agentic-notifyr", "collection":"agent" },
+      { "role": "readWrite", "db": "agentic-notifyr", "collection":"llm" },
+      { "role": "readWrite", "db": "agentic-notifyr", "collection":"chat" },
+      { "role": "readWrite", "db": "agentic-notifyr", "collection":"tool" },
+      { "role": "readWrite", "db": "agentic-notifyr", "collection":"store" },
+      { "role": "readWrite", "db": "agentic-notifyr", "collection":"chat_write" }]}' \
       default_ttl="12h" \
       max_ttl="16h"
+    
+    vault write notifyr-database/roles/admin-agentic-mongo-ntfr-role \
+      db_name="mongodb-notifyr" \
+      default_ttl="30m" \
+      max_ttl="1h" \
+      creation_statements='{ "db": "admin", "roles": [
+          { "role": "dbOwner", "db": "agentic-notifyr" }
+      ]}'
 
     vault write notifyr-database/roles/app-mongo-ntfr-role \
-      db_name="mongodb" \
-      creation_statements='{ "db": "notifyr", "roles": [
-      { "role": "readWrite", "db": "notifyr", "collection":"communication" },
-      { "role": "readWrite", "db": "notifyr", "collection":"webhook" },
-      { "role": "readWrite", "db": "notifyr", "collection":"tasks" },
-      { "role": "readWrite", "db": "notifyr", "collection":"outbound" },
-      { "role": "readWrite", "db": "notifyr", "collection":"errorProfile" },
-      { "role": "readWrite", "db": "notifyr", "collection":"workflow" }]}' \
+      db_name="mongodb-notifyr" \
+      creation_statements='{ "db": "app-notifyr", "roles": [
+      { "role": "readWrite", "db": "app-notifyr", "collection":"communication" },
+      { "role": "readWrite", "db": "app-notifyr", "collection":"webhook" }
+      { "role": "readWrite", "db": "app-notifyr", "collection":"custom" },
+      { "role": "readWrite", "db": "app-notifyr", "collection":"outbound" },
+      { "role": "readWrite", "db": "app-notifyr", "collection":"errorProfile" },
+      { "role": "readWrite", "db": "app-notifyr", "collection":"workflow" }]}' \
       default_ttl="12h" \
       max_ttl="16h"
 
     vault write notifyr-database/roles/admin-mongo-ntfr-role \
+      db_name="mongodb-notifyr" \
+      default_ttl="30m" \
+      max_ttl="1h" \
+      creation_statements='{ "db": "admin", "roles": [
+          { "role": "dbOwner", "db": "app-notifyr" }
+      ]}'
+    
+    vault write notifyr-database/roles/app-mongo-jobs-ntfr-role \
+      db_name="mongodb" \
+      creation_statements='{ "db": "notifyr", "roles": [
+      { "role": "readWrite", "db": "notifyr", "collection":"aps" },
+      { "role": "readWrite", "db": "notifyr", "collection":"celery" },
+      { "role": "readWrite", "db": "notifyr", "collection":"tasks" }]}' \
+      default_ttl="12h" \
+      max_ttl="16h"
+
+    vault write notifyr-database/roles/admin-app-mongo-jobs-ntfr-role \
       db_name="mongodb" \
       default_ttl="30m" \
       max_ttl="1h" \
       creation_statements='{ "db": "admin", "roles": [
           { "role": "dbOwner", "db": "notifyr" }
       ]}'
+
     setup_config_kv2 "mongo_roles" "set"
   fi
 
@@ -532,16 +561,27 @@ database_connection_config(){
   # --- POSTGRES CONNECTION ---
   if ! setup_config_kv2 "postgres_connection" "check"; then
     echo "Configuring Postgres connection..."
+
+    vault write notifyr-database/config/postgres-notifyr \
+      plugin_name="postgresql-database-plugin" \
+      allowed_roles="" \
+      connection_url="postgresql://{{username}}:{{password}}@postgres:5432/client-notifyr" \
+      max_open_connections=50 \
+      max_idle_connections=20 \
+      username="pg-vaultadmin" \
+      password="$VAULTPASS"
+    vault write -f notifyr-database/rotate-root/postgres-notifyr
+
     vault write notifyr-database/config/postgres \
       plugin_name="postgresql-database-plugin" \
       allowed_roles="admin-postgres-ntfr-role, app-postgres-ntfr-role" \
       connection_url="postgresql://{{username}}:{{password}}@$POSTGRES_HOST:5432/notifyr" \
       max_open_connections=50 \
       max_idle_connections=20 \
-      username="$POSTGRES_USER" \
-      password="$POSTGRES_PASSWORD"
-
+      username="$NOTIFYR_POSTGRES_USER" \
+      password="$NOTIFYR_POSTGRES_PASSWORD"
     vault write -f notifyr-database/rotate-root/postgres
+
     setup_config_kv2 "postgres_connection" "set"
   fi
 
@@ -550,14 +590,23 @@ database_connection_config(){
   # --- MONGODB CONNECTION ---
   if ! setup_config_kv2 "mongodb_connection" "check"; then
     echo "Configuring MongoDB connection..."
+
+    vault write notifyr-database/config/mongodb-notifyr \
+      plugin_name="mongodb-database-plugin" \
+      allowed_roles="admin-mongo-ntfr-role, app-mongo-ntfr-role, agentic-mongo-ntfr-role, admin-agentic-mongo-ntfr-role" \
+      connection_url="mongodb://{{username}}:{{password}}@mongodb:27017/admin?replicaSet=$MONGO_REPLICA_NAME" \
+      username="mongo-vaultadmin" \
+      password="$VAULTPASS"
+    vault write -f notifyr-database/rotate-root/mongodb-notifyr
+
     vault write notifyr-database/config/mongodb \
       plugin_name="mongodb-database-plugin" \
-      allowed_roles="admin-mongo-ntfr-role, app-mongo-ntfr-role, agentic-mongo-ntfr-role" \
+      allowed_roles="app-mongo-jobs-ntfr-role, admin-app-mongo-jobs-ntfr-role " \
       connection_url="mongodb://{{username}}:{{password}}@$MONGO_HOST:27017/admin?replicaSet=$MONGO_REPLICA_NAME" \
-      username="$MONGO_INITDB_ROOT_USERNAME" \
-      password="$MONGO_INITDB_ROOT_PASSWORD"
-
+      username="$NOTIFYR_MONGO_USERNAME" \
+      password="$NOTIFYR_MONGO_PASSWORD"
     vault write -f notifyr-database/rotate-root/mongodb
+    
     setup_config_kv2 "mongodb_connection" "set"
   fi
 

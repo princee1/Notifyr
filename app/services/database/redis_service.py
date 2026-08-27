@@ -16,7 +16,7 @@ from app.services.database.base_db_service import BrokerService, CredentialName,
 from app.services.file.file_service import FileService
 from app.services.reactive_service import ReactiveService
 from app.services.vault_service import VaultService
-from app.utils.constant import RedisConstant, SubConstant, VaultConstant
+from app.utils.constant import HostConstant, RedisConstant, SubConstant, VaultConstant
 from app.utils.globals import APP_MODE, CAPABILITIES, ApplicationMode
 from app.utils.toolbox import RunInThreadPool
 from app.utils.transformer import none_to_empty_str
@@ -235,30 +235,30 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
     def generate_credentials(self):
         self.add_credentials(VaultConstant.REDIS_ROLE)
         self.add_credentials(VaultConstant.REDIS_ROLE,CREDIT_CREDS,prefix='app-credit')
-        self.add_credentials(VaultConstant.CELERY_BACKEND_ROLE,CELERY_BACKEND_CREDS)
+        self.add_credentials(VaultConstant.REDIS_ROLE,CELERY_BACKEND_CREDS,suffix='celery-backend')
 
-        if self.configService.BROKER_PROVIDER == 'redis':
-            self.add_credentials(VaultConstant.CELERY_BROKER_ROLE,CELERY_BROKER_CREDS)
+        if self.configService.CELERY_BROKER_PROVIDER == 'redis':
+            self.add_credentials(VaultConstant.REDIS_ROLE,CELERY_BROKER_CREDS,suffix='celery-broker')
         
         if CAPABILITIES['agentic'] and APP_MODE in AGENTIC_APP_MODE_CRED:
             self.add_credentials(VaultConstant.REDIS_ROLE,AGENTIC_CREDS,prefix='agentic')
 
     def create_redis_instance(self):
 
-        self.redis_cost = Redis(host=NOTIFYR_HOST,db=RedisConstant.COST_DB,decode_responses=True,username=self.db_user(CREDIT_CREDS),password=self.db_password(CREDIT_CREDS))
+        self.redis_cost = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.COST_DB,decode_responses=True,username=self.db_user(CREDIT_CREDS),password=self.db_password(CREDIT_CREDS))
         self.redis_celery = Redis(host=self.configService.REDIS_HOST,db=RedisConstant.CELERY_DB,username=self.db_user(CELERY_BACKEND_CREDS),password=self.db_password(CELERY_BACKEND_CREDS))
         
-        self.redis_limiter = Redis(host=NOTIFYR_HOST,db=RedisConstant.LIMITER_DB,username=self.db_user(),password=self.db_password())
-        self.redis_cache = Redis(host=NOTIFYR_HOST,db=RedisConstant.CACHE_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
-        self.redis_config = Redis(host=NOTIFYR_HOST,db=RedisConstant.CONFIG_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
+        self.redis_limiter = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.LIMITER_DB,username=self.db_user(),password=self.db_password())
+        self.redis_cache = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.CACHE_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
+        self.redis_config = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.CONFIG_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
 
         if CAPABILITIES['agentic'] and APP_MODE in AGENTIC_APP_MODE_CRED:
-            self.redis_agentic = Redis(host=NOTIFYR_HOST,db=RedisConstant.AGENTIC_DB,decode_responses=True,username=self.db_user(AGENTIC_CREDS),password=self.db_password(AGENTIC_CREDS))        
+            self.redis_agentic = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.AGENTIC_DB,decode_responses=True,username=self.db_user(AGENTIC_CREDS),password=self.db_password(AGENTIC_CREDS))        
 
         if APP_MODE == ApplicationMode.beat or APP_MODE == ApplicationMode.worker:
-            self.redis_events = SyncRedis(host=NOTIFYR_HOST,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
+            self.redis_events = SyncRedis(host=HostConstant.REDIS_HOST,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
         else:
-            self.redis_events = Redis(host=NOTIFYR_HOST,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
+            self.redis_events = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
         
         self.db.clear()
         self.db.update({
@@ -280,8 +280,12 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
             self.db['agentic']=self.redis_agentic
             self.db[RedisConstant.AGENTIC_DB]= self.redis_agentic
 
+        if self.configService.JOBSTORE_DB == 'redis':
+            self.db['celery'] = self.redis_celery
+            self.db[RedisConstant.CELERY_DB] = self.redis_celery
+
     def revoke_lease(self,name:CredentialName=None):
-        if self.configService.BROKER_PROVIDER == 'redis':
+        if self.configService.CELERY_BROKER_PROVIDER == 'redis':
             if name == None or name == CELERY_BROKER_CREDS:
                 super().revoke_lease(CELERY_BROKER_CREDS)
 
@@ -392,7 +396,7 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
     async def rem(self,database:int|str,name:str,*keys:str,redis:Redis=None):
         return await redis.zrem(name,*keys)
 
-    def compute_url(self,host:str=NOTIFYR_HOST,port:int=6379,creds:CredentialName='default',db:int=None):
+    def compute_url(self,host:str=HostConstant.REDIS_HOST,port:int=6379,creds:CredentialName='default',db:int=None):
         return f'redis://{self.db_user(creds)}:{self.db_password(creds)}@{host}:{port}/{db}'
 
     def compute_limiter_url(self):
@@ -402,7 +406,7 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         return f"redis://{self.db_user(CELERY_BACKEND_CREDS)}:{self.db_password(CELERY_BACKEND_CREDS)}@{self.configService.REDIS_HOST}:6379/{db}"
 
     def compute_broker_url(self)->str:
-        if self.configService.BROKER_PROVIDER == 'redis':
+        if self.configService.CELERY_BROKER_PROVIDER == 'redis':
             return f"redis://{self.db_user(CELERY_BROKER_CREDS)}:{self.db_user(CELERY_BROKER_CREDS)}@{self.configService.REDIS_HOST}:6379/{RedisConstant.CELERY_DB}"
         else:
             return None

@@ -616,7 +616,7 @@ class AgentService(BaseMiniServiceManager[AgentMiniService],agent_pb2_grpc.Agent
 
         if build_state == DEFAULT_BUILD_STATE or build_state == RECREATE_MEMORY_BUILD_STATE:
             self.checkpointer = MongoDBSaver(self.mongooseService.client_store.get_client(AGENTIC_CREDS,'sync'),
-                                        MongooseDBConstant.DATABASE_NAME,
+                                        MongooseDBConstant.AGENTIC_DATABASE_NAME,
                                         MongooseDBConstant.CHAT_COLLECTION,
                                         MongooseDBConstant.CHAT_WRITE_COLLECTION,
                                         )
