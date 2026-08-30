@@ -476,7 +476,8 @@ services:
     volumes:
       - mongo-data:/data/db
       - ./scripts/entrypoint/mongo-entrypoint.sh:/usr/local/bin/mongo-entrypoint.sh
-      - ./scripts/init/mongo-init.sh:/docker-entrypoint-initdb.d/mongo-init.sh
+      - ./scripts/db-init/mongo-init.sh:/docker-entrypoint-initdb.d/mongo-init.sh
+      - ./scripts/database/mongodb/notifyr.js:/notifyr/notifyr.js
     environment:
       MONGO_INITDB_ROOT_USERNAME: mongo-vaultadmin
       MONGO_INITDB_ROOT_PASSWORD: ${VAULTPASS:-vaultpass}

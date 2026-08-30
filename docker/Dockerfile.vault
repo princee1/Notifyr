@@ -354,7 +354,7 @@ RUN chmod 770 /usr/local/bin/*-rotator.sh
 COPY --chown=vaultuser:vaultuser ./.notifyr/settings_db.json ./vault/config/settings_db.json
 
 # Copy scripts with correct permissions
-COPY --chmod=700 ./scripts/init/vault-init.sh /usr/local/bin/vault-init.sh
+COPY --chmod=700 ./scripts/db-init/vault-init.sh /usr/local/bin/vault-init.sh
 COPY --chown=vaultuser:vaultuser ./scripts/entrypoint/vault-entrypoint.sh /usr/local/bin/vault-entrypoint.sh
 
 RUN chmod +x /usr/local/bin/vault-entrypoint.sh

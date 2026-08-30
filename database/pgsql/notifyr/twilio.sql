@@ -2,7 +2,7 @@
 SET search_path = twilio;
 
 -- Create domain for SMS Status
-CREATE DOMAIN SMSStatus AS VARCHAR(50) CHECK (
+CREATE DOMAIN SMSStatus AS VARCHAR(15) CHECK (
     VALUE IN (
         'QUEUED',
         'SENT',
@@ -23,7 +23,7 @@ CREATE DOMAIN Direction AS VARCHAR(1) CHECK (
 );
 
 -- Create domain for Call Status
-CREATE DOMAIN CallStatus AS VARCHAR(50) CHECK (
+CREATE DOMAIN CallStatus AS VARCHAR(15) CHECK (
     VALUE IN (
         'RECEIVED',
         'INITIATED',
@@ -490,3 +490,33 @@ SELECT
 FROM CallAnalytics
 ORDER BY week_start_date ASC;
 -- Sort by oldest to newest week
+
+
+INSERT INTO
+    twilio.SMSAnalytics (
+        analytics_id,
+        week_start_date,
+        direction,
+        sms_sent,
+        sms_delivered,
+        sms_failed,
+        total_price
+    )
+VALUES (
+        DEFAULT,
+        DATE_TRUNC('week', NOW()),
+        'O',
+        0,
+        0,
+        0,
+        0
+    ),
+    (
+        DEFAULT,
+        DATE_TRUNC('week', CURRENT_DATE),
+        'I',
+        0,
+        0,
+        0,
+        0
+    );

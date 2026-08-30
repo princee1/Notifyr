@@ -311,3 +311,5 @@ SELECT cron.schedule (
         'create_daily_email_analytics_row', '0 0 * * *', -- Every day at midnight
         'SELECT emails.create_daily_email_analytics_row();'
     );
+
+SELECT emails.create_daily_email_analytics_row();

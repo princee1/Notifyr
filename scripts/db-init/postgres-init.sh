@@ -1,39 +1,44 @@
 #!/bin/bash
-echo "📂 Running setup.sql..."
-psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/setup.sql
+set -e
 
-echo "📂 Running admin.sql..."
+echo "📂 Initialize Notifyr Postgres Database"
+
+NOTIFYR_DATABASE=notifyr
+INIT_NOTIFYR_DB=${INIT_NOTIFYR_DB:-off}
+
+echo "📂 Running admin setup operations..."
 psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/admin.sql
+psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/public.sql
+psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/client/setup.sql
 
+echo "📂 Running logic schema..."
+psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/client/security.sql
 
-echo "📂 Running security.sql..."
-psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/security.sql
-
-echo "📂 Running contacts.sql..."
-psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/contacts.sql
-
-echo "📂 Running emails.sql..."
-psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/emails.sql
-
-echo "📂 Running links.sql..."
-psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/links.sql
-
-echo "📂 Running cron.sql..."
+echo "📂 Running cron for notifyr db"
 psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/cron.sql
 
-# echo "📂 Running notifications.sql..."
-# psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/notifications.sql
+if [ "$INIT_NOTIFYR_DB" != "on" ]; then
 
-# echo "📂 Running campaigns.sql..."
-# psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/campaigns.sql
+    echo "📂 Creating notifyr admin user"
+    psql -U "$POSTGRES_USER" -c "CREATE USER $NOTIFYR_POSTGRES_USER WITH PASSWORD '$NOTIFYR_POSTGRES_PASSWORD';"
+    psql -U "$POSTGRES_USER" -c "CREATE DATABASE $NOTIFYR_DATABASE OWNER $NOTIFYR_POSTGRES_USER;"
+    
+    echo "📂 Running admin setup operation in notifyr db..."
+    psql -U "$POSTGRES_USER" -d "$NOTIFYR_DATABASE" -f /database/admin.sql
+    psql -U "$POSTGRES_USER" -d "$NOTIFYR_DATABASE" -f /database/public.sql
+    psql -U "$POSTGRES_USER" -d "$NOTIFYR_DATABASE" -f /database/notifyr/setup.sql
 
-# echo "📂 Running mta.sql..."
-# psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/mta.sql
+    echo "📂 Running logic schema in notifyr db..." 
+    psql -U "$POSTGRES_USER" -d "$NOTIFYR_DATABASE" -f /database/notifyr/contacts.sql
+    psql -U "$POSTGRES_USER" -d "$NOTIFYR_DATABASE" -f /database/notifyr/emails.sql
+    psql -U "$POSTGRES_USER" -d "$NOTIFYR_DATABASE" -f /database/notifyr/links.sql
+    # psql -U "$POSTGRES_USER" -d "$NOTIFYR_DATABASE" -f /database/notifyr/notifications.sql
+    # psql -U "$POSTGRES_USER" -d "$NOTIFYR_DATABASE" -f /database/notifyr/campaigns.sql
+    # psql -U "$POSTGRES_USER" -d "$NOTIFYR_DATABASE" -f /database/notifyr/mta.sql
+    psql -U "$POSTGRES_USER" -d "$NOTIFYR_DATABASE" -f /database/notifyr/twilio.sql
 
-echo "📂 Running twilio.sql..."
-psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/twilio.sql
-
-echo "📂 Running data.sql..."
-psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/data.sql
+    echo "📂 Running cron for notifyr db"
+    psql -U "$POSTGRES_USER" -d "$NOTIFYR_DB" -f /database/cron.sql
+fi
 
 echo "✅ setup.sh completed."

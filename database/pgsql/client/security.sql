@@ -373,3 +373,44 @@ CREATE TRIGGER guard_challenge_expiry
     ON Challenge
     FOR EACH ROW
     EXECUTE FUNCTION guard_challenge_expiry();
+
+DELETE FROM security.Client;
+
+DELETE FROM security.Groupclient;
+
+INSERT INTO
+    security.Client (
+        client_name,
+        client_type,
+        client_description,
+        client_scope,
+        authenticated,
+        can_login
+
+    )
+VALUES (
+        'Notifyr ADMIN',
+        'Admin',
+        'Admin client for Notifyr application',
+        'Free',
+        True,
+        True
+    );
+
+
+INSERT INTO
+    security.Challenge (
+        client_id,
+        expired_at_auth,
+        expired_at_refresh
+    )
+VALUES (
+        (
+            SELECT client_id
+            FROM security.Client
+            WHERE
+                client_type = 'Admin'
+        ),
+        NOW() + INTERVAL '5 minute',
+        NOW() + INTERVAL '1 hour'
+    );

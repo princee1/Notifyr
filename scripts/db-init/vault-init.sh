@@ -345,19 +345,19 @@ setup_database_config(){
         default_ttl="12h" \
         max_ttl="16h" \
         creation_statements="CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}'; \
-                      GRANT vault_ntrfyr_app_role TO \"{{name}}\";" \
+                      GRANT vault_ntfr_app_role TO \"{{name}}\";" \
         rollback_statements="DROP ROLE IF EXISTS \"{{name}}\";" \
-        revocation_statements="REVOKE vault_ntrfyr_app_role FROM \"{{name}}\";
+        revocation_statements="REVOKE vault_ntfr_app_role FROM \"{{name}}\";
                         DROP ROLE IF EXISTS \"{{name}}\";"
 
     vault write notifyr-database/roles/admin-postgres-ntfr-role \
       db_name="postgres" \
       default_ttl="3h" \
       max_ttl="5h" \
-      creation_statements="CREATE ROLE \"{{name}}\" WITH LOGIN SUPERUSER PASSWORD '{{password}}' VALID UNTIL '{{expiration}}'; \
-                          GRANT vault_ntrfyr_admin_role TO \"{{name}}\";" \
+      creation_statements="CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}'; \
+                          GRANT vault_ntfr_admin_role TO \"{{name}}\";" \
       rollback_statements="DROP ROLE IF EXISTS \"{{name}}\";" \
-      revocation_statements="REVOKE vault_ntrfyr_admin_role FROM \"{{name}}\"; \
+      revocation_statements="REVOKE vault_ntfr_admin_role FROM \"{{name}}\"; \
                             DROP ROLE IF EXISTS \"{{name}}\";"
     setup_config_kv2 "postgres_roles" "set"
   fi

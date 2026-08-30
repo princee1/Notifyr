@@ -38,7 +38,7 @@ CREATE DOMAIN ContentType AS VARCHAR(30) CHECK (
 );
 
 CREATE TABLE IF NOT EXISTS Contact (
-    contact_id UUID PRIMARY KEY DEFAULT uuid_generate_v1mc (),
+    contact_id UUID PRIMARY KEY DEFAULT public.uuid_generate_v1mc (),
     first_name VARCHAR(50) NOT NULL,
     last_name VARCHAR(50) NOT NULL,
     email VARCHAR(50) UNIQUE NOT NULL,
@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS Contact (
 );
 
 CREATE TABLE IF NOT EXISTS SecurityContact (
-    security_id UUID PRIMARY KEY DEFAULT uuid_generate_v1mc (),
+    security_id UUID PRIMARY KEY DEFAULT public.uuid_generate_v1mc (),
     contact_id UUID,
     security_code TEXT DEFAULT NULL,
     security_code_salt VARCHAR(64) DEFAULT NULL,
@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS SecurityContact (
 
 -- TODO Combine the SubscriptionContact and Content Type Later ...
 CREATE TABLE IF NOT EXISTS SubscriptionContact (
-    subscription_id UUID DEFAULT uuid_generate_v1mc (),
+    subscription_id UUID DEFAULT public.uuid_generate_v1mc (),
     contact_id UUID UNIQUE,
     email_status SubscriptionStatus NOT NULL,
     sms_status SubscriptionStatus NOT NULL,
@@ -398,3 +398,45 @@ BEGIN
     ORDER BY group_number, country, region, city;
 END;
 $$ LANGUAGE plpgsql;
+
+
+
+DELETE FROM contacts.Reason;
+
+INSERT INTO
+    contacts.Reason (
+        reason_name,
+        reason_description
+    )
+VALUES (
+        'Not Interested',
+        'The user is not interested in the content.'
+    ),
+    (
+        'Too Many Emails',
+        'The user is receiving too many emails.'
+    ),
+    (
+        'Content Not Relevant',
+        'The content is not relevant to the user.'
+    ),
+    (
+        'Other',
+        'Other reasons for unsubscribing.'
+    ),
+    (
+        'Switched to Competitor',
+        'The user has switched to a competitor.'
+    ),
+    (
+        'Privacy Concerns',
+        'The user has concerns about privacy.'
+    ),
+    (
+        'Technical Issues',
+        'The user is experiencing technical issues.'
+    ),
+    (
+        'No Longer Needed',
+        'The user no longer needs the service.'
+    );
