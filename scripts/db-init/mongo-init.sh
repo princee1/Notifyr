@@ -3,12 +3,17 @@ set -e
 
 VOLUME_DIR=/data/db
 INIT_FILE="$VOLUME_DIR/init.lock"
+INIT_NOTIFYR_DB=${INIT_NOTIFYR_DB:-off}
 
-mongosh \
-    --username "$MONGO_INITDB_ROOT_USERNAME" \
-    --password "$MONGO_INITDB_ROOT_PASSWORD" \
-    --authenticationDatabase admin \
-    /notifyr/notifyr.js
+if [ "$INIT_NOTIFYR_DB" != "on" ]; then
+
+    mongosh \
+        --username "$MONGO_INITDB_ROOT_USERNAME" \
+        --password "$MONGO_INITDB_ROOT_PASSWORD" \
+        --authenticationDatabase admin \
+        /notifyr/notifyr.js
+        
+fi
 
 echo -n "done" > $INIT_FILE
 chown mongodb:mongodb $INIT_FILE

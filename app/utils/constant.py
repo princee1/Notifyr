@@ -181,8 +181,8 @@ class MongooseDBConstant:
     TASKS_COLLECTION = 'tasks'
 
     JOB_DATABASE_NAME = 'notifyr'
-    AGENTIC_DATABASE_NAME = 'agentic-notifyr'
-    DEFAULT_DATABASE_NAME = 'app-notifyr'
+    AGENTIC_DATABASE_NAME = 'agentic'
+    DEFAULT_DATABASE_NAME = 'app'
 
     JOB_COLLECTIONS =  {APS_COLLECTION,CELERY_COLLECTION,TASKS_COLLECTION}
     AGENTIC_COLLECTIONS = {AGENT_COLLECTION,LLM_COLLECTION,TOOL_COLLECTION,STORE_COLLECTION,CHAT_COLLECTION,CHAT_WRITE_COLLECTION}
@@ -200,7 +200,7 @@ class MongooseDBConstant:
 
 class PostgresConstant:
     DEFAULT_DATABASE_NAME = 'notifyr'
-    CLIENT_DATABASE_NAME = 'client-notifyr'
+    SECURITY_DATABASE_NAME = 'security'
             
 ########################                     ########################################
 

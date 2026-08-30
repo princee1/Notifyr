@@ -165,7 +165,6 @@ services:
       - DOMAIN_NAME=${DOMAIN_NAME}
   
       - CELERY_BROKER_PROVIDER=${CELERY_BROKER_PROVIDER:-rabbitmq}
-      - APS_JOBSTORE=${APS_JOBSTORE}
 
       - MONGO_REPLICA_NAME=${MONGO_REPLICA_NAME:-nrp}
       - SECURITY_FLAG=${SECURITY_FLAG:-true}
@@ -478,12 +477,13 @@ services:
       - mongo-data:/data/db
       - ./scripts/entrypoint/mongo-entrypoint.sh:/usr/local/bin/mongo-entrypoint.sh
       - ./scripts/db-init/mongo-init.sh:/docker-entrypoint-initdb.d/mongo-init.sh
-      - ./scripts/database/mongodb/notifyr.js:/notifyr/notifyr.js
+      - ./database/mongodb/notifyr.js:/notifyr/notifyr.js
     environment:
+      INIT_NOTIFYR_DB: on
+      MONGO_INITDB_DATABASE: app
       MONGO_INITDB_ROOT_USERNAME: mongo-vaultadmin
       MONGO_INITDB_ROOT_PASSWORD: ${VAULTPASS:-vaultpass}
       MONGO_REPLICA_NAME: ${MONGO_REPLICA_NAME:-nrp}
-      MONGO_INITDB_DATABASE: app-notifyr
       NOTIFYR_MONGO_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:?Mongo root user must be set}
       NOTIFYR_MONGO_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?Mongo root password must be set}
     networks:
@@ -499,9 +499,10 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     environment:
+      INIT_NOTIFYR_DB: on
+      POSTGRES_DB: security
       POSTGRES_USER: pg-vaultadmin
       POSTGRES_PASSWORD: ${VAULTPASS:-vaultpass}
-      POSTGRES_DB: client-notifyr
       NOTIFYR_POSTGRES_USER: ${POSTGRES_USER:?Postgres user must be set}
       NOTIFYR_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Postgres password must be set}
     networks:

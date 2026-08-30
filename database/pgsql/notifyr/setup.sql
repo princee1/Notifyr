@@ -8,6 +8,11 @@
 -- DROP SCHEMA IF EXISTS emails CASCADE;
 
 -- DROP SCHEMA IF EXISTS cron CASCADE;
+
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+GRANT USAGE ON SCHEMA cron TO test; -- need to get in env
+
 CREATE SCHEMA contacts;
 
 CREATE SCHEMA emails;
@@ -52,10 +57,16 @@ CREATE ROLE vault_ntfr_app_role NOLOGIN;
 
 CREATE ROLE vault_ntfr_admin_role NOLOGIN;
 
-GRANT CONNECT ON DATABASE notifyr TO vault_ntfr_app_role;
-
 -- Grants the ability to execute CREATE SCHEMA commands in the database.
-GRANT CREATE ON DATABASE notifyr TO vault_ntfr_admin_role;
+GRANT CONNECT ON DATABASE notifyr TO vault_ntfr_app_role;
 
 -- Grants basic connect permission
 GRANT CONNECT ON DATABASE notifyr TO vault_ntfr_admin_role;
+
+GRANT CREATE ON DATABASE notifyr TO vault_ntfr_admin_role;
+
+CALL bootstrap_admin.grant_app_role_privileges('vault_ntfr_app_role',ARRAY['public','contacts','emails','links','twilio']);
+
+CALL bootstrap_admin.grant_admin_role_privileges('vault_ntfr_admin_role',ARRAY['public','contacts','emails','links','twilio']);
+
+DROP SCHEMA bootstrap_admin CASCADE;

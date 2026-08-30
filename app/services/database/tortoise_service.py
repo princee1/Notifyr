@@ -52,7 +52,7 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
                 CLIENT_CREDS: self.compute_url(
                     HostConstant.POSTGRES_HOST,
                     creds=CLIENT_CREDS,
-                    database=PostgresConstant.CLIENT_DATABASE_NAME,
+                    database=PostgresConstant.SECURITY_DATABASE_NAME,
                 ),
             },
             "apps": {
@@ -74,7 +74,7 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
 
     def init_sync_connection(self):
         self.sync_conn = psycopg2.connect(
-                            dbname=PostgresConstant.CLIENT_DATABASE_NAME,
+                            dbname=PostgresConstant.SECURITY_DATABASE_NAME,
                             user=self.db_user(CLIENT_CREDS),
                             password=self.db_password(CLIENT_CREDS),
                             host=HostConstant.POSTGRES_HOST,

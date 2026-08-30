@@ -389,13 +389,13 @@ setup_database_config(){
     echo "Configuring Mongo roles..."
     vault write notifyr-database/roles/agentic-mongo-ntfr-role \
       db_name="mongodb-notifyr" \
-      creation_statements='{ "db": "agentic-notifyr", "roles": [
-      { "role": "readWrite", "db": "agentic-notifyr", "collection":"agent" },
-      { "role": "readWrite", "db": "agentic-notifyr", "collection":"llm" },
-      { "role": "readWrite", "db": "agentic-notifyr", "collection":"chat" },
-      { "role": "readWrite", "db": "agentic-notifyr", "collection":"tool" },
-      { "role": "readWrite", "db": "agentic-notifyr", "collection":"store" },
-      { "role": "readWrite", "db": "agentic-notifyr", "collection":"chat_write" }]}' \
+      creation_statements='{ "db": "agentic", "roles": [
+      { "role": "readWrite", "db": "agentic", "collection":"agent" },
+      { "role": "readWrite", "db": "agentic", "collection":"llm" },
+      { "role": "readWrite", "db": "agentic", "collection":"chat" },
+      { "role": "readWrite", "db": "agentic", "collection":"tool" },
+      { "role": "readWrite", "db": "agentic", "collection":"store" },
+      { "role": "readWrite", "db": "agentic", "collection":"chat_write" }]}' \
       default_ttl="12h" \
       max_ttl="16h"
     
@@ -404,18 +404,18 @@ setup_database_config(){
       default_ttl="30m" \
       max_ttl="1h" \
       creation_statements='{ "db": "admin", "roles": [
-          { "role": "dbOwner", "db": "agentic-notifyr" }
+          { "role": "dbOwner", "db": "agentic" }
       ]}'
 
     vault write notifyr-database/roles/app-mongo-ntfr-role \
       db_name="mongodb-notifyr" \
-      creation_statements='{ "db": "app-notifyr", "roles": [
-      { "role": "readWrite", "db": "app-notifyr", "collection":"communication" },
-      { "role": "readWrite", "db": "app-notifyr", "collection":"webhook" }
-      { "role": "readWrite", "db": "app-notifyr", "collection":"custom" },
-      { "role": "readWrite", "db": "app-notifyr", "collection":"outbound" },
-      { "role": "readWrite", "db": "app-notifyr", "collection":"errorProfile" },
-      { "role": "readWrite", "db": "app-notifyr", "collection":"workflow" }]}' \
+      creation_statements='{ "db": "app", "roles": [
+      { "role": "readWrite", "db": "app", "collection":"communication" },
+      { "role": "readWrite", "db": "app", "collection":"webhook" }
+      { "role": "readWrite", "db": "app", "collection":"custom" },
+      { "role": "readWrite", "db": "app", "collection":"outbound" },
+      { "role": "readWrite", "db": "app", "collection":"errorProfile" },
+      { "role": "readWrite", "db": "app", "collection":"workflow" }]}' \
       default_ttl="12h" \
       max_ttl="16h"
 
@@ -424,7 +424,7 @@ setup_database_config(){
       default_ttl="30m" \
       max_ttl="1h" \
       creation_statements='{ "db": "admin", "roles": [
-          { "role": "dbOwner", "db": "app-notifyr" }
+          { "role": "dbOwner", "db": "app" }
       ]}'
     
     vault write notifyr-database/roles/app-mongo-jobs-ntfr-role \
@@ -587,7 +587,7 @@ database_connection_config(){
     vault write notifyr-database/config/postgres-notifyr \
       plugin_name="postgresql-database-plugin" \
       allowed_roles="app-postgres-client-ntfr-role, admin-postgres-client-ntfr-role" \
-      connection_url="postgresql://{{username}}:{{password}}@postgres:5432/client-notifyr" \
+      connection_url="postgresql://{{username}}:{{password}}@postgres:5432/client" \
       max_open_connections=50 \
       max_idle_connections=20 \
       username="pg-vaultadmin" \
