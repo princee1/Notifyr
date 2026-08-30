@@ -230,7 +230,6 @@ class ConfigService(_service.BaseService):
 
         # APS CONFIG #
         self.APS_ACTIVATED:bool = ConfigService.parseToBool(self.getenv('APS_ACTIVATED','true'),True)
-        self.APS_JOBSTORE:Literal['redis','mongodb','memory'] = self.getenv('APS_JOBSTORE','redis')
 
         # JOBSTORE CONFIG #
         self.JOBSTORE_DB:Literal['redis','mongodb'] = self.getenv('JOBSTORE','redis')
@@ -256,9 +255,6 @@ class ConfigService(_service.BaseService):
 
         if self.CELERY_BROKER_PROVIDER not in ['redis','rabbitmq']:
             raise BuildWarningError()
-
-        if self.APS_JOBSTORE not in ['redis','mongodb','memory']:
-            self.APS_JOBSTORE = 'memory'
 
     def __getitem__(self, key):
         try:

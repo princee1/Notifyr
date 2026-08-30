@@ -2,6 +2,7 @@ import functools
 from typing import Any, Callable
 from celery import Celery
 from app.classes.celery import CeleryTaskNameNotExistsError, TaskHeaviness
+from app.definition._service import ServiceStatus
 from app.services.config_service import ConfigService
 from app.container import Get, build_container, Register
 from app.services import *
@@ -34,7 +35,6 @@ def compute_name(t: str) -> str:
 def task_name(t):
     return f'{CELERY_MODULE_NAME}.{t}'
 
-
 TASK_REGISTRY: dict[str, dict[str, Any]] = {}
 
 ##############################################           ##################################################
@@ -43,15 +43,22 @@ configService: ConfigService = Get(ConfigService)
 redisService  = Get(RedisService)
 vaultService = Get(VaultService)
 
-if configService.JOBSTORE_DB=='redis':
+if configService.JOBSTORE_DB == 'redis':
     backend_url = redisService.compute_url(configService.REDIS_HOST,creds=CELERY_BACKEND_CREDS)
+    if redisService.service_status != ServiceStatus.AVAILABLE:
+        raise ... 
 else:
-    from app.services.database.mongoose_service import MongooseService
+    from app.services.database.mongoose_service import MongooseService,JOBS_CREDS
     mongooseService = Register(MongooseService)
-    backend_url = ...
+    if mongooseService.service_status != ServiceStatus.AVAILABLE:
+        raise ... 
+    backend_url = mongooseService.compute_url(configService.MONGO_HOST,name=JOBS_CREDS)
 
 if APP_MODE != ApplicationMode.beat:
     rabbitmqService = Get(RabbitMQService)
+    if rabbitmqService.service_status != ServiceStatus.AVAILABLE:
+        raise ... 
+
     broker_url = redisService.compute_broker_url() or rabbitmqService.compute_broker_url()
 else:
     broker_url = None
@@ -74,6 +81,7 @@ celery_app.conf.result_backend_transport_options = {
        'timeout': 5.0
     }
 }
+
 celery_app.conf.task_store_errors_even_if_ignored = True
 celery_app.conf.task_ignore_result = True
 
