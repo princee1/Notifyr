@@ -20,8 +20,8 @@ MINIO_PID=$!
 sleep 15
 echo "Minio is UP!"
 
-VAULT_ACCESS_KEY=vaultadmin-minio
-VAULT_SECRET_KEY=${MINIO_VAULT_PASSWORD}
+VAULT_ACCESS_KEY=minio-vaultadmin
+VAULT_SECRET_KEY=${MINIO_PASSWORD}
 
 accessKey=$(jq -r '.credential.accessKey' "$CONFIG_DIR/config.json")
 secretKey=$(jq -r '.credential.secretKey' "$CONFIG_DIR/config.json")
@@ -40,7 +40,7 @@ create_bucket() {
 mc alias set notifyr http://localhost:9000 "$accessKey" "$secretKey" >/dev/null
 
 # ===============================
-# Add vaultadmin-minio ONLY IF NOT EXISTS
+# Add minio-vaultadmin ONLY IF NOT EXISTS
 # ===============================
 echo "Checking if user '$VAULT_ACCESS_KEY' exists..."
 

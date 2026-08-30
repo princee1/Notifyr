@@ -273,7 +273,7 @@ services:
       - MONGO_REPLICA_NAME=${MONGO_REPLICA_NAME:-nrp}
       - REDIS_HOST=${REDIS_HOST-redis}
       - CELERY_BROKER_PROVIDER=${CELERY_BROKER_PROVIDER:-rabbitmq}
-      - MODE=${MODE:-prod}bea
+      - MODE=${MODE:-prod}
     networks:
       - data_net
       - vault_net
@@ -352,7 +352,7 @@ services:
       NOTIFYR_MONGO_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:?Mongo root user must be set}
       NOTIFYR_MONGO_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?Mongo root password must be set}
 
-      MINIO_VAULT_PASSWORD: ${MINIO_VAULT_PASSWORD:?Minio admin vault password must be set}
+      MINIO_PASSWORD: ${MINIO_PASSWORD:?Minio admin vault password must be set}
 
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?Rabbit mq user must be set}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?Rabbit mq password must be set}
@@ -415,7 +415,7 @@ services:
     volumes:
       - minio-data:/data
     environment:
-      - MINIO_VAULT_PASSWORD=${MINIO_VAULT_PASSWORD:?Minio admin password must set}
+      - MINIO_PASSWORD=${MINIO_PASSWORD:?Minio admin password must set}
       - MINIO_STS_ENABLE=${MINIO_STS_ENABLE:-false}
     depends_on:
       - redis
@@ -452,6 +452,7 @@ services:
       - CELERY_EXTERNAL=${CELERY_EXTERNAL:-false}
       - REDIS_USER=${REDIS_USER:?Redis user must be set}
       - REDIS_PASSWORD=${REDIS_PASSWORD:?Redis password must be set}
+      - REDIS_VAULT_PASSWORD=${VAULTPASS:-vaultpass}
       - DEFAULT_USER=on
       - SKIP_FIX_PERMS=1
     volumes:

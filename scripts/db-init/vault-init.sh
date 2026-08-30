@@ -350,6 +350,16 @@ setup_database_config(){
         revocation_statements="REVOKE vault_ntfr_app_role FROM \"{{name}}\";
                         DROP ROLE IF EXISTS \"{{name}}\";"
 
+    vault write notifyr-database/roles/app-postgres-client-ntfr-role \
+        db_name="postgres-notifyr" \
+        default_ttl="12h" \
+        max_ttl="16h" \
+        creation_statements="CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}'; \
+                      GRANT vault_ntfr_app_role TO \"{{name}}\";" \
+        rollback_statements="DROP ROLE IF EXISTS \"{{name}}\";" \
+        revocation_statements="REVOKE vault_ntfr_app_role FROM \"{{name}}\";
+                        DROP ROLE IF EXISTS \"{{name}}\";"
+
     vault write notifyr-database/roles/admin-postgres-ntfr-role \
       db_name="postgres" \
       default_ttl="3h" \
@@ -360,6 +370,18 @@ setup_database_config(){
       revocation_statements="REVOKE vault_ntfr_admin_role FROM \"{{name}}\"; \
                             DROP ROLE IF EXISTS \"{{name}}\";"
     setup_config_kv2 "postgres_roles" "set"
+
+    vault write notifyr-database/roles/admin-postgres-client-ntfr-role \
+      db_name="postgres-notifyr" \
+      default_ttl="3h" \
+      max_ttl="5h" \
+      creation_statements="CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}'; \
+                          GRANT vault_ntfr_admin_role TO \"{{name}}\";" \
+      rollback_statements="DROP ROLE IF EXISTS \"{{name}}\";" \
+      revocation_statements="REVOKE vault_ntfr_admin_role FROM \"{{name}}\"; \
+                            DROP ROLE IF EXISTS \"{{name}}\";"
+    setup_config_kv2 "postgres_roles" "set"
+
   fi
 
   # --- MONGO ROLES ---
@@ -564,7 +586,7 @@ database_connection_config(){
 
     vault write notifyr-database/config/postgres-notifyr \
       plugin_name="postgresql-database-plugin" \
-      allowed_roles="" \
+      allowed_roles="app-postgres-client-ntfr-role, admin-postgres-client-ntfr-role" \
       connection_url="postgresql://{{username}}:{{password}}@postgres:5432/client-notifyr" \
       max_open_connections=50 \
       max_idle_connections=20 \
@@ -617,12 +639,11 @@ database_connection_config(){
         plugin_name="redis-database-plugin" \
         host="redis" \
         port=6379 \
-        username="vaultadmin-redis" \
-        password="vautlpass" \
+        username="redis-vaultadmin" \
+        password="$VAULTPASS" \
         allowed_roles="admin-redis-ntfr-role, app-redis-ntfr-role, ncs-credit-redis-ntfr-role, agentic-redis-ntfr-role, app-credit-redis-ntfr-role"
     vault write -f notifyr-database/rotate-root/redis-notifyr
     
-
     vault write notifyr-database/config/redis \
         plugin_name="redis-database-plugin" \
         host="$REDIS_HOST" \
@@ -640,8 +661,8 @@ database_connection_config(){
     echo "Configuring Minio connection..."
     vault write notifyr-minio/config/root \
         endpoint="$S3_ENDPOINT" \
-        accessKeyId="vaultadmin-minio" \
-        secretAccessKey="$MINIO_VAULT_PASSWORD" \
+        accessKeyId="minio-vaultadmin" \
+        secretAccessKey="$MINIO_PASSWORD" \
         sts_region="us-east-1" \
         ssl=false
     setup_config_kv2 "minio_connection" "set"
