@@ -41,7 +41,7 @@ CREATE DOMAIN CallStatus AS VARCHAR(15) CHECK (
 
 -- Update table for SMS Tracking
 CREATE TABLE IF NOT EXISTS SMSTracking (
-    sms_id UUID DEFAULT uuid_generate_v1mc (),
+    sms_id UUID DEFAULT public.uuid_generate_v1mc (),
     sms_sid VARCHAR(60) UNIQUE DEFAULT NULL,
     contact_id UUID DEFAULT NULL,
     recipient VARCHAR(100) NOT NULL,
@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS SMSTracking (
 
 -- Update table for Call Tracking
 CREATE TABLE IF NOT EXISTS CallTracking (
-    call_id UUID DEFAULT uuid_generate_v1mc (),
+    call_id UUID DEFAULT public.uuid_generate_v1mc (),
     call_sid VARCHAR(60) UNIQUE DEFAULT NULL,
     contact_id UUID DEFAULT NULL,
     recipient VARCHAR(100) NOT NULL,
@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS CallTracking (
 
 -- Update table for SMS Events
 CREATE TABLE IF NOT EXISTS SMSEvent (
-    event_id UUID DEFAULT uuid_generate_v1mc (),
+    event_id UUID DEFAULT public.uuid_generate_v1mc (),
     sms_id UUID DEFAULT NULL,
     sms_sid VARCHAR(60) DEFAULT NULL,
     direction Direction,
@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS SMSEvent (
 
 -- Update table for Call Events to include location details
 CREATE TABLE IF NOT EXISTS CallEvent (
-    event_id UUID DEFAULT uuid_generate_v1mc (),
+    event_id UUID DEFAULT public.uuid_generate_v1mc (),
     call_id UUID DEFAULT NULL,
     call_sid VARCHAR(60) DEFAULT NULL,
     direction Direction,
@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS CallEvent (
 
 -- Create table for SMS Analytics
 CREATE TABLE IF NOT EXISTS SMSAnalytics (
-    analytics_id UUID DEFAULT uuid_generate_v1mc (),
+    analytics_id UUID DEFAULT public.uuid_generate_v1mc (),
     week_start_date DATE NOT NULL DEFAULT DATE_TRUNC('week', NOW()),
     direction Direction NOT NULL,
     sms_received INT DEFAULT 0,
@@ -123,7 +123,7 @@ CREATE TABLE IF NOT EXISTS SMSAnalytics (
 
 -- Update table for Call Analytics to include location details
 CREATE TABLE IF NOT EXISTS CallAnalytics (
-    analytics_id UUID DEFAULT uuid_generate_v1mc (),
+    analytics_id UUID DEFAULT public.uuid_generate_v1mc (),
     week_start_date DATE NOT NULL DEFAULT DATE_TRUNC('week', NOW()),
     direction Direction NOT NULL,
     country VARCHAR(100) DEFAULT NULL, -- Added country column

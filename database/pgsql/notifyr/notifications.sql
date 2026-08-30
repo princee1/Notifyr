@@ -1,1 +1,1 @@
-SET search_path = notifications
+SET search_path = notifications;

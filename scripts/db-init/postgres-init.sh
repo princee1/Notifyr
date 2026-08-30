@@ -6,12 +6,21 @@ echo "📂 Initialize Notifyr Postgres Database"
 NOTIFYR_DATABASE=notifyr
 INIT_NOTIFYR_DB=${INIT_NOTIFYR_DB:-off}
 
-if [ "$INIT_NOTIFYR_DB" != "on" ]; then
+
+echo "📂 Running admin setup operations..."
+psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/admin.sql
+psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/public.sql
+psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/security/setup.sql
+
+echo "📂 Running logic schema..."
+psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/security/clients.sql
+
+if [ "$INIT_NOTIFYR_DB" = "on" ]; then
 
     echo "📂 Creating notifyr admin user"
-    psql -U "$POSTGRES_USER" -c "CREATE USER $NOTIFYR_POSTGRES_USER WITH PASSWORD '$NOTIFYR_POSTGRES_PASSWORD';"
-    psql -U "$POSTGRES_USER" -c "CREATE DATABASE $NOTIFYR_DATABASE OWNER $NOTIFYR_POSTGRES_USER;"
-    
+    psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "CREATE USER \"$NOTIFYR_POSTGRES_USER\" WITH PASSWORD '$NOTIFYR_POSTGRES_PASSWORD';"
+    psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "CREATE DATABASE \"$NOTIFYR_DATABASE\" OWNER \"$NOTIFYR_POSTGRES_USER\";"
+
     echo "📂 Running admin setup operation in notifyr db..."
     psql -U "$POSTGRES_USER" -d "$NOTIFYR_DATABASE" -f /database/admin.sql
     psql -U "$POSTGRES_USER" -d "$NOTIFYR_DATABASE" -f /database/public.sql
@@ -27,18 +36,10 @@ if [ "$INIT_NOTIFYR_DB" != "on" ]; then
     psql -U "$POSTGRES_USER" -d "$NOTIFYR_DATABASE" -f /database/notifyr/twilio.sql
 
     echo "📂 Running cron for notifyr db"
-    psql -U "$POSTGRES_USER" -d "$NOTIFYR_DB" -f /database/cron.sql
+    psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/cron.sql
 fi
 
-echo "📂 Running admin setup operations..."
-psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/admin.sql
-psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/public.sql
-psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/security/setup.sql
-
-echo "📂 Running logic schema..."
-psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/security/client.sql
-
-echo "📂 Running cron for notifyr db"
+echo "📂 Running cron..."
 psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/cron.sql
 
 echo "✅ setup.sh completed."

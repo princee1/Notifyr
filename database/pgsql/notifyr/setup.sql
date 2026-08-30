@@ -9,9 +9,9 @@
 
 -- DROP SCHEMA IF EXISTS cron CASCADE;
 
-CREATE EXTENSION IF NOT EXISTS pg_cron;
+-- CREATE EXTENSION IF NOT EXISTS pg_cron;
 
-GRANT USAGE ON SCHEMA cron TO test; -- need to get in env
+-- GRANT USAGE ON SCHEMA cron TO test; -- need to get in env
 
 CREATE SCHEMA contacts;
 

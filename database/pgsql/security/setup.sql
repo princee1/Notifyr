@@ -1,3 +1,8 @@
+
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+GRANT USAGE ON SCHEMA cron TO test; -- need to get in env
+
 CREATE SCHEMA clients;
 
 CREATE ROLE vault_ntfr_client_role NOLOGIN;

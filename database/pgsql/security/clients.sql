@@ -129,7 +129,7 @@ WHERE group_id IS NOT NULL;
 
 CREATE OR REPLACE FUNCTION set_auth_challenge() RETURNS VOID AS $$
 BEGIN
-    SET search_path = security;
+    SET search_path = clients;
 
     UPDATE 
         Challenge c
@@ -144,7 +144,7 @@ END; $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION set_refresh_challenge() RETURNS VOID AS $$
 BEGIN
-    SET search_path = security;
+    SET search_path = clients;
     UPDATE 
         Challenge c
     SET 
@@ -158,7 +158,7 @@ END; $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION raw_revoke_challenges(cid UUID) RETURNS VOID as $$
 BEGIN
-    SET search_path = security;
+    SET search_path = clients;
     UPDATE 
         Challenge c
     SET 
@@ -181,7 +181,7 @@ END; $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION raw_revoke_auth_token(cid UUID) RETURNS VOID as $$
 BEGIN
-    SET search_path = security;
+    SET search_path = clients;
     UPDATE 
         Challenge c
     SET 
@@ -201,7 +201,7 @@ END; $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION update_challenge() RETURNS VOID AS $$
 BEGIN
-    SET search_path = security;
+    SET search_path = clients;
     PERFORM set_auth_challenge();
     PERFORM set_refresh_challenge();
 END; $$ LANGUAGE plpgsql;
@@ -216,7 +216,7 @@ SELECT cron.schedule (
 
 CREATE OR REPLACE FUNCTION delete_blacklist() RETURNS VOID AS $$
 BEGIN
-    SET search_path = security;
+    SET search_path = clients;
     DELETE FROM Blacklist
     WHERE expired_at <= NOW();
 
@@ -236,7 +236,7 @@ DECLARE
 
 BEGIN
     SET 
-        search_path = security;
+        search_path = clients;
 
     SELECT 
         COUNT(*) 
@@ -260,7 +260,7 @@ DECLARE
     client_count INT;
 
 BEGIN   
-    SET search_path = security;
+    SET search_path = clients;
     SELECT 
         COUNT(*) 
     INTO 
@@ -297,7 +297,7 @@ CREATE TRIGGER limit_client
 
 CREATE OR REPLACE FUNCTION guard_admin_creation() RETURNS TRIGGER AS $guard_admin_creation$
 BEGIN
-    SET search_path = security;
+    SET search_path = clients;
     IF NEW.client_type = 'Admin' THEN
         IF (SELECT COUNT(*) FROM Client WHERE client_type = 'Admin') > 0 THEN
             RAISE EXCEPTION 'Admin already exists';
@@ -317,7 +317,7 @@ CREATE TRIGGER guard_admin_creation
 
 CREATE OR REPLACE FUNCTION guard_admin_deletion() RETURNS TRIGGER AS $guard_admin_deletion$
 BEGIN
-    SET search_path = security;
+    SET search_path = clients;
     IF OLD.client_type = 'Admin' THEN
         RAISE EXCEPTION 'Admin cannot be deleted or updated';
         RETURN NULL;  
@@ -341,7 +341,7 @@ CREATE OR REPLACE FUNCTION guard_challenge_expiry() RETURNS TRIGGER AS $guard_ch
 DECLARE
     client_auth_type AuthType;
 BEGIN
-    SET search_path = security;
+    SET search_path = clients;
     SELECT auth_type INTO client_auth_type FROM Client WHERE client_id = NEW.client_id;
 
     IF client_auth_type = 'ACCESS_TOKEN' THEN
@@ -385,7 +385,6 @@ INSERT INTO
         client_scope,
         authenticated,
         can_login
-
     )
 VALUES (
         'Notifyr ADMIN',

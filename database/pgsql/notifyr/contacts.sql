@@ -99,14 +99,14 @@ CREATE TABLE IF NOT EXISTS ContentTypeSubscription (
 );
 
 CREATE TABLE IF NOT EXISTS Reason (
-    reason_id UUID DEFAULT uuid_generate_v4 (),
+    reason_id UUID DEFAULT public.uuid_generate_v4 (),
     reason_description TEXT DEFAULT NULL,
     reason_name VARCHAR(50) UNIQUE,
     reason_count BIGINT DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS SubsContent (
-    content_id UUID DEFAULT uuid_generate_v1mc (),
+    content_id UUID DEFAULT public.uuid_generate_v1mc (),
     content_name VARCHAR(50) UNIQUE,
     content_description TEXT DEFAULT NULL,
     content_type ContentType DEFAULT 'other',
@@ -118,7 +118,7 @@ CREATE TABLE IF NOT EXISTS SubsContent (
 ALTER TABLE Subscontent ADD COLUMN ttl TIMESTAMP;
 
 CREATE TABLE IF NOT EXISTS Subscription (
-    subs_id UUID UNIQUE DEFAULT uuid_generate_v1mc (),
+    subs_id UUID UNIQUE DEFAULT public.uuid_generate_v1mc (),
     contact_id UUID,
     content_id UUID,
     subs_status SubscriptionStatus DEFAULT 'Active',
@@ -269,7 +269,7 @@ FOR EACH ROW
 EXECUTE FUNCTION compute_limit();
 
 CREATE TABLE IF NOT EXISTS ContactAnalytics (
-    analytics_id UUID DEFAULT uuid_generate_v1mc(),
+    analytics_id UUID DEFAULT public.uuid_generate_v1mc(),
     week_start_date DATE NOT NULL DEFAULT DATE_TRUNC('week', NOW()),
     content_id UUID DEFAULT '00000000-0000-0000-0000-000000000000',
     country VARCHAR(5),
@@ -341,7 +341,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TABLE IF NOT EXISTS ContactCreationAnalytics (
-    analytics_id UUID DEFAULT uuid_generate_v1mc(),
+    analytics_id UUID DEFAULT public.uuid_generate_v1mc(),
     week_start_date DATE NOT NULL DEFAULT DATE_TRUNC('week', NOW()),
     country VARCHAR(5),
     region VARCHAR(60),

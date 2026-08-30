@@ -35,7 +35,7 @@ CREATE DOMAIN EmailStatus AS VARCHAR(50) CHECK (
 );
 
 CREATE TABLE IF NOT EXISTS EmailTracking (
-    email_id UUID DEFAULT uuid_generate_v1mc (),
+    email_id UUID DEFAULT public.uuid_generate_v1mc (),
     message_id VARCHAR(150) UNIQUE NOT NULL,
     recipient VARCHAR(100) NOT NULL,
     esp_provider VARCHAR(25) DEFAULT 'Untracked Provider',
@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS EmailTracking (
 );
 
 CREATE TABLE IF NOT EXISTS TrackingEvent (
-    event_id UUID DEFAULT uuid_generate_v1mc (),
+    event_id UUID DEFAULT public.uuid_generate_v1mc (),
     email_id UUID NOT NULL,
     current_event EmailStatus NOT NULL,
     description VARCHAR(200) DEFAULT NULL,
@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS TrackedLinks (
 
 -- Update EmailAnalytics table to track daily analytics
 CREATE TABLE IF NOT EXISTS EmailAnalytics (
-    analytics_id UUID DEFAULT uuid_generate_v1mc (),
+    analytics_id UUID DEFAULT public.uuid_generate_v1mc (),
     esp_provider VARCHAR(25) NOT NULL, -- Added esp_provider column
     day_start_date DATE NOT NULL DEFAULT DATE_TRUNC('day', NOW()), -- Changed to daily tracking
     emails_received INT DEFAULT 0,
