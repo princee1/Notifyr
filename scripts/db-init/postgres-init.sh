@@ -35,11 +35,11 @@ if [ "$INIT_NOTIFYR_DB" = "on" ]; then
     # psql -U "$POSTGRES_USER" -d "$NOTIFYR_DATABASE" -f /database/notifyr/mta.sql
     psql -U "$POSTGRES_USER" -d "$NOTIFYR_DATABASE" -f /database/notifyr/twilio.sql
 
-    echo "📂 Running cron for notifyr db"
-    psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/cron.sql
+    echo "📂 Running cron..."
+    psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/notifyr/cron.sql
+
+
 fi
 
-echo "📂 Running cron..."
-psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /database/cron.sql
 
 echo "✅ setup.sh completed."

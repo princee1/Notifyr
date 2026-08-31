@@ -143,11 +143,6 @@ BEGIN
 END;
 $$ LANGUAGE PLPGSQL;
 
-
-SELECT cron.schedule('delete_expired_links_every_day', '0 0 * * *', 'SELECT links.delete_expired_links();');
-
-SELECT cron.schedule('delete_expired_link_session_event_every_day', '0 0 * * *', 'SELECT links.delete_link_event_session();');
-
 CREATE OR REPLACE FUNCTION compute_limit() RETURNS TRIGGER AS $compute_limit$
 DECLARE
     links_count INT;

@@ -446,25 +446,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Schedule the weekly cron job
-SELECT cron.schedule (
-        'create_weekly_sms_analytics_row', '0 0 * * 0', -- Every Sunday at midnight
-        'SELECT twilio.create_weekly_sms_analytics_row();'
-    );
-
--- Schedule the functions using pg_cron
-SELECT cron.schedule (
-        'set_sms_delivered_every_hour', '0 * * * *', 'SELECT twilio.set_sms_delivered();'
-    );
-
-SELECT cron.schedule (
-        'set_call_completed_every_hour', '0 * * * *', 'SELECT twilio.set_call_completed();'
-    );
-
-SELECT cron.schedule (
-        'delete_expired_tracking_every_day', '0 0 * * *', 'SELECT twilio.delete_expired_tracking();'
-    );
-
 CREATE OR REPLACE VIEW FetchCallAnalyticsByWeek AS
 SELECT
     analytics_id,

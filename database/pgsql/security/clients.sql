@@ -209,11 +209,6 @@ END; $$ LANGUAGE plpgsql;
 -- ------------------------------------             -------------------------------------------#
 -- ------------------------------------             -------------------------------------------#
 
-
-SELECT cron.schedule (
-    'update_challenge_every_5_minutes', '*/5 * * * *', 'SELECT clients.update_challenge();'
-    );
-
 CREATE OR REPLACE FUNCTION delete_blacklist() RETURNS VOID AS $$
 BEGIN
     SET search_path = clients;
@@ -221,10 +216,6 @@ BEGIN
     WHERE expired_at <= NOW();
 
 END; $$ LANGUAGE plpgsql;
-
-SELECT cron.schedule (
-    'delete_blacklist_every_5_minutes', '*/5 * * * *', 'SELECT clients.delete_blacklist();'
-);
 
 -- ------------------------------------             -------------------------------------------#
 
@@ -411,4 +402,13 @@ VALUES (
         ),
         NOW() + INTERVAL '5 minute',
         NOW() + INTERVAL '1 hour'
+    );
+
+
+SELECT cron.schedule (
+        'update_challenge_every_5_minutes', '*/5 * * * *', 'SELECT clients.update_challenge();'
+    );
+
+SELECT cron.schedule (
+        'delete_blacklist_every_5_minutes', '*/5 * * * *', 'SELECT clients.delete_blacklist();'
     );

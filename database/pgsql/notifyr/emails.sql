@@ -288,28 +288,4 @@ BEGIN
 END;
 $$ LANGUAGE PLPGSQL;
 
-
--- Schedule the function to run every hour using pg_cron
-SELECT cron.schedule (
-        'set_email_delivered_every_hour', -- Job name
-        '0 * * * *', -- Cron expression for every hour
-        'SELECT emails.set_email_delivered();'
-    );
-
-SELECT cron.schedule (
-        'delete_expired_email_tracking_every_day', '0 0 * * *', -- Cron expression for every day at midnight
-        'SELECT emails.delete_expired_email_tracking();'
-    );
-
-SELECT cron.schedule (
-        'delete_non_mapped_email_event_every_day', '0 */3 * * *', -- Cron expression for every 3 hours
-        'SELECT emails.delete_non_mapped_email_event();'
-    );
-
--- Schedule the daily cron job
-SELECT cron.schedule (
-        'create_daily_email_analytics_row', '0 0 * * *', -- Every day at midnight
-        'SELECT emails.create_daily_email_analytics_row();'
-    );
-
 SELECT emails.create_daily_email_analytics_row();

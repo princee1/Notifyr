@@ -236,10 +236,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-SELECT cron.schedule (
-    'delete_expired_subscontent_every_5_min', '*/5 * * * *', 'SELECT contacts.delete_expired_subscontent();'
-);
-
 CREATE OR REPLACE FUNCTION compute_limit() RETURNS TRIGGER AS $compute_limit$
 DECLARE
     contact_count INT;

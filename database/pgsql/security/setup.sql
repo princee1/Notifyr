@@ -3,6 +3,19 @@ CREATE EXTENSION IF NOT EXISTS pg_cron;
 
 GRANT USAGE ON SCHEMA cron TO test; -- need to get in env
 
+SET search_path = cron;
+
+CREATE OR REPLACE FUNCTION cron.clear_job_details() RETURNS VOID AS $$
+BEGIN
+    SET search_path = cron;
+    DELETE FROM cron.job_run_details;
+END $$ LANGUAGE PLPGSQL;
+
+SELECT cron.schedule (
+        'clear job details', '0 0 * * 0', 'SELECT cron.clear_job_details();'
+    );
+
+
 CREATE SCHEMA clients;
 
 CREATE ROLE vault_ntfr_client_role NOLOGIN;

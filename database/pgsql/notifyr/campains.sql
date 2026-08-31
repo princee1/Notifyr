@@ -37,9 +37,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-
-SELECT cron.schedule('0 0 * * *', 'CALL delete_old_campaigns()');
-
 CREATE OR REPLACE FUNCTION compute_campaign_limit() RETURNS TRIGGER AS $compute_campaign_limit$
 DECLARE
     campaign_count INT;
