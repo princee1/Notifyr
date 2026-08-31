@@ -325,8 +325,9 @@ class MongooseService(TempCredentialsDatabaseService):
     # Connection string
     ##################################################
 
-    def compute_url(self,host:str,database=MongooseDBConstant.JOB_DATABASE_NAME,name:CredentialName='default'):
+    def compute_url(self,host:str,database=MongooseDBConstant.JOB_DATABASE_NAME,name:CredentialName='default',authSource=None):
         replica = self.configService.getenv('MONGO_REPLICA_NAME','notifyr-0')
+        authSource = authSource or database
         return f"mongodb://{self.db_user(name)}:{self.db_password(name)}@{host}:27017/{database}?replicaSet={replica}"
     
     def get_credentials_name(self,model:Type[D]|D)->CredentialName:

@@ -1,13 +1,19 @@
-const adminDb = db.getSiblingDB('admin');
+const adminNotifyr = process.env.NOTIFYR_MONGO_USERNAME;
+const password = process.env.NOTIFYR_MONGO_PASSWORD;
 
-db = db.getSiblingDB('agentic-notifyr');
-db = db.getSiblingDB('app-notifyr');
+if (!adminNotifyr || !password) {
+  throw new Error("NOTIFYR_MONGO_USERNAME or NOTIFYR_MONGO_PASSWORD is not set");
+}
 
-// Task administrator
+const adminDb = db.getSiblingDB("notifyr");
+
 adminDb.createUser({
-    user: '${NOTIFYR_MONGO_USERNAME}',
-    pwd: '${NOTIFYR_MONGO_PASSWORD}',
-    roles: [
-        { role: 'dbOwner', db: 'notifyr' }
-    ]
+  user: adminNotifyr,
+  pwd: password,
+  roles: [
+    { role: "dbOwner", db: "notifyr" },
+    {role:'userAdmin',db:"notifyr"}
+  ]
 });
+
+print(`Created MongoDB user: ${adminNotifyr}`);

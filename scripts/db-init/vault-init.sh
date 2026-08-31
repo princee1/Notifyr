@@ -399,12 +399,13 @@ setup_database_config(){
       default_ttl="12h" \
       max_ttl="16h"
     
-    vault write notifyr-database/roles/admin-agentic-mongo-ntfr-role \
+    vault write notifyr-database/roles/admin-mongo-agentic-ntfr-role \
       db_name="mongodb-notifyr" \
       default_ttl="30m" \
       max_ttl="1h" \
-      creation_statements='{ "db": "admin", "roles": [
-          { "role": "dbOwner", "db": "agentic" }
+      creation_statements='{ "db": "agentic", "roles": [
+          { "role": "dbOwner", "db": "agentic" },
+          {"role": "userAdmin", "db":"agentic"}
       ]}'
 
     vault write notifyr-database/roles/app-mongo-ntfr-role \
@@ -423,8 +424,9 @@ setup_database_config(){
       db_name="mongodb-notifyr" \
       default_ttl="30m" \
       max_ttl="1h" \
-      creation_statements='{ "db": "admin", "roles": [
-          { "role": "dbOwner", "db": "app" }
+      creation_statements='{ "db": "app", "roles": [
+          { "role": "dbOwner", "db": "app" },
+          {"role": "userAdmin", "db":"app"}
       ]}'
     
     vault write notifyr-database/roles/app-mongo-jobs-ntfr-role \
@@ -436,12 +438,12 @@ setup_database_config(){
       default_ttl="12h" \
       max_ttl="16h"
 
-    vault write notifyr-database/roles/admin-app-mongo-jobs-ntfr-role \
+    vault write notifyr-database/roles/admin-mongo-jobs-ntfr-role \
       db_name="mongodb" \
       default_ttl="30m" \
       max_ttl="1h" \
-      creation_statements='{ "db": "admin", "roles": [
-          { "role": "dbOwner", "db": "notifyr" }
+      creation_statements='{ "db": "notifyr", "roles": [
+          { "role": "dbOwner", "db": "notifyr" },
       ]}'
 
     setup_config_kv2 "mongo_roles" "set"
@@ -582,12 +584,14 @@ database_connection_config(){
  
   # --- POSTGRES CONNECTION ---
   if ! setup_config_kv2 "postgres_connection" "check"; then
+    echo "waiting for postgres server" && sleep 10
+
     echo "Configuring Postgres connection..."
 
     vault write notifyr-database/config/postgres-notifyr \
       plugin_name="postgresql-database-plugin" \
       allowed_roles="app-postgres-client-ntfr-role, admin-postgres-client-ntfr-role" \
-      connection_url="postgresql://{{username}}:{{password}}@postgres:5432/client" \
+      connection_url="postgresql://{{username}}:{{password}}@postgres:5432/security" \
       max_open_connections=50 \
       max_idle_connections=20 \
       username="pg-vaultadmin" \
@@ -607,15 +611,16 @@ database_connection_config(){
     setup_config_kv2 "postgres_connection" "set"
   fi
 
-  echo "waiting for mongodb server" && sleep 10
 
   # --- MONGODB CONNECTION ---
   if ! setup_config_kv2 "mongodb_connection" "check"; then
+
+    echo "waiting for mongodb server" && sleep 10
     echo "Configuring MongoDB connection..."
 
     vault write notifyr-database/config/mongodb-notifyr \
       plugin_name="mongodb-database-plugin" \
-      allowed_roles="admin-mongo-ntfr-role, app-mongo-ntfr-role, agentic-mongo-ntfr-role, admin-agentic-mongo-ntfr-role" \
+      allowed_roles="admin-mongo-ntfr-role, app-mongo-ntfr-role, agentic-mongo-ntfr-role, admin-mongo-agentic-ntfr-role" \
       connection_url="mongodb://{{username}}:{{password}}@mongodb:27017/admin?replicaSet=$MONGO_REPLICA_NAME" \
       username="mongo-vaultadmin" \
       password="$VAULTPASS"
@@ -623,8 +628,8 @@ database_connection_config(){
 
     vault write notifyr-database/config/mongodb \
       plugin_name="mongodb-database-plugin" \
-      allowed_roles="app-mongo-jobs-ntfr-role, admin-app-mongo-jobs-ntfr-role " \
-      connection_url="mongodb://{{username}}:{{password}}@$MONGO_HOST:27017/admin?replicaSet=$MONGO_REPLICA_NAME" \
+      allowed_roles="app-mongo-jobs-ntfr-role, admin-mongo-jobs-ntfr-role " \
+      connection_url="mongodb://{{username}}:{{password}}@$MONGO_HOST:27017/notifyr?replicaSet=$MONGO_REPLICA_NAME" \
       username="$NOTIFYR_MONGO_USERNAME" \
       password="$NOTIFYR_MONGO_PASSWORD"
     vault write -f notifyr-database/rotate-root/mongodb
