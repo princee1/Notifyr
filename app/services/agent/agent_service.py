@@ -72,7 +72,7 @@ factory_include = ('temperature','model','timeout')
 acceptable_service = {ServiceStatus.AVAILABLE,ServiceStatus.WORKS_ALMOST_ATT,ServiceStatus.PARTIALLY_AVAILABLE}
 answer_exclude = {'token'}
 
-C = TypeVar('C',BaseModel)
+C = TypeVar('C',bound=BaseModel)
 
 
 @MiniService(mirror=RemoteAgentMiniService,links=[LinkDep(LLMMiniService,to_build=True,build_state=AVOID_RE_VALIDATE_BUILD_STATE)])
@@ -596,7 +596,7 @@ class AgentService(BaseMiniServiceManager[AgentMiniService],agent_pb2_grpc.Agent
         self.customService = customService
 
         self.mcp_client:MultiServerMCPClient = None
-        self.mcp_tools=dict[str,List[BaseTool]] = {}
+        self.mcp_tools:dict[str,List[BaseTool]] = {}
 
         self.MiniServiceStore = MiniServiceStore[AgentMiniService](self.name)
         self.tools_config:Dict[str,ToolModels] = {}

@@ -26,6 +26,12 @@ D = TypeVar('D',bound=BaseDocument)
 
 ClientMode  = Literal['async','sync']
 
+DB_MAP:dict[CredentialName,str]= {
+    'default':MongooseDBConstant.DEFAULT_DATABASE_NAME,
+    AGENTIC_CREDS:MongooseDBConstant.AGENTIC_DATABASE_NAME,
+    JOBS_CREDS:MongooseDBConstant.JOB_DATABASE_NAME
+}
+
 class MongoClientStore:
 
     def __init__(self,):
@@ -40,7 +46,7 @@ class MongoClientStore:
         
         return self.clients[name][mode]
     
-    def add_client(self,name:CredentialName,uri:str,mode:ClientMode|None  = None):
+    def add_client(self,name:CredentialName,uri:str,mode:ClientMode|None = None):
         try:
             self.get_client(name,mode)
             raise MongoClientAlreadyExistError(name,mode)
@@ -53,11 +59,12 @@ class MongoClientStore:
         if mode == None or mode == 'async':
             self.clients[name]['async'] = AsyncIOMotorClient(uri)
     
-    def get_database(self,name:CredentialName,mode:ClientMode='async',database=MongooseDBConstant.JOB_DATABASE_NAME):
+    def get_database(self,name:CredentialName,mode:ClientMode='async'):
+        database=DB_MAP[name]
         return self.get_client(name,mode)[database]
     
-    def get_collection(self,name:CredentialName,collection:str,mode:ClientMode='async',database=MongooseDBConstant.JOB_DATABASE_NAME):
-        return self.get_database(name,mode,database)[collection]
+    def get_collection(self,name:CredentialName,collection:str,mode:ClientMode='async'):
+        return self.get_database(name,mode)[collection]
     
     def iterator(self,mode:ClientMode|None = None):
         for n,m in self.clients.items():
@@ -253,13 +260,13 @@ class MongooseService(TempCredentialsDatabaseService):
         # fetch fresh creds from Vault
         self.client_store.clear()
         self.client_store.add_client('default',self.compute_url(HostConstant.MONGOOSE_HOST,MongooseDBConstant.DEFAULT_DATABASE_NAME))
-        self.client_store.add_client(AGENTIC_CREDS,self.compute_url(HostConstant.MONGOOSE_HOST,MongooseDBConstant.AGENTIC_DATABASE_NAME,AGENTIC_CREDS))
         self.client_store.add_client(JOBS_CREDS,self.compute_url(self.configService.MONGO_HOST,MongooseDBConstant.JOB_DATABASE_NAME,name=JOBS_CREDS))
-    
+        self.client_store.add_client(AGENTIC_CREDS,self.compute_url(HostConstant.MONGOOSE_HOST,MongooseDBConstant.AGENTIC_DATABASE_NAME,AGENTIC_CREDS))
+
     def generate_credentials(self):
-        self.add_credentials(VaultConstant.MONGO_ROLE,'default')
-        self.add_credentials(VaultConstant.MONGO_ROLE,AGENTIC_CREDS,prefix='agentic')
+        self.add_credentials(VaultConstant.MONGO_ROLE,'default',prefix='app')
         self.add_credentials(VaultConstant.MONGO_ROLE,JOBS_CREDS,suffix='jobs')
+        self.add_credentials(VaultConstant.MONGO_ROLE,AGENTIC_CREDS,prefix='agentic')
 
     async def _creds_rotator(self):
         self.close_connection()

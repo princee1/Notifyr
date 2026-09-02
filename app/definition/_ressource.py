@@ -8,7 +8,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.datastructures import Default
 from pydantic import BaseModel
 from app.classes.cost_definition import SimpleTaskCostDefinition
-from app.classes.operation_id import OperationID
 from app.classes.profiles import ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
 from app.definition._ws import W
 from app.depends.dependencies import get_auth_permission
@@ -181,14 +180,14 @@ class Helper:
 
     @staticmethod
     def filter_type_function(functions, flag=True):
-        temp_pipe_func = []
+        temp_func = []
 
         for p in functions:
             if type(p) == type:
                 p=p()
-            temp_pipe_func.append(p)
+            temp_func.append(p)
 
-        return temp_pipe_func
+        return temp_func
 
     @staticmethod
     def stack_decorator(decorated_function, deco_type: Type[DecoratorObj], empty_decorator: bool, default_error: dict, error_type: Type[DecoratorException],inject_func_meta=False):
@@ -279,12 +278,13 @@ class BaseHTTPRessource(EventInterface, metaclass=HTTPRessourceMetaClass):
             func_name = func.__name__
             if isinstance(methods,HTTPMethod):
                 _methods = [methods]
-            _methods = HTTPMethod.to_strs()
+            _methods = HTTPMethod.to_strs(methods)
 
             operationId = SimpleOperationID(None,operation_id) if isinstance(operation_id,str) else operation_id
-            computed_operation_id = operationId(path,func_name,_methods)
+            computed_operation_id = operationId(path,func_name,_methods) if isinstance(operation_id,OperationIDFactory) else None
 
-            _tags = list(set(tags or []))
+            _tags = tags if isinstance(tags,list) else []
+            _tags = list(set(_tags))
 
             setattr(func, 'meta', FuncMetaData())
             func.meta['operation_id'] = computed_operation_id

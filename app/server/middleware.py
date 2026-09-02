@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from app.classes.auth_permission import AuthPermission, ClientType, filter_asset_permission, parse_authPermission_enum
 from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE
 from app.depends.orm_cache import AuthPermissionCache, BlacklistORMCache, ChallengeORMCache, ClientORMCache
-from app.models.security_model import BlacklistORM, ChallengeORM, ClientORM
+from app.models.orm.security_model import BlacklistORM, ChallengeORM, ClientORM
 from app.services.admin_service import AdminService
 from app.services.monitoring_service import MonitoringService
 from app.services.config_service import ConfigService, WorkerService

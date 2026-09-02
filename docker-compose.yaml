@@ -477,7 +477,7 @@ services:
       - mongo-data:/data/db
       - ./scripts/entrypoint/mongo-entrypoint.sh:/usr/local/bin/mongo-entrypoint.sh
       - ./scripts/db-init/mongo-init.sh:/docker-entrypoint-initdb.d/mongo-init.sh
-      - ./database/mongodb/notifyr.js:/notifyr/notifyr.js
+      - ./database/mongodb/notifyr/admin.js:/notifyr/admin.js
     environment:
       INIT_NOTIFYR_DB: on
       MONGO_INITDB_DATABASE: app

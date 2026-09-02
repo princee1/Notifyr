@@ -2,7 +2,7 @@ import traceback
 from tortoise.models import Model
 from tortoise.transactions import in_transaction
 from app.depends.lock import LockLogicDecorator
-from app.models.email_model import EmailTrackingORM
+from app.models.orm.email_model import EmailTrackingORM
 from app.models.orm.twilio_model import CallTrackingORM, SMSTrackingORM
 from app.utils.constant import StreamConstant
 from app.utils.transformer import empty_str_to_none

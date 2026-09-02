@@ -13,7 +13,7 @@ from app.depends.variables import _wrap_checker
 from app.interface.issue_auth import IssueAuthInterface
 from app.manager.broker_manager import Broker
 from app.manager.merchant_manager import Merchant
-from app.models.security_model import BlacklistORM, ChallengeORM, ClientModel, ClientORM, GroupClientORM, GroupModel, PolicyMappingORM, PolicyORM, UpdateClientModel, raw_revoke_challenges
+from app.models.orm.security_model import BlacklistORM, ChallengeORM, ClientModel, ClientORM, GroupClientORM, GroupModel, PolicyMappingORM, PolicyORM, UpdateClientModel, raw_revoke_challenges
 from app.services.admin_service import AdminService
 from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.profile_service import ProfileService

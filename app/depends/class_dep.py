@@ -10,7 +10,7 @@ from app.definition._interface import Interface
 from app.interface.email import EmailInterface, EmailSendInterface
 from app.models.call_model import BaseVoiceCallModel
 from app.models.ingest_model import FileUploadDataIngestModel
-from app.models.email_model import CustomEmailModel, EmailStatus, EmailTemplateModel, TrackingEmailEventORM
+from app.models.orm.email_model import CustomEmailModel, EmailStatus, EmailTemplateModel, TrackingEmailEventORM
 from app.models.orm.link_model import LinkORM
 from app.models.sms_model import OnGoingBaseSMSModel
 from app.models.orm.twilio_model import CallEventORM, CallStatusEnum, SMSEventORM, SMSStatusEnum

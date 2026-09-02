@@ -17,7 +17,7 @@ from app.services.database.redis_service import RedisService
 from app.utils.constant import RedisConstant
 from app.utils.helper import KeyBuilder
 from app.utils.toolbox import Time
-from app.models.security_model import ClientORM,ChallengeORM, PolicyORM
+from app.models.orm.security_model import ClientORM,ChallengeORM, PolicyORM
 import typing
 from typing import Any, Callable, Generic, Type,TypeVar, TypedDict
 from tortoise.models import Model,ModelMeta

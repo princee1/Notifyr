@@ -350,7 +350,7 @@ setup_database_config(){
         revocation_statements="REVOKE vault_ntfr_app_role FROM \"{{name}}\";
                         DROP ROLE IF EXISTS \"{{name}}\";"
 
-    vault write notifyr-database/roles/app-postgres-client-ntfr-role \
+    vault write notifyr-database/roles/app-postgres-security-ntfr-role \
         db_name="postgres-notifyr" \
         default_ttl="12h" \
         max_ttl="16h" \
@@ -371,7 +371,7 @@ setup_database_config(){
                             DROP ROLE IF EXISTS \"{{name}}\";"
     setup_config_kv2 "postgres_roles" "set"
 
-    vault write notifyr-database/roles/admin-postgres-client-ntfr-role \
+    vault write notifyr-database/roles/admin-postgres-security-ntfr-role \
       db_name="postgres-notifyr" \
       default_ttl="3h" \
       max_ttl="5h" \
@@ -412,7 +412,7 @@ setup_database_config(){
       db_name="mongodb-notifyr" \
       creation_statements='{ "db": "app", "roles": [
       { "role": "readWrite", "db": "app", "collection":"communication" },
-      { "role": "readWrite", "db": "app", "collection":"webhook" }
+      { "role": "readWrite", "db": "app", "collection":"webhook" },
       { "role": "readWrite", "db": "app", "collection":"custom" },
       { "role": "readWrite", "db": "app", "collection":"outbound" },
       { "role": "readWrite", "db": "app", "collection":"errorProfile" },
@@ -448,6 +448,7 @@ setup_database_config(){
 
     setup_config_kv2 "mongo_roles" "set"
   fi
+  #           { "role":"createIndexes","db":"notifyr","collection":"aps"}
 
   # --- REDIS ROLES ---
   if ! setup_config_kv2 "redis_roles" "check"; then
@@ -471,7 +472,7 @@ setup_database_config(){
       max_ttl="5h" \
       creation_statements='["~*","+@all"]'
     
-    vault write notifyr-database/roles/app-credit-redis-ntfr-role \
+    vault write notifyr-database/roles/app-redis-credit-ntfr-role \
       db_name="redis-notifyr" \
       default_ttl="35d" \
       max_ttl="35d" \
@@ -495,7 +496,7 @@ setup_database_config(){
       max_ttl="5h" \
       creation_statements='["~*","+@all"]'
 
-    vault write notifyr-database/roles/ncs-credit-redis-ntfr-role \
+    vault write notifyr-database/roles/ncs-redis-ntfr-role \
       db_name="redis-notifyr" \
       default_ttl="10m" \
       max_ttl="20m" \
@@ -590,7 +591,7 @@ database_connection_config(){
 
     vault write notifyr-database/config/postgres-notifyr \
       plugin_name="postgresql-database-plugin" \
-      allowed_roles="app-postgres-client-ntfr-role, admin-postgres-client-ntfr-role" \
+      allowed_roles="app-postgres-security-ntfr-role, admin-postgres-security-ntfr-role" \
       connection_url="postgresql://{{username}}:{{password}}@postgres:5432/security" \
       max_open_connections=50 \
       max_idle_connections=20 \
@@ -646,7 +647,7 @@ database_connection_config(){
         port=6379 \
         username="redis-vaultadmin" \
         password="$VAULTPASS" \
-        allowed_roles="admin-redis-ntfr-role, app-redis-ntfr-role, ncs-credit-redis-ntfr-role, agentic-redis-ntfr-role, app-credit-redis-ntfr-role"
+        allowed_roles="admin-redis-ntfr-role, app-redis-ntfr-role, ncs-redis-ntfr-role, agentic-redis-ntfr-role, app-redis-credit-ntfr-role"
     vault write -f notifyr-database/rotate-root/redis-notifyr
     
     vault write notifyr-database/config/redis \

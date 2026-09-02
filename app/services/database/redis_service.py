@@ -234,7 +234,7 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
     
     def generate_credentials(self):
         self.add_credentials(VaultConstant.REDIS_ROLE)
-        self.add_credentials(VaultConstant.REDIS_ROLE,CREDIT_CREDS,prefix='app-credit')
+        self.add_credentials(VaultConstant.REDIS_ROLE,CREDIT_CREDS,prefix='app',suffix='credit')
         self.add_credentials(VaultConstant.REDIS_ROLE,CELERY_BACKEND_CREDS,suffix='celery-backend')
 
         if self.configService.CELERY_BROKER_PROVIDER == 'redis':

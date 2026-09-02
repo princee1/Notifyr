@@ -9,7 +9,7 @@ from app.services.vault_service import VaultService
 from app.utils.constant import HostConstant, PostgresConstant, VaultConstant, VaultTTLSyncConstant
 from app.utils.toolbox import RunInThreadPool
 
-CLIENT_CREDS='client'
+SECURITY_CREDS='client'
 
 @Service(links=[LinkDep(VaultService,to_build=True,to_destroy=True)])
 class TortoiseConnectionService(TempCredentialsDatabaseService):
@@ -40,7 +40,7 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
 
     def generate_credentials(self):
         self.add_credentials(VaultConstant.POSTGRES_ROLE)
-        self.add_credentials(VaultConstant.POSTGRES_ROLE,CLIENT_CREDS,suffix='client')
+        self.add_credentials(VaultConstant.POSTGRES_ROLE,SECURITY_CREDS,suffix='security')
 
     def compute_url(self,host:str,port:int=5432,creds:CredentialName='default',database=PostgresConstant.DEFAULT_DATABASE_NAME):
         return f'postgres://{self.db_user(creds)}:{self.db_password(creds)}@{host}:{port}/{database}'
@@ -49,9 +49,9 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
         return {
             "connections": {
                 "default": self.compute_url(self.configService.POSTGRES_HOST),
-                CLIENT_CREDS: self.compute_url(
+                SECURITY_CREDS: self.compute_url(
                     HostConstant.POSTGRES_HOST,
-                    creds=CLIENT_CREDS,
+                    creds=SECURITY_CREDS,
                     database=PostgresConstant.SECURITY_DATABASE_NAME,
                 ),
             },
@@ -59,15 +59,15 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
                 "default": {
                     "models": [
                         "app.models.orm.contacts_model",
-                        "app.models.email_model",
+                        "app.models.orm.email_model",
                         "app.models.orm.link_model",
                         "app.models.orm.twilio_model",
                     ],
                     "default_connection": "default",
                 },
-                CLIENT_CREDS: {
-                    "models": ["app.models.security_model"],
-                    "default_connection": CLIENT_CREDS,
+                SECURITY_CREDS: {
+                    "models": ["app.models.orm.security_model"],
+                    "default_connection": SECURITY_CREDS,
                 },
             },
         }
@@ -75,8 +75,8 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
     def init_sync_connection(self):
         self.sync_conn = psycopg2.connect(
                             dbname=PostgresConstant.SECURITY_DATABASE_NAME,
-                            user=self.db_user(CLIENT_CREDS),
-                            password=self.db_password(CLIENT_CREDS),
+                            user=self.db_user(SECURITY_CREDS),
+                            password=self.db_password(SECURITY_CREDS),
                             host=HostConstant.POSTGRES_HOST,
                             port=5432
                         )

@@ -18,7 +18,7 @@ from app.models.ingest_model import DataIngestModel, WebCrawlingDataIngestModel
 from app.models.orm.link_model import LinkORM
 from app.models.odm.llm_model import LLMProfileModel
 from app.models.otp_model import OTPModel
-from app.models.security_model import ClientORM
+from app.models.orm.security_model import ClientORM
 from app.services.admin_service import AdminService
 from app.services.cost_service import CostService
 from app.services.database.mongoose_service import MongooseService

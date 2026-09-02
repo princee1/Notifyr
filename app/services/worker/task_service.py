@@ -5,12 +5,12 @@ from app.classes.celery import SchedulerModel, TaskType
 from app.definition._service import DEFAULT_BUILD_STATE, BaseService, Service, ServiceStatus
 from app.errors.aps_error import APSJobDoesNotExists
 from apscheduler.jobstores.redis import RedisJobStore
-from apscheduler.jobstores.mongodb import MongoDBJobStore
+from apscheduler.jobstores.mongodb import MongoDBJobStore,BaseJobStore
 from app.errors.service_error import BuildFailureError, BuildOkError, NotBuildedError, ServiceNotAvailableError
 from app.interface.timers import SchedulerInterface,MemoryJobStore
 from app.services.config_service import ConfigService, WorkerService
 from app.services.cost_service import CostService
-from app.services.database.mongoose_service import MongooseService
+from app.services.database.mongoose_service import JOBS_CREDS, MongooseService
 from app.services.database.redis_service import RedisService
 from app.services.logger_service import LoggerService
 from app.services.vault_service import VaultService
@@ -23,6 +23,12 @@ from apscheduler.schedulers import (
 )
 
 CeleryConstant.BACKEND_KEY_PREFIX
+
+
+class NotifyrMongoDBJobStore(MongoDBJobStore):
+
+    def start(self, scheduler, alias):
+        return BaseJobStore.start(self,scheduler, alias)
 
 
 # configuration
@@ -77,8 +83,8 @@ class TaskService(BaseService,SchedulerInterface):
     def build(self, build_state = DEFAULT_BUILD_STATE):
         if self._builded:
             self.shutdown(False)
-        
-        self.redis_client = self.redisService.db[RedisConstant.CELERY_DB]
+
+        self.redis_client = self.redisService.db[RedisConstant.CONFIG_DB]
         jobstores = {
             "redis": RedisJobStore(
                 host=self.redisService.redis_celery.connection_pool.connection_kwargs.get("host", "localhost"),
@@ -90,10 +96,10 @@ class TaskService(BaseService,SchedulerInterface):
                 password=self.redisService.redis_celery.connection_pool.connection_kwargs.get('password')
                 ),
             'memory':MemoryJobStore(),
-            'mongodb':MongoDBJobStore(
+            'mongodb':NotifyrMongoDBJobStore(
                 MongooseDBConstant.JOB_DATABASE_NAME,
                 collection=MongooseDBConstant.APS_COLLECTION,
-                client=self.mongooseService.client_store.get_client('default','sync')
+                client=self.mongooseService.client_store.get_client(JOBS_CREDS,'sync')
                 )
         }
         jobstore = self.configService.JOBSTORE_DB
