@@ -61,7 +61,7 @@ Requests==2.32.5
 slowapi==0.1.9
 starlette==0.50.0
 str2bool==1.1
-tortoise-orm==0.24.0
+tortoise-orm==1.1.7
 twilio==9.4.6
 typing_extensions==4.15.0
 urllib3==2.5.0
