@@ -5,7 +5,7 @@ from pydantic import ConfigDict
 from app.classes.auth_permission import AuthPermission, MustHaveWhen, Role
 from app.classes.mongo import MongoFindFilter
 from app.container import InjectInMethod,Get
-from app.decorators.handlers import AsyncIOHandler, CostHandler, DataSourceHandler, MiniServiceHandler, MotorErrorHandler, ProfileHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler, VaultHandler,CeleryControlHandler
+from app.decorators.handlers import AsyncIOHandler, CostHandler, DataSourceHandler, MiniServiceHandler, MongooseHandler, MotorErrorHandler, ProfileHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler, VaultHandler,CeleryControlHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, MCPPermission, ProfilePermission
 from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe, SanitizePathParameterPipe
@@ -37,10 +37,10 @@ from app.depends.variables import mcp_configuration
 PROFILE_PREFIX = 'profile'
 
 
+@UseRoles([Role.ADMIN])
 @PingService([MongooseService])
 @LockService(MongooseService,lockType='reader',check_status=False)
-@UseRoles([Role.ADMIN])
-@UseHandler(ServiceAvailabilityHandler,AsyncIOHandler,MotorErrorHandler,ProfileHandler)
+@UseHandler(ServiceAvailabilityHandler,AsyncIOHandler,MongooseHandler,MotorErrorHandler,ProfileHandler)
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource('will be overwritten')
 class BaseProfilModelRessource(BaseHTTPRessource):
@@ -276,7 +276,7 @@ def generate_profil_model_ressource(model:Type[BaseProfileModel],path:str):
 @LockService(MongooseService,lockType='reader')
 @UseRoles([Role.ADMIN])
 @UseHandler(ServiceAvailabilityHandler,AsyncIOHandler,ProfileHandler)
-@UseHandler(MotorErrorHandler)
+@UseHandler(MongooseHandler,MotorErrorHandler)
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource(PROFILE_PREFIX,[generate_profil_model_ressource(model,name) for name,model  in ProfilModelValues.items()])
 class ProfilRessource(BaseHTTPRessource):

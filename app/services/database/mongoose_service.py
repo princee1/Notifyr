@@ -22,6 +22,8 @@ from app.utils.toolbox import RunInThreadPool
 AGENTIC_CREDS='agentic'
 JOBS_CREDS='jobs'
 
+CREDENTIALS_SET:set[CredentialName] = {'default',AGENTIC_CREDS,JOBS_CREDS} 
+
 D = TypeVar('D',bound=BaseDocument)
 
 ClientMode  = Literal['async','sync']
@@ -312,6 +314,9 @@ class MongooseService(TempCredentialsDatabaseService):
 
     @asynccontextmanager
     async def transaction(self,name:CredentialName='default', retries=1,timeout=5,wait=1,lock:ServiceLockType='none'):
+        if name not in CREDENTIALS_SET:
+            raise VaultCredentialNameDoesNotExistError(name)
+
         lock = lock or 'none'
         async with self.lock(lock):
             client = self.client_store.get_client(name)
@@ -321,12 +326,13 @@ class MongooseService(TempCredentialsDatabaseService):
                         async with session.start_transaction() as tr:
                             yield session,tr
                         break
-                    except (ConnectionFailure, OperationFailure):
+                    except (ConnectionFailure, OperationFailure) as e:
                         if attempt == retries - 1:
-                            raise
+                            raise MongoTransactionFailureError(name,attempt,...,e)
                         else:
                             if wait:
                                 await asyncio.sleep(wait)
+                
 
     ##################################################
     # Connection string

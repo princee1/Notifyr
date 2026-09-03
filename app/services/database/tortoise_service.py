@@ -1,6 +1,10 @@
+import asyncio
+from contextlib import asynccontextmanager
+
 import psycopg2
 from tortoise import Tortoise
-from app.definition._service import DEFAULT_BUILD_STATE, LinkDep, Service
+from app.definition._service import DEFAULT_BUILD_STATE, LinkDep, Service, ServiceLockType
+from app.errors.db_error import TortoiseTransactionFailureError, VaultCredentialNameDoesNotExistError
 from app.errors.service_error import BuildFailureError
 from app.services.config_service import ConfigService
 from app.services.database.base_db_service import CredentialName, TempCredentialsDatabaseService
@@ -8,8 +12,13 @@ from app.services.file.file_service import FileService
 from app.services.vault_service import VaultService
 from app.utils.constant import HostConstant, PostgresConstant, VaultConstant, VaultTTLSyncConstant
 from app.utils.toolbox import RunInThreadPool
+from tortoise.transactions import in_transaction
+from tortoise.exceptions import OperationalError,ConfigurationError,IntegrityError
 
-SECURITY_CREDS='client'
+
+SECURITY_CREDS='security'
+
+CREDENTIALS_SET:set[CredentialName] = {'default',SECURITY_CREDS}
 
 @Service(links=[LinkDep(VaultService,to_build=True,to_destroy=True)])
 class TortoiseConnectionService(TempCredentialsDatabaseService):
@@ -99,4 +108,22 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
         await RunInThreadPool(self.generate_credentials)()
         await self.init_connection(False)
         await RunInThreadPool(self.init_sync_connection)()
+    
+    @asynccontextmanager
+    async def transaction(self,name:CredentialName,retries=1,timeout=5,wait=1,lock:ServiceLockType='none'):
+        if name not in CREDENTIALS_SET:
+            raise VaultCredentialNameDoesNotExistError(name)
+        async with self.lock(lock):
+            for attempts in range(retries):
+                try:
+                    async with in_transaction(connection_name=name) as ctx:
+                        yield ctx
+                    break
+                except (OperationalError,IntegrityError) as e:
+                    if attempts == retries:
+                        raise TortoiseTransactionFailureError(name,retries,error=e)
+                    if wait:
+                        asyncio.sleep(wait)
+                    continue
+            
 

@@ -46,7 +46,22 @@ from redis import WatchError
 
 from app.services.logger_service import LoggerService
 from pydantic import BaseModel, ValidationError as PydanticValidationError
-from app.errors.db_error import DocumentAddConditionError, DocumentConditionWrongMethodError, DocumentDoesNotExistsError, DocumentExistsUniqueConstraintError, DocumentPrimaryKeyConflictError, DocumentSingletonLimitReachedError,MemCacheNoValidKeysDefinedError, MemCachedTypeValueError
+from app.errors.db_error import (
+    DocumentAddConditionError,
+    DocumentConditionWrongMethodError,
+    DocumentDoesNotExistsError,
+    DocumentExistsUniqueConstraintError,
+    DocumentPrimaryKeyConflictError,
+    DocumentSingletonLimitReachedError,
+    MemCacheNoValidKeysDefinedError,
+    MemCachedTypeValueError,
+    TortoiseTransactionFailureError,
+    MongoCollectionDoesNotExists,
+    MongoClientNameDoesNotExistError,
+    MongoClientAlreadyExistError,
+    MongoClientModeDoesNotExistError,
+    MongoTransactionFailureError,
+)
 from app.utils.fileIO import ExtensionNotAllowedError, MultipleExtensionError
 from aiomcache.exceptions import ClientException, ValidationException 
 from pymemcache import MemcacheClientError,MemcacheServerError,MemcacheUnexpectedCloseError
@@ -368,6 +383,9 @@ class TortoiseHandler(Handler):
             mess = str(mess)
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
                                 'message': 'Parameters error', 'detail': mess, })
+        
+        except TortoiseTransactionFailureError as e :
+            raise ...
 
         except BaseORMException as e:
             print(e.__class__)
@@ -488,6 +506,28 @@ class MotorErrorHandler(Handler):
         except DocumentDoesNotExistsError as e:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,detail=f"Document with id '{e.id}' does not exists")
+
+
+class MongooseHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await super().handle(function, *args, **kwargs)
+        
+        except MongoCollectionDoesNotExists as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"collection": getattr(e, "collection", None), "model": getattr(e, "model", None)},
+            )
+
+        except MongoClientNameDoesNotExistError as e:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+        except MongoClientModeDoesNotExistError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+        except MongoTransactionFailureError as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 class AsyncIOHandler(Handler):
 

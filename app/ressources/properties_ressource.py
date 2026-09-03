@@ -4,7 +4,7 @@ from fastapi.params import Query
 from app.classes.auth_permission import Role
 from app.container import Get, InjectInMethod
 from app.decorators.guards import MongooseHardLimitGuard
-from app.decorators.handlers import AsyncIOHandler, GlobalVarHandler, MotorErrorHandler, PydanticHandler, ServiceAvailabilityHandler, TemplateHandler
+from app.decorators.handlers import AsyncIOHandler, GlobalVarHandler, MongooseHandler, MotorErrorHandler, PydanticHandler, ServiceAvailabilityHandler, TemplateHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import DocumentFriendlyPipe, GlobalPointerIteratorPipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, LockService, UseRoles
@@ -195,7 +195,7 @@ if CAPABILITIES['object']:
 
 if CAPABILITIES['agentic']:
     @UsePermission(JWTRouteHTTPPermission)
-    @UseHandler(ServiceAvailabilityHandler, AsyncIOHandler,MotorErrorHandler)
+    @UseHandler(ServiceAvailabilityHandler, AsyncIOHandler,MongooseHandler,MotorErrorHandler)
     @HTTPRessource('custom-model')
     class CustomModelRessource(BaseHTTPRessource):
 

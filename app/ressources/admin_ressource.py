@@ -15,7 +15,7 @@ from app.manager.broker_manager import Broker
 from app.manager.merchant_manager import Merchant
 from app.models.orm.security_model import BlacklistORM, ChallengeORM, ClientModel, ClientORM, GroupClientORM, GroupModel, PolicyMappingORM, PolicyORM, UpdateClientModel, raw_revoke_challenges
 from app.services.admin_service import AdminService
-from app.services.database.tortoise_service import TortoiseConnectionService
+from app.services.database.tortoise_service import TortoiseConnectionService,SECURITY_CREDS
 from app.services.profile_service import ProfileService
 from app.services.vault_service import VaultService
 from app.services.setting_service import SettingService
@@ -33,7 +33,6 @@ from app.utils.helper import  parseToBool
 from app.utils.validation import ipv4_subnet_validator, ipv4_validator
 from app.errors.security_error import GroupIdNotMatchError, SecurityIdentityNotResolvedError
 from datetime import timedelta
-from tortoise.transactions import in_transaction
 from tortoise.expressions import Q
 
 ADMIN_PREFIX = 'admin'
@@ -52,20 +51,21 @@ class PolicyRessource(BaseHTTPRessource):
     get_policy = GetPolicy(False)
     
     @InjectInMethod()
-    def __init__(self,adminService:AdminService):
+    def __init__(self,adminService:AdminService,tortoiseService:TortoiseConnectionService):
         super().__init__()
         self.adminService = adminService
+        self.tortoiseService = tortoiseService
 
+    @UseGuard(PolicyGuard)
     @PingService([ProfileService])
     @LockService(ProfileService,lockType='reader',check_status=False)
     @UsePipe(ObjectRelationalFriendlyPipe,before=False)
-    @UseGuard(PolicyGuard)
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
     async def create_policy(self,request:Request,response:Response, policyModel:PolicyModel, authPermission=Depends(get_auth_permission)):
         policy_model = policyModel.model_dump(mode='python')
 
-        async with in_transaction():
+        async with self.tortoiseService.transaction(SECURITY_CREDS):
             policy_orm =  await PolicyORM.create(**policy_model)
             policy_id = str(policy_orm.policy_id)
 
@@ -75,22 +75,22 @@ class PolicyRessource(BaseHTTPRessource):
     @UsePipe(ObjectRelationalFriendlyPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/{policy}/',methods=[HTTPMethod.DELETE])
     async def delete_policy(self,request:Request,policy:Annotated[PolicyORM,Depends(get_policy)],authPermission=Depends(get_auth_permission)):
-        async with in_transaction():
+        async with self.tortoiseService.transaction(SECURITY_CREDS):
             await policy.delete()
             await PolicyORMCache.Invalid(str(policy.policy_id))
             await AuthPermissionCache.InvalidAll()
         
         return policy
 
+    @UseGuard(PolicyGuard)
     @PingService([ProfileService])
     @LockService(ProfileService,lockType='reader',check_status=False)
     @UseHandler(PydanticHandler)
-    @UseGuard(PolicyGuard)
     @UsePipe(ObjectRelationalFriendlyPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/{policy}/',methods=[HTTPMethod.PUT])
     async def update_policy(self,request:Request,policyModel:PolicyModel,policy:Annotated[PolicyORM,Depends(get_policy)],mode:PolicyUpdateMode =Depends(policy_update_mode_query), authPermission=Depends(get_auth_permission)):
         
-        async with in_transaction():
+        async with self.tortoiseService.transaction(SECURITY_CREDS):
             self._update_policy_model(policyModel,mode,policy)
             await policy.save()
             policy_id = str(policy.policy_id)
@@ -139,12 +139,13 @@ class PolicyRessource(BaseHTTPRessource):
 class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
 
     @InjectInMethod()
-    def __init__(self, configService: ConfigService, securityService: SecurityService, jwtAuthService: JWTAuthService, adminService: AdminService):
+    def __init__(self, configService: ConfigService, securityService: SecurityService, jwtAuthService: JWTAuthService, adminService: AdminService,tortoiseService:TortoiseConnectionService):
         super().__init__()
         self.configService = configService
         self.securityService = securityService
         self.jwtAuthService = jwtAuthService
         self.adminService = adminService
+        self.tortoiseService = tortoiseService
 
         self.settingService = Get(SettingService)
         self.vaultService = Get(VaultService)
@@ -176,7 +177,7 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
             group = None
 
 
-        async with in_transaction():
+        async with self.tortoiseService.transaction(SECURITY_CREDS):
             group_id = None if group == None else str(group.group_id)
             client_data['group'] = group
 
@@ -216,7 +217,8 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
             rmgrp_ = parseToBool(rmgrp)
             if rmgrp_ == None:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail=f'Could not parse {rmgrp} as a bool')
-        async with in_transaction():
+            
+        async with self.tortoiseService.transaction(SECURITY_CREDS):
             is_revoked = await self._update_client(updateClient, client, gid, authPermission,rmgrp_)
             await self._update_policy(updateClient.policy_ids,mode,client)
             if is_revoked:
@@ -244,11 +246,9 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
     async def delete_client(self, merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[DataCost,Depends(DataCost)],request:Request,response:Response, client: Annotated[ClientORM, Depends(get_client)], authPermission=Depends(get_auth_permission)):
         
         async def transaction():
-            async with in_transaction():
+            async with self.tortoiseService.transaction(SECURITY_CREDS,lock='reader') as ctx:
                 await client.delete()
-
                 group_id = None if client.group==None else str(client.group.group_id)
-
                 await ClientORMCache.Invalid([group_id,client.client_id])
                 await AuthPermissionCache.Invalid([group_id,client.client_id])
         
@@ -275,7 +275,7 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
     @BaseHTTPRessource.Post('/group/')
     async def create_group(self, groupModel: GroupModel, authPermission=Depends(get_auth_permission)):
         
-        async with in_transaction():    
+        async with self.tortoiseService.transaction(SECURITY_CREDS):    
             group:GroupClientORM = await GroupClientORM.create(group_name=groupModel.group_name)
             await PolicyMappingORM.bulk_create([PolicyMappingORM(policy_id=policy_id,client=None,group=group) for policy_id in groupModel.policy_ids])
 
@@ -286,7 +286,7 @@ class ClientRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseHandler(ORMCacheHandler)
     @BaseHTTPRessource.Delete('/group/')
     async def delete_group(self, group: Annotated[GroupClientORM, Depends(get_group)], authPermission=Depends(get_auth_permission)):
-        async with in_transaction():
+        async with self.tortoiseService.transaction(SECURITY_CREDS):
 
             await group.delete()
             await BlacklistORMCache.InvalidAll([group.group_id,WILDCARD])
@@ -391,12 +391,13 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
 
 
     @InjectInMethod()
-    def __init__(self, configService: ConfigService, jwtAuthService: JWTAuthService, securityService: SecurityService):
+    def __init__(self, configService: ConfigService, jwtAuthService: JWTAuthService, securityService: SecurityService,tortoiseService:TortoiseConnectionService):
         BaseHTTPRessource.__init__(self)
         IssueAuthInterface.__init__(self,Get(AdminService))
         self.configService = configService
         self.jwtAuthService = jwtAuthService
         self.securityService = securityService
+        self.tortoiseService = tortoiseService
 
     @UseLimiter(limit_value='20/week')
     @UseHandler(SecurityClientHandler,ORMCacheHandler)
@@ -499,7 +500,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseHandler(ORMCacheHandler)
     @BaseHTTPRessource.HTTPRoute('/revoke/', methods=[HTTPMethod.DELETE])
     async def revoke_tokens(self, request: Request, client: Annotated[ClientORM, Depends(get_client)], authPermission=Depends(get_auth_permission)):
-        async with in_transaction():    
+        async with self.tortoiseService.transaction(SECURITY_CREDS):    
             await self._revoke_client(client)
             client.can_login = False #QUESTION Can be set to True?
             if client.can_login:
@@ -521,7 +522,7 @@ class AdminRessource(BaseHTTPRessource,IssueAuthInterface):
     @BaseHTTPRessource.HTTPRoute('/issue-auth/', methods=[HTTPMethod.GET])
     async def issue_auth_token(self, client: Annotated[ClientORM, Depends(get_client)], request: Request, authPermission=Depends(get_auth_permission)):
         
-        async with in_transaction():    
+        async with self.tortoiseService.transaction(SECURITY_CREDS):    
             await raw_revoke_challenges(client)
 
             auth_token, refresh_token = await self.issue_auth(client,True)
