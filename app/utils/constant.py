@@ -161,24 +161,32 @@ class HTMLTemplateConstant:
 ########################                     ########################################
 class MongooseDBConstant:
     ERROR_PROFILE_COLLECTION ='errorProfile'
-    AGENT_COLLECTION = 'agent'
     COMMUNICATION_PROFILE_COLLECTION = 'communication'
+    OUTBOUND_COLLECTION = 'outbound'
     WEBHOOK_PROFILE_COLLECTION = 'webhook'
-    CHAT_COLLECTION = 'chat'
-    CHAT_WRITE_COLLECTION = 'chat_write'
-
     WORKFLOW_COLLECTION ='workflow'
     EDGE_COLLECTION='edge'
     NODE_COLLECTION='node'
-    TASKS_COLLECTION = 'tasks'
-    LLM_COLLECTION = 'llm'
     CUSTOM_MODEL_COLLECTION = 'custom'
+
+    CHAT_COLLECTION = 'chat'
+    CHAT_WRITE_COLLECTION = 'chat_write'
     TOOL_COLLECTION = 'tool'
     STORE_COLLECTION = 'store'
+    LLM_COLLECTION = 'llm'
+    AGENT_COLLECTION = 'agent'
 
-    OUTBOUND_COLLECTION = 'outbound'
-    DATABASE_NAME = 'notifyr'
+    APS_COLLECTION = 'aps'
+    CELERY_COLLECTION = 'celery'
+    TASKS_COLLECTION = 'tasks'
 
+    JOB_DATABASE_NAME = 'notifyr'
+    AGENTIC_DATABASE_NAME = 'agentic'
+    DEFAULT_DATABASE_NAME = 'app'
+
+    JOB_COLLECTIONS =  {APS_COLLECTION,CELERY_COLLECTION,TASKS_COLLECTION}
+    AGENTIC_COLLECTIONS = {AGENT_COLLECTION,LLM_COLLECTION,TOOL_COLLECTION,STORE_COLLECTION,CHAT_COLLECTION,CHAT_WRITE_COLLECTION}
+    DEFAULT_COLLECTIONS = {ERROR_PROFILE_COLLECTION,COMMUNICATION_PROFILE_COLLECTION,OUTBOUND_COLLECTION,WEBHOOK_PROFILE_COLLECTION,WORKFLOW_COLLECTION,CUSTOM_MODEL_COLLECTION}
 
     def __init__(self):
         available_collection = []
@@ -189,6 +197,10 @@ class MongooseDBConstant:
                 available_collection.append(x)
         
         self.available_collection = set(available_collection)
+
+class PostgresConstant:
+    DEFAULT_DATABASE_NAME = 'notifyr'
+    SECURITY_DATABASE_NAME = 'security'
             
 ########################                     ########################################
 
@@ -267,13 +279,11 @@ class VaultConstant:
     CHAT_KEY='chat-key'
     S3_REST_KEY='s3-rest-key'
 
-    NotifyrDynamicSecretsRole= Literal['postgres','mongo','redis','neo4j','redis-celery-broker','redis-celery-backend']
+    NotifyrDynamicSecretsRole= Literal['postgres','mongo','redis','neo4j']
     MONGO_ROLE='mongo'
     POSTGRES_ROLE='postgres'
     REDIS_ROLE='redis'
     NEO4J_ROLE='neo4j'
-    CELERY_BROKER_ROLE='redis-celery-broker'
-    CELERY_BACKEND_ROLE='redis-celery-backend'
 
     NotifyrMinioRole = Literal['static','sts']
 
@@ -572,8 +582,6 @@ class AgenticConstant:
     K_GRAPH_ROUTER = lambda p:f'/k-graph{p}'
     CONVERSATION_ROUTER = lambda p:f'/conversation{p}'
 
-    AGENTIC_COLLECTIONS = {MongooseDBConstant.LLM_COLLECTION,MongooseDBConstant.TOOL_COLLECTION,MongooseDBConstant.STORE_COLLECTION,MongooseDBConstant.CHAT_COLLECTION,MongooseDBConstant.CHAT_WRITE_COLLECTION}
-
 class Crawl4AIConstant:
     INGEST_PARENT_DIR ='crawl4ai'
     CRAWL_CACHE_DIR = '.crawl_cache'
@@ -581,3 +589,9 @@ class Crawl4AIConstant:
 
 class MCPConstant:
     API_TOKEN_NAME=''
+
+class HostConstant:
+    REDIS_HOST='redis'
+    POSTGRES_HOST='postgres'
+    MONGOOSE_HOST='mongodb'
+    VAULT_HOST='vault'

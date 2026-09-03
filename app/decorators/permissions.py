@@ -4,8 +4,8 @@ from app.classes.cost_definition import SimpleTaskCostDefinition
 from app.definition._cost import Cost
 from app.manager.task_manager import TaskManager
 from app.models.orm.contacts_model import ContactORM
-from app.models.email_model import BaseEmailSchedulerModel
-from app.models.security_model import ChallengeORM, ClientORM
+from app.models.orm.email_model import BaseEmailSchedulerModel
+from app.models.orm.security_model import ChallengeORM, ClientORM
 from app.definition._utils_decorator import Permission
 from app.container import InjectInMethod, Get
 from app.services.config_service import ConfigService
@@ -379,9 +379,10 @@ class TaskCostPermission(Permission):
 
 class MCPPermission(Permission):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,configService:ConfigService):
         self.configService = configService
+        super().__init__()
 
     def permission(self,func_meta:FuncMetaData,authPermission:AuthPermission,request:Request):
         if not self.configService.MCP_ENABLED:

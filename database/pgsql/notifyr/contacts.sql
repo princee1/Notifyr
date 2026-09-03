@@ -38,7 +38,7 @@ CREATE DOMAIN ContentType AS VARCHAR(30) CHECK (
 );
 
 CREATE TABLE IF NOT EXISTS Contact (
-    contact_id UUID PRIMARY KEY DEFAULT uuid_generate_v1mc (),
+    contact_id UUID PRIMARY KEY DEFAULT public.uuid_generate_v1mc (),
     first_name VARCHAR(50) NOT NULL,
     last_name VARCHAR(50) NOT NULL,
     email VARCHAR(50) UNIQUE NOT NULL,
@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS Contact (
 );
 
 CREATE TABLE IF NOT EXISTS SecurityContact (
-    security_id UUID PRIMARY KEY DEFAULT uuid_generate_v1mc (),
+    security_id UUID PRIMARY KEY DEFAULT public.uuid_generate_v1mc (),
     contact_id UUID,
     security_code TEXT DEFAULT NULL,
     security_code_salt VARCHAR(64) DEFAULT NULL,
@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS SecurityContact (
 
 -- TODO Combine the SubscriptionContact and Content Type Later ...
 CREATE TABLE IF NOT EXISTS SubscriptionContact (
-    subscription_id UUID DEFAULT uuid_generate_v1mc (),
+    subscription_id UUID DEFAULT public.uuid_generate_v1mc (),
     contact_id UUID UNIQUE,
     email_status SubscriptionStatus NOT NULL,
     sms_status SubscriptionStatus NOT NULL,
@@ -99,14 +99,14 @@ CREATE TABLE IF NOT EXISTS ContentTypeSubscription (
 );
 
 CREATE TABLE IF NOT EXISTS Reason (
-    reason_id UUID DEFAULT uuid_generate_v4 (),
+    reason_id UUID DEFAULT public.uuid_generate_v4 (),
     reason_description TEXT DEFAULT NULL,
     reason_name VARCHAR(50) UNIQUE,
     reason_count BIGINT DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS SubsContent (
-    content_id UUID DEFAULT uuid_generate_v1mc (),
+    content_id UUID DEFAULT public.uuid_generate_v1mc (),
     content_name VARCHAR(50) UNIQUE,
     content_description TEXT DEFAULT NULL,
     content_type ContentType DEFAULT 'other',
@@ -118,7 +118,7 @@ CREATE TABLE IF NOT EXISTS SubsContent (
 ALTER TABLE Subscontent ADD COLUMN ttl TIMESTAMP;
 
 CREATE TABLE IF NOT EXISTS Subscription (
-    subs_id UUID UNIQUE DEFAULT uuid_generate_v1mc (),
+    subs_id UUID UNIQUE DEFAULT public.uuid_generate_v1mc (),
     contact_id UUID,
     content_id UUID,
     subs_status SubscriptionStatus DEFAULT 'Active',
@@ -236,10 +236,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-SELECT cron.schedule (
-    'delete_expired_subscontent_every_5_min', '*/5 * * * *', 'SELECT contacts.delete_expired_subscontent();'
-);
-
 CREATE OR REPLACE FUNCTION compute_limit() RETURNS TRIGGER AS $compute_limit$
 DECLARE
     contact_count INT;
@@ -269,7 +265,7 @@ FOR EACH ROW
 EXECUTE FUNCTION compute_limit();
 
 CREATE TABLE IF NOT EXISTS ContactAnalytics (
-    analytics_id UUID DEFAULT uuid_generate_v1mc(),
+    analytics_id UUID DEFAULT public.uuid_generate_v1mc(),
     week_start_date DATE NOT NULL DEFAULT DATE_TRUNC('week', NOW()),
     content_id UUID DEFAULT '00000000-0000-0000-0000-000000000000',
     country VARCHAR(5),
@@ -341,7 +337,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TABLE IF NOT EXISTS ContactCreationAnalytics (
-    analytics_id UUID DEFAULT uuid_generate_v1mc(),
+    analytics_id UUID DEFAULT public.uuid_generate_v1mc(),
     week_start_date DATE NOT NULL DEFAULT DATE_TRUNC('week', NOW()),
     country VARCHAR(5),
     region VARCHAR(60),
@@ -398,3 +394,45 @@ BEGIN
     ORDER BY group_number, country, region, city;
 END;
 $$ LANGUAGE plpgsql;
+
+
+
+DELETE FROM contacts.Reason;
+
+INSERT INTO
+    contacts.Reason (
+        reason_name,
+        reason_description
+    )
+VALUES (
+        'Not Interested',
+        'The user is not interested in the content.'
+    ),
+    (
+        'Too Many Emails',
+        'The user is receiving too many emails.'
+    ),
+    (
+        'Content Not Relevant',
+        'The content is not relevant to the user.'
+    ),
+    (
+        'Other',
+        'Other reasons for unsubscribing.'
+    ),
+    (
+        'Switched to Competitor',
+        'The user has switched to a competitor.'
+    ),
+    (
+        'Privacy Concerns',
+        'The user has concerns about privacy.'
+    ),
+    (
+        'Technical Issues',
+        'The user is experiencing technical issues.'
+    ),
+    (
+        'No Longer Needed',
+        'The user no longer needs the service.'
+    );

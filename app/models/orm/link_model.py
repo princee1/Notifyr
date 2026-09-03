@@ -49,7 +49,7 @@ class LinkORM(models.Model):
 
 class LinkEventORM(models.Model):
     event_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    link = fields.ForeignKeyField("models.LinkORM", related_name="events", on_delete=fields.CASCADE)
+    link = fields.ForeignKeyField("default.LinkORM", related_name="events", on_delete=fields.CASCADE)
     contact_id = fields.UUIDField(null=True)
     email_id = fields.UUIDField(null=True)
     user_agent = fields.CharField(max_length=150, null=True)
@@ -91,7 +91,7 @@ class LinkEventORM(models.Model):
 class LinkSessionORM(models.Model):
     session_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     contact_id = fields.UUIDField(null=True)
-    link = fields.ForeignKeyField("models.LinkORM", related_name="sessions", on_delete=fields.CASCADE)
+    link = fields.ForeignKeyField("default.LinkORM", related_name="sessions", on_delete=fields.CASCADE)
     converted = fields.BooleanField(null=True)
 
     class Meta:
@@ -109,7 +109,7 @@ class LinkSessionORM(models.Model):
     
 
 class LinkAnalyticsORM(models.Model):
-    link = fields.ForeignKeyField("models.LinkORM", related_name="analytics", on_delete=fields.CASCADE)
+    link = fields.ForeignKeyField("default.LinkORM", related_name="analytics", on_delete=fields.CASCADE)
     day_start_date = fields.DateField(default=datetime.utcnow().date)
     visits_counts = fields.IntField(default=1)
     country = fields.CharField(max_length=60, null=True)

@@ -44,7 +44,7 @@ class ClientORM(models.Model):
     client_type = fields.CharEnumField(enum_type=ClientType, default=ClientType.User, max_length=25)
     auth_type = fields.CharEnumField(enum_type=AuthType, default=AuthType.ACCESS_TOKEN, max_length=30)
     issued_for = fields.CharField(max_length=50, null=False, unique=True)
-    group = fields.ForeignKeyField("models.GroupClientORM", related_name="group", on_delete=fields.SET_NULL, null=True)
+    group = fields.ForeignKeyField("security.GroupClientORM", related_name="group", on_delete=fields.SET_NULL, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
 
@@ -72,7 +72,7 @@ class ClientORM(models.Model):
         }
 
 class ChallengeORM(models.Model):
-    client = fields.OneToOneField("models.ClientORM", pk=True, related_name="challenge", on_delete=fields.CASCADE)
+    client = fields.OneToOneField("security.ClientORM", pk=True, related_name="challenge", on_delete=fields.CASCADE)
     challenge_auth = fields.TextField(generated=True)
     created_at_auth = fields.DatetimeField(auto_now_add=True)
     expired_at_auth = fields.DatetimeField(null=True)
@@ -87,8 +87,8 @@ class ChallengeORM(models.Model):
 
 class BlacklistORM(models.Model):
     blacklist_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    client = fields.ForeignKeyField("models.ClientORM", related_name="blacklist", on_delete=fields.CASCADE, null=True)
-    group = fields.ForeignKeyField("models.GroupClientORM", related_name="groupclient", on_delete=fields.CASCADE, null=True)
+    client = fields.ForeignKeyField("security.ClientORM", related_name="blacklist", on_delete=fields.CASCADE, null=True)
+    group = fields.ForeignKeyField("security.GroupClientORM", related_name="groupclient", on_delete=fields.CASCADE, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
     expired_at = fields.DatetimeField(null=False)
 
@@ -139,9 +139,9 @@ class PolicyORM(models.Model):
 
 class PolicyMappingORM(models.Model):
     mapping_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    policy = fields.ForeignKeyField("models.PolicyORM", related_name="mappings", on_delete=fields.CASCADE)
-    client = fields.ForeignKeyField("models.ClientORM", related_name="policy_mappings", on_delete=fields.CASCADE, null=True)
-    group = fields.ForeignKeyField("models.GroupClientORM", related_name="policy_mappings", on_delete=fields.CASCADE, null=True)
+    policy = fields.ForeignKeyField("security.PolicyORM", related_name="mappings", on_delete=fields.CASCADE)
+    client = fields.ForeignKeyField("security.ClientORM", related_name="policy_mappings", on_delete=fields.CASCADE, null=True)
+    group = fields.ForeignKeyField("security.GroupClientORM", related_name="policy_mappings", on_delete=fields.CASCADE, null=True)
 
     class Meta:
         schema = SCHEMA

@@ -2,7 +2,7 @@
 SET search_path = links;
 
 CREATE TABLE IF NOT EXISTS Link (
-    link_id UUID DEFAULT uuid_generate_v1mc(),
+    link_id UUID DEFAULT public.uuid_generate_v1mc(),
     link_name VARCHAR(100) UNIQUE,
     link_short_id VARCHAR(7) UNIQUE,
     link_url VARCHAR(150) UNIQUE,
@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS Link (
 );
 
 CREATE TABLE IF NOT EXISTS LinkEvent (
-    event_id UUID DEFAULT uuid_generate_v1mc(),
+    event_id UUID DEFAULT public.uuid_generate_v1mc(),
     link_id UUID,
     link_path VARCHAR(100) DEFAULT '/',
     contact_id UUID DEFAULT NULL,
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS LinkEvent (
 );
 
 CREATE TABLE IF NOT EXISTS LinkSession (
-    session_id UUID DEFAULT uuid_generate_v1mc(),
+    session_id UUID DEFAULT public.uuid_generate_v1mc(),
     contact_id UUID DEFAULT NULL,
     link_id UUID NOT NULL,
     converted BOOLEAN DEFAULT FALSE,
@@ -142,11 +142,6 @@ BEGIN
         expiring_date <= NOW();
 END;
 $$ LANGUAGE PLPGSQL;
-
-
-SELECT cron.schedule('delete_expired_links_every_day', '0 0 * * *', 'SELECT links.delete_expired_links();');
-
-SELECT cron.schedule('delete_expired_link_session_event_every_day', '0 0 * * *', 'SELECT links.delete_link_event_session();');
 
 CREATE OR REPLACE FUNCTION compute_limit() RETURNS TRIGGER AS $compute_limit$
 DECLARE

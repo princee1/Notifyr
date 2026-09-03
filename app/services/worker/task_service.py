@@ -5,12 +5,12 @@ from app.classes.celery import SchedulerModel, TaskType
 from app.definition._service import DEFAULT_BUILD_STATE, BaseService, Service, ServiceStatus
 from app.errors.aps_error import APSJobDoesNotExists
 from apscheduler.jobstores.redis import RedisJobStore
-from apscheduler.jobstores.mongodb import MongoDBJobStore
-from app.errors.service_error import BuildOkError, NotBuildedError, ServiceNotAvailableError
+from apscheduler.jobstores.mongodb import MongoDBJobStore,BaseJobStore
+from app.errors.service_error import BuildFailureError, BuildOkError, NotBuildedError, ServiceNotAvailableError
 from app.interface.timers import SchedulerInterface,MemoryJobStore
 from app.services.config_service import ConfigService, WorkerService
 from app.services.cost_service import CostService
-from app.services.database.mongoose_service import MongooseService
+from app.services.database.mongoose_service import JOBS_CREDS, MongooseService
 from app.services.database.redis_service import RedisService
 from app.services.logger_service import LoggerService
 from app.services.vault_service import VaultService
@@ -23,6 +23,12 @@ from apscheduler.schedulers import (
 )
 
 CeleryConstant.BACKEND_KEY_PREFIX
+
+
+class NotifyrMongoDBJobStore(MongoDBJobStore):
+
+    def start(self, scheduler, alias):
+        return BaseJobStore.start(self,scheduler, alias)
 
 
 # configuration
@@ -66,19 +72,19 @@ class TaskService(BaseService,SchedulerInterface):
     def verify_dependency(self):
         #self._builded = True
         if not self.configService.APS_ACTIVATED:
-            raise BuildOkError
+            raise BuildOkError('APS not activated')
 
-        if self.configService.APS_JOBSTORE == 'mongodb' and  self.mongooseService.service_status != ServiceStatus.AVAILABLE:
-            self.fallback_to_memory = True
+        if self.configService.JOBSTORE_DB == 'mongodb' and  self.mongooseService.service_status != ServiceStatus.AVAILABLE:
+            raise BuildFailureError('MongoDB Jobstore Not Available')
         
-        if  self.configService.APS_JOBSTORE == 'redis' and self.redisService.service_status != ServiceStatus.AVAILABLE:
-            self.fallback_to_memory = True
+        if  self.configService.JOBSTORE_DB == 'redis' and self.redisService.service_status != ServiceStatus.AVAILABLE:
+            raise BuildFailureError('Redis Jobstore Not Available')
 
     def build(self, build_state = DEFAULT_BUILD_STATE):
         if self._builded:
             self.shutdown(False)
-        
-        self.redis_client = self.redisService.db[RedisConstant.EVENT_DB]
+
+        self.redis_client = self.redisService.db[RedisConstant.CONFIG_DB]
         jobstores = {
             "redis": RedisJobStore(
                 host=self.redisService.redis_celery.connection_pool.connection_kwargs.get("host", "localhost"),
@@ -90,17 +96,17 @@ class TaskService(BaseService,SchedulerInterface):
                 password=self.redisService.redis_celery.connection_pool.connection_kwargs.get('password')
                 ),
             'memory':MemoryJobStore(),
-            'mongodb':MongoDBJobStore(
-                MongooseDBConstant.DATABASE_NAME,
-                collection=MongooseDBConstant.TASKS_COLLECTION,
-                client=self.mongooseService.client_store.get_client('default','sync')
+            'mongodb':NotifyrMongoDBJobStore(
+                MongooseDBConstant.JOB_DATABASE_NAME,
+                collection=MongooseDBConstant.APS_COLLECTION,
+                client=self.mongooseService.client_store.get_client(JOBS_CREDS,'sync')
                 )
         }
-        jobstore = self.configService.APS_JOBSTORE if not self.fallback_to_memory else 'memory'
+        jobstore = self.configService.JOBSTORE_DB
         SchedulerInterface.__init__(self,None,jobstores,jobstore,executor='asyncio-executor',replace_existing=True,coalesce=True,thread_pool_count=50)
 
     def start(self):
-        if self.configService.APS_JOBSTORE == 'memory' or self.fallback_to_memory:
+        if not self.configService.APS_ACTIVATED:
             return 
         if not self._builded:
             raise NotBuildedError()
@@ -110,7 +116,7 @@ class TaskService(BaseService,SchedulerInterface):
         self._leader_task = asyncio.create_task(self._leader_loop())
 
     def shutdown(self):
-        if self.configService.APS_JOBSTORE == 'memory' or self.fallback_to_memory:
+        if not self.configService.APS_ACTIVATED:
             return 
         self._stop = True
         if self._leader_task:
@@ -118,7 +124,7 @@ class TaskService(BaseService,SchedulerInterface):
         SchedulerInterface.shutdown(self)
     
     async def resume(self):
-        if self.configService.APS_JOBSTORE != 'mongodb':
+        if self.configService.JOBSTORE_DB != 'mongodb':
             SchedulerInterface.resume(self)
             return
         async with self.mongooseService.lock('reader'):

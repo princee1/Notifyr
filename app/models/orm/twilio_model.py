@@ -40,7 +40,7 @@ class DirectionEnum(str, Enum):
 class SMSTrackingORM(models.Model):
     sms_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     sms_sid = fields.CharField(max_length=60, null=True, default=None)
-    contact = fields.ForeignKeyField('models.ContactORM', null=True, on_delete=fields.SET_NULL)
+    contact = fields.ForeignKeyField('default.ContactORM', null=True, on_delete=fields.SET_NULL)
     recipient = fields.CharField(max_length=100)
     sender = fields.CharField(max_length=100)
     date_sent = fields.DatetimeField(auto_now_add=True, use_tz=True)
@@ -74,7 +74,7 @@ class SMSTrackingORM(models.Model):
 class CallTrackingORM(models.Model):
     call_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     call_sid = fields.CharField(max_length=60, null=True, default=None)
-    contact = fields.ForeignKeyField('models.ContactORM', null=True, on_delete=fields.SET_NULL)
+    contact = fields.ForeignKeyField('default.ContactORM', null=True, on_delete=fields.SET_NULL)
     recipient = fields.CharField(max_length=100)
     sender = fields.CharField(max_length=100)
     date_started = fields.DatetimeField(auto_now_add=True, use_tz=True)
@@ -110,7 +110,7 @@ class CallTrackingORM(models.Model):
 
 class SMSEventORM(models.Model):
     event_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    sms = fields.ForeignKeyField("models.SMSTrackingORM", related_name="events", on_delete=fields.CASCADE)
+    sms = fields.ForeignKeyField("default.SMSTrackingORM", related_name="events", on_delete=fields.CASCADE)
     sms_sid = fields.CharField(max_length=60,null=True)
     direction = fields.CharEnumField(enum_type=DirectionEnum, max_length=1)
     current_event = fields.CharEnumField(enum_type=SMSStatusEnum, max_length=50)
@@ -149,7 +149,7 @@ class SMSEventORM(models.Model):
 
 class CallEventORM(models.Model):
     event_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    call = fields.ForeignKeyField("models.CallTrackingORM", related_name="events", null=True, on_delete=fields.CASCADE)
+    call = fields.ForeignKeyField("default.CallTrackingORM", related_name="events", null=True, on_delete=fields.CASCADE)
     call_sid = fields.CharField(max_length=60,null=True)
     direction = fields.CharEnumField(enum_type=DirectionEnum, max_length=1)
     current_event = fields.CharEnumField(enum_type=CallStatusEnum, max_length=50)

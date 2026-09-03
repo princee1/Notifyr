@@ -79,16 +79,18 @@ class DocumentConditionWrongMethodError(BaseError):
 class DocumentConditionFilterDoesNotExistOnModelError(BaseError):
     ...
 
-    
 class DocumentAlreadyDeletedError(BaseError):
     ...
+
+###############################################################################################################################
+#############################################                                                      ############################
+###############################################################################################################################
 
 class MongoCollectionDoesNotExists(BaseError):
     def __init__(self, collection:str,model:str=None):
         super().__init__(collection,model)
         self.collection = collection
         self.model = model
-
 
 class MongoClientNameDoesNotExistError(BaseError):
     def __init__(self,name):
@@ -107,6 +109,15 @@ class MongoClientModeDoesNotExistError(BaseError):
         self.name = name
         self.mode = mode
 
+
+class MongoTransactionFailureError(BaseError):
+    def __init__(self,connection:str,attempts:int,collection:str,error=None,):
+        super().__init__()
+        self.connection = connection
+        self.attempts = attempts
+        self.error = error
+        self.collection = collection
+
 ###############################################################################################################################
 #############################################                                                      ############################
 ###############################################################################################################################
@@ -119,3 +130,14 @@ class MemCacheNoValidKeysDefinedError(BaseError):
 
 class MemCachedCacheMissError(BaseError):
     ...
+
+###############################################################################################################################
+#############################################                                                      ############################
+###############################################################################################################################
+
+class TortoiseTransactionFailureError(BaseError):
+    def __init__(self,connection:str,attempts:int,error=None):
+        super().__init__()
+        self.connection = connection
+        self.attempts = attempts
+        self.error = error

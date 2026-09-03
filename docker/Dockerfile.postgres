@@ -4,20 +4,20 @@ RUN apt-get update && apt-get install -y curl postgresql-15-cron postgresql-15-p
 
 # RUN apt-get install -y postgresql-plpython3-15 
 
-COPY database/*.sql /database/
-
-COPY --chown=postgres:postgres scripts/postgres-init.sh /docker-entrypoint-initdb.d/init.sh
-
-RUN chmod +x /docker-entrypoint-initdb.d/init.sh
-
 RUN echo "shared_preload_libraries = 'pg_cron'" >> /usr/share/postgresql/postgresql.conf.sample
 
-RUN echo "cron.database_name = 'notifyr'" >> /usr/share/postgresql/postgresql.conf.sample
+RUN echo "cron.database_name = 'security'" >> /usr/share/postgresql/postgresql.conf.sample
 
 RUN echo "cron.use_background_workers = on" >> /usr/share/postgresql/postgresql.conf.sample
 
 RUN echo "max_worker_processes = 20" >> /usr/share/postgresql/postgresql.conf.sample
 
 RUN echo "max_connections = 200" >> /usr/share/postgresql/postgresql.conf.sample
+
+COPY database/pgsql/ /database/
+
+COPY --chown=postgres:postgres scripts/db-init/postgres-init.sh /docker-entrypoint-initdb.d/init.sh
+
+RUN chmod +x /docker-entrypoint-initdb.d/init.sh
 
 

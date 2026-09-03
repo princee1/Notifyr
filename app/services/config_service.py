@@ -3,7 +3,7 @@ from typing import Any, Callable, TypedDict
 from typing_extensions import Literal
 from dotenv import load_dotenv, find_dotenv
 from enum import Enum
-from app.errors.service_error import BuildAbortError, BuildOkError, BuildWarningError
+from app.errors.service_error import BuildAbortError, BuildFailureError, BuildOkError, BuildWarningError
 from app.utils.constant import RabbitMQConstant, RedisConstant
 from app.definition import _service
 import socket
@@ -223,14 +223,16 @@ class ConfigService(_service.BaseService):
         self.GRAPHITI_PROTOCOL:str = self.getenv('GRAPHITI_PROTOCOL','neo4j')
 
         # CELERY CONFIG #
-        self.BROKER_PROVIDER:Literal['redis','rabbitmq'] = self.getenv('BROKER_PROVIDER','rabbitmq')
+        self.CELERY_BROKER_PROVIDER:Literal['redis','rabbitmq'] = self.getenv('CELERY_BROKER_PROVIDER','rabbitmq')
         self.CELERY_RESULT_EXPIRES = ConfigService.parseToInt(self.getenv("CELERY_RESULT_EXPIRES"), 60*60*24)
         self.CELERY_VISIBILITY_TIMEOUT = ConfigService.parseToInt(self.getenv('CELERY_VISIBILITY_TIMEOUT'),60*60*2)
         self.CELERY_WORKERS_EXPECTED = SCALING.get('worker',0)
 
         # APS CONFIG #
         self.APS_ACTIVATED:bool = ConfigService.parseToBool(self.getenv('APS_ACTIVATED','true'),True)
-        self.APS_JOBSTORE:Literal['redis','mongodb','memory'] = self.getenv('APS_JOBSTORE','redis')
+
+        # JOBSTORE CONFIG #
+        self.JOBSTORE_DB:Literal['redis','mongodb'] = self.getenv('JOBSTORE','redis')
 
         # LANGCHAIN CONFIG #
         self.ALLOWED_TWO_LEVEL_SUBAGENT:bool = ConfigService.parseToBool(self.getenv('ALLOWED_TWO_LEVEL_AGENT','false'),False)
@@ -244,14 +246,14 @@ class ConfigService(_service.BaseService):
         
         if self.HTTP_MODE not in ['HTTP','HTTPS']:
             raise BuildAbortError(f"HTTP_MODE {self.HTTP_MODE} is not valid please use HTTP or HTTPS")
-        
+
+        if self.JOBSTORE_DB not in ['redis','mongodb']:
+            raise BuildFailureError(f'JOBSTORE_DB env var should be redis or mongodb not {self.JOBSTORE_DB}')
+
         if not self.SECURITY_FLAG:
             raise BuildWarningError(f"SECURITY_FLAG {self.SECURITY_FLAG} is set to False, this is not recommended for production environments")
-        
-        if self.APS_JOBSTORE not in ['redis','mongodb','memory']:
-            self.APS_JOBSTORE = 'memory'
-        
-        if self.BROKER_PROVIDER not in ['redis','rabbitmq']:
+
+        if self.CELERY_BROKER_PROVIDER not in ['redis','rabbitmq']:
             raise BuildWarningError()
 
     def __getitem__(self, key):

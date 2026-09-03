@@ -15,7 +15,7 @@ class RabbitMQService(TempCredentialsDatabaseService,BrokerService):
         super().__init__(configService, fileService, vaultService,60*60*24*29)
     
     def verify_dependency(self):
-        if self.configService.BROKER_PROVIDER == 'redis':
+        if self.configService.CELERY_BROKER_PROVIDER == 'redis':
             raise BuildWarningError("Redis is set as the broker; skipping RabbitMQ setup.")
     
     def generate_credentials(self):
@@ -46,14 +46,16 @@ class RabbitMQService(TempCredentialsDatabaseService,BrokerService):
                 super().build(build_state)
 
         except Exception as e:
-            self.configService.BROKER_PROVIDER = 'redis'
+            self.configService.CELERY_BROKER_PROVIDER = 'redis'
             raise BuildFailureError("Failed to connect to RabbitMQ with generated credentials. Ensure RabbitMQ is running and accessible.") from e
 
-    
-    def compute_broker_url(self):
-        if self.configService.BROKER_PROVIDER == 'redis':
-            return None
+    def compute_url(self):
         return f"amqp://{self.db_user()}:{self.db_password()}@{self.configService.RABBITMQ_HOST}:5672/{RabbitMQConstant.NOTIFYR_VIRTUAL_HOST}"
-    
+        
+    def compute_broker_url(self):
+        if self.configService.CELERY_BROKER_PROVIDER == 'redis':
+            return None
+        return self.compute_url()
+
     async def _creds_rotator(self):
         await RunInThreadPool(self.generate_credentials)()

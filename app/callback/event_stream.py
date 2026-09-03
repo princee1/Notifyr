@@ -5,7 +5,7 @@ from typing import Callable
 from app.container import Get
 from app.definition._service import ServiceStatus
 from app.depends.lock import LockLogicDecorator
-from app.models.email_model import EmailStatus, EmailTrackingORM,TrackingEmailEventORM, bulk_upsert_email_analytics
+from app.models.orm.email_model import EmailStatus, EmailTrackingORM,TrackingEmailEventORM, bulk_upsert_email_analytics
 from app.models.orm.link_model import LinkEventORM,bulk_upsert_analytics, bulk_upsert_links_vc
 from app.models.orm.contacts_model import ContactORM, bulk_upsert_contact_analytics, bulk_upsert_contact_creation_analytics
 from app.models.orm.twilio_model import CallEventORM, CallStatusEnum, CallTrackingORM, SMSEventORM, SMSStatusEnum,SMSTrackingORM, bulk_upsert_call_analytics, bulk_upsert_sms_analytics

@@ -18,7 +18,7 @@ from app.models.ingest_model import DataIngestModel, WebCrawlingDataIngestModel
 from app.models.orm.link_model import LinkORM
 from app.models.odm.llm_model import LLMProfileModel
 from app.models.otp_model import OTPModel
-from app.models.security_model import ClientORM
+from app.models.orm.security_model import ClientORM
 from app.services.admin_service import AdminService
 from app.services.cost_service import CostService
 from app.services.database.mongoose_service import MongooseService
@@ -304,7 +304,7 @@ class CeleryBrokerGuard(Guard):
         self.max_visibility_time = self.configService.CELERY_VISIBILITY_TIMEOUT *.15
     
     def guard(self,scheduler:SchedulerModel,taskManager:TaskManager):
-        if self.configService.BROKER_PROVIDER == 'redis':
+        if self.configService.CELERY_BROKER_PROVIDER == 'redis':
             if scheduler.task_type in self._not_allowed_redis_eta:
                 if self.allowed_fallback:
                     taskManager.set_algorithm('aps')

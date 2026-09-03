@@ -164,8 +164,7 @@ services:
       - USERNAME=${USERNAME}
       - DOMAIN_NAME=${DOMAIN_NAME}
   
-      - BROKER_PROVIDER=${BROKER_PROVIDER:-rabbitmq}
-      - APS_JOBSTORE=${APS_JOBSTORE}
+      - CELERY_BROKER_PROVIDER=${CELERY_BROKER_PROVIDER:-rabbitmq}
 
       - MONGO_REPLICA_NAME=${MONGO_REPLICA_NAME:-nrp}
       - SECURITY_FLAG=${SECURITY_FLAG:-true}
@@ -272,8 +271,8 @@ services:
       - MONGO_HOST=${MONGO_HOST-mongodb}
       - MONGO_REPLICA_NAME=${MONGO_REPLICA_NAME:-nrp}
       - REDIS_HOST=${REDIS_HOST-redis}
-      - BROKER_PROVIDER=${BROKER_PROVIDER:-rabbitmq}
-      - MODE=${MODE:-prod}bea
+      - CELERY_BROKER_PROVIDER=${CELERY_BROKER_PROVIDER:-rabbitmq}
+      - MODE=${MODE:-prod}
     networks:
       - data_net
       - vault_net
@@ -300,7 +299,7 @@ services:
     environment:
       - REDIS_HOST=${REDIS_HOST-redis}
       - RABBITMQ_HOST=${RABBITMQ_HOST-rabbitmq}
-      - BROKER_PROVIDER=${BROKER_PROVIDER:-rabbitmq}
+      - CELERY_BROKER_PROVIDER=${CELERY_BROKER_PROVIDER:-rabbitmq}
       - MODE=${MODE:-prod}
     networks:
       - data_net
@@ -344,15 +343,15 @@ services:
       ROTATE_ROOT: true
       VAULT_ADDR: http://127.0.0.1:8200
 
-      POSTGRES_USER: ${POSTGRES_USER:?Postgres user must be set}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Postgres password must be set}
+      VAULTPASS: ${VAULTPASS:-vaultpass}
 
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:?Mongo root user must be set}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?Mongo root password must be set}
+      NOTIFYR_POSTGRES_USER: ${POSTGRES_USER:?Postgres user must be set}
+      NOTIFYR_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Postgres password must be set}
 
-      MINIO_VAULT_PASSWORD: ${MINIO_VAULT_PASSWORD:?Minio admin vault password must be set}
+      NOTIFYR_MONGO_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:?Mongo root user must be set}
+      NOTIFYR_MONGO_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?Mongo root password must be set}
 
-      REDIS_NOTIFYR_PASSWORD: ${REDIS_NOTIFYR_PASSWORD:-vaultpass}
+      MINIO_PASSWORD: ${MINIO_PASSWORD:?Minio admin vault password must be set}
 
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?Rabbit mq user must be set}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?Rabbit mq password must be set}
@@ -415,7 +414,7 @@ services:
     volumes:
       - minio-data:/data
     environment:
-      - MINIO_VAULT_PASSWORD=${MINIO_VAULT_PASSWORD:?Minio admin password must set}
+      - MINIO_PASSWORD=${MINIO_PASSWORD:?Minio admin password must set}
       - MINIO_STS_ENABLE=${MINIO_STS_ENABLE:-false}
     depends_on:
       - redis
@@ -452,15 +451,14 @@ services:
       - CELERY_EXTERNAL=${CELERY_EXTERNAL:-false}
       - REDIS_USER=${REDIS_USER:?Redis user must be set}
       - REDIS_PASSWORD=${REDIS_PASSWORD:?Redis password must be set}
-      - REDIS_NOTIFYR_PASSWORD=${REDIS_NOTIFYR_PASSWORD:-vaultpass}
+      - REDIS_VAULT_PASSWORD=${VAULTPASS:-vaultpass}
       - DEFAULT_USER=on
       - SKIP_FIX_PERMS=1
     volumes:
       - redis-data:/data
-      - ./scripts/redis-entrypoint.sh:/entrypoint.sh
-      - ./scripts/ncs-lib.lua:/functions/ncs-lib.lua
-      - ./scripts/credit-deduction.lua:/functions/credit-deduction.lua
-
+      - ./scripts/entrypoint/redis-entrypoint.sh:/entrypoint.sh
+      - ./scripts/credit/ncs-lib.lua:/functions/ncs-lib.lua
+      - ./scripts/credit/credit-deduction.lua:/functions/credit-deduction.lua
     networks:
       - data_net
 
@@ -477,13 +475,17 @@ services:
         target: /run/secrets/mongo-keyfile.txt
     volumes:
       - mongo-data:/data/db
-      - ./scripts/mongo-entrypoint.sh:/usr/local/bin/mongo-entrypoint.sh
-      - ./scripts/mongo-init.sh:/docker-entrypoint-initdb.d/mongo-init.sh
+      - ./scripts/entrypoint/mongo-entrypoint.sh:/usr/local/bin/mongo-entrypoint.sh
+      - ./scripts/db-init/mongo-init.sh:/docker-entrypoint-initdb.d/mongo-init.sh
+      - ./database/mongodb/notifyr/admin.js:/notifyr/admin.js
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:?Mongo root user must be set}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?Mongo root password must be set}
-      MONGO_INITDB_DATABASE: notifyr
+      INIT_NOTIFYR_DB: on
+      MONGO_INITDB_DATABASE: app
+      MONGO_INITDB_ROOT_USERNAME: mongo-vaultadmin
+      MONGO_INITDB_ROOT_PASSWORD: ${VAULTPASS:-vaultpass}
       MONGO_REPLICA_NAME: ${MONGO_REPLICA_NAME:-nrp}
+      NOTIFYR_MONGO_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:?Mongo root user must be set}
+      NOTIFYR_MONGO_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?Mongo root password must be set}
     networks:
       - data_net
 
@@ -497,9 +499,12 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:?Postgres user must be set}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Postgres password must be set}
-      POSTGRES_DB: notifyr
+      INIT_NOTIFYR_DB: on
+      POSTGRES_DB: security
+      POSTGRES_USER: pg-vaultadmin
+      POSTGRES_PASSWORD: ${VAULTPASS:-vaultpass}
+      NOTIFYR_POSTGRES_USER: ${POSTGRES_USER:?Postgres user must be set}
+      NOTIFYR_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Postgres password must be set}
     networks:
       - data_net
   

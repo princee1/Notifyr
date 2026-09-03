@@ -1,12 +1,11 @@
--- Active: 1740679093248@@127.0.0.1@5432@notifyr@security
-SET search_path = security;
+SET search_path = clients;
 
 CREATE OR REPLACE FUNCTION secure_random_string(length INT) RETURNS TEXT AS $$
 DECLARE
     raw_bytes BYTEA;
     encoded TEXT;
 BEGIN
-    raw_bytes := gen_random_bytes(length);
+    raw_bytes := public.gen_random_bytes(length);
     encoded := encode(raw_bytes, 'base64');
     RETURN substring(encoded FROM 1 FOR length);
 END;
@@ -31,7 +30,7 @@ CREATE DOMAIN ClientType AS VARCHAR(10) CHECK (
 );
 
 CREATE TABLE IF NOT EXISTS GroupClient (
-    group_id UUID DEFAULT uuid_generate_v1mc (),
+    group_id UUID DEFAULT public.uuid_generate_v1mc (),
     group_name VARCHAR(50) UNIQUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
@@ -39,7 +38,7 @@ CREATE TABLE IF NOT EXISTS GroupClient (
 );
 
 CREATE TABLE IF NOT EXISTS Client (
-    client_id UUID DEFAULT uuid_generate_v1mc (),
+    client_id UUID DEFAULT public.uuid_generate_v1mc (),
     client_name VARCHAR(50) UNIQUE,
     client_description TEXT DEFAULT NULL,
     client_username VARCHAR(30) UNIQUE DEFAULT 'notifyr-user-' || secure_random_string(12),
@@ -69,13 +68,13 @@ CREATE TABLE IF NOT EXISTS Challenge (
     challenge_refresh VARCHAR(256) UNIQUE DEFAULT secure_random_string(256),
     created_at_refresh TIMESTAMPTZ DEFAULT NOW(),
     expired_at_refresh TIMESTAMPTZ ,
-    last_authz_id UUID DEFAULT uuid_generate_v4(),
+    last_authz_id UUID DEFAULT public.uuid_generate_v4(),
     PRIMARY KEY (client_id),
     FOREIGN KEY (client_id) REFERENCES Client (client_id) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS Blacklist (
-    blacklist_id UUID DEFAULT uuid_generate_v1mc (),
+    blacklist_id UUID DEFAULT public.uuid_generate_v1mc (),
     client_id UUID UNIQUE DEFAULT NULL,
     group_id UUID UNIQUE DEFAULT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -90,7 +89,7 @@ CREATE TABLE IF NOT EXISTS Blacklist (
 );
 
 CREATE TABLE IF NOT EXISTS Policy (
-    policy_id UUID PRIMARY KEY DEFAULT uuid_generate_v1mc(),
+    policy_id UUID PRIMARY KEY DEFAULT public.uuid_generate_v1mc(),
     allowed_profiles TEXT[] DEFAULT '{}',
     allowed_agents TEXT[] DEFAULT '{}',
     allowed_routes JSONB DEFAULT '{}'::jsonb,
@@ -101,7 +100,7 @@ CREATE TABLE IF NOT EXISTS Policy (
 );
 
 CREATE TABLE IF NOT EXISTS PolicyMapping(
-    mapping_id UUID DEFAULT uuid_generate_v1mc(),
+    mapping_id UUID DEFAULT public.uuid_generate_v1mc(),
     policy_id UUID,
     client_id UUID DEFAULT NULL,
     group_id UUID DEFAULT NULL,
@@ -130,7 +129,7 @@ WHERE group_id IS NOT NULL;
 
 CREATE OR REPLACE FUNCTION set_auth_challenge() RETURNS VOID AS $$
 BEGIN
-    SET search_path = security;
+    SET search_path = clients;
 
     UPDATE 
         Challenge c
@@ -145,7 +144,7 @@ END; $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION set_refresh_challenge() RETURNS VOID AS $$
 BEGIN
-    SET search_path = security;
+    SET search_path = clients;
     UPDATE 
         Challenge c
     SET 
@@ -159,7 +158,7 @@ END; $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION raw_revoke_challenges(cid UUID) RETURNS VOID as $$
 BEGIN
-    SET search_path = security;
+    SET search_path = clients;
     UPDATE 
         Challenge c
     SET 
@@ -182,7 +181,7 @@ END; $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION raw_revoke_auth_token(cid UUID) RETURNS VOID as $$
 BEGIN
-    SET search_path = security;
+    SET search_path = clients;
     UPDATE 
         Challenge c
     SET 
@@ -202,7 +201,7 @@ END; $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION update_challenge() RETURNS VOID AS $$
 BEGIN
-    SET search_path = security;
+    SET search_path = clients;
     PERFORM set_auth_challenge();
     PERFORM set_refresh_challenge();
 END; $$ LANGUAGE plpgsql;
@@ -210,22 +209,13 @@ END; $$ LANGUAGE plpgsql;
 -- ------------------------------------             -------------------------------------------#
 -- ------------------------------------             -------------------------------------------#
 
-
-SELECT cron.schedule (
-    'update_challenge_every_5_minutes', '*/5 * * * *', 'SELECT security.update_challenge();'
-    );
-
 CREATE OR REPLACE FUNCTION delete_blacklist() RETURNS VOID AS $$
 BEGIN
-    SET search_path = security;
+    SET search_path = clients;
     DELETE FROM Blacklist
     WHERE expired_at <= NOW();
 
 END; $$ LANGUAGE plpgsql;
-
-SELECT cron.schedule (
-    'delete_blacklist_every_5_minutes', '*/5 * * * *', 'SELECT security.delete_blacklist();'
-);
 
 -- ------------------------------------             -------------------------------------------#
 
@@ -237,7 +227,7 @@ DECLARE
 
 BEGIN
     SET 
-        search_path = security;
+        search_path = clients;
 
     SELECT 
         COUNT(*) 
@@ -261,7 +251,7 @@ DECLARE
     client_count INT;
 
 BEGIN   
-    SET search_path = security;
+    SET search_path = clients;
     SELECT 
         COUNT(*) 
     INTO 
@@ -298,7 +288,7 @@ CREATE TRIGGER limit_client
 
 CREATE OR REPLACE FUNCTION guard_admin_creation() RETURNS TRIGGER AS $guard_admin_creation$
 BEGIN
-    SET search_path = security;
+    SET search_path = clients;
     IF NEW.client_type = 'Admin' THEN
         IF (SELECT COUNT(*) FROM Client WHERE client_type = 'Admin') > 0 THEN
             RAISE EXCEPTION 'Admin already exists';
@@ -318,7 +308,7 @@ CREATE TRIGGER guard_admin_creation
 
 CREATE OR REPLACE FUNCTION guard_admin_deletion() RETURNS TRIGGER AS $guard_admin_deletion$
 BEGIN
-    SET search_path = security;
+    SET search_path = clients;
     IF OLD.client_type = 'Admin' THEN
         RAISE EXCEPTION 'Admin cannot be deleted or updated';
         RETURN NULL;  
@@ -342,7 +332,7 @@ CREATE OR REPLACE FUNCTION guard_challenge_expiry() RETURNS TRIGGER AS $guard_ch
 DECLARE
     client_auth_type AuthType;
 BEGIN
-    SET search_path = security;
+    SET search_path = clients;
     SELECT auth_type INTO client_auth_type FROM Client WHERE client_id = NEW.client_id;
 
     IF client_auth_type = 'ACCESS_TOKEN' THEN
@@ -373,3 +363,52 @@ CREATE TRIGGER guard_challenge_expiry
     ON Challenge
     FOR EACH ROW
     EXECUTE FUNCTION guard_challenge_expiry();
+
+DELETE FROM clients.Client;
+
+DELETE FROM clients.Groupclient;
+
+INSERT INTO
+    clients.Client (
+        client_name,
+        client_type,
+        client_description,
+        client_scope,
+        authenticated,
+        can_login
+    )
+VALUES (
+        'Notifyr ADMIN',
+        'Admin',
+        'Admin client for Notifyr application',
+        'Free',
+        True,
+        True
+    );
+
+
+INSERT INTO
+    clients.Challenge (
+        client_id,
+        expired_at_auth,
+        expired_at_refresh
+    )
+VALUES (
+        (
+            SELECT client_id
+            FROM clients.Client
+            WHERE
+                client_type = 'Admin'
+        ),
+        NOW() + INTERVAL '5 minute',
+        NOW() + INTERVAL '1 hour'
+    );
+
+
+SELECT cron.schedule (
+        'update_challenge_every_5_minutes', '*/5 * * * *', 'SELECT clients.update_challenge();'
+    );
+
+SELECT cron.schedule (
+        'delete_blacklist_every_5_minutes', '*/5 * * * *', 'SELECT clients.delete_blacklist();'
+    );

@@ -10,7 +10,7 @@ from app.classes.embeddings import EmbeddingModel, EmbeddingWrapper
 from app.classes.mongo import MongoFindFilter
 from app.container import InjectInMethod
 from app.decorators.guards import LLMProviderGuard
-from app.decorators.handlers import AgentHandler, AgenticHandler, DataSourceHandler, LLMHandler, AsyncIOHandler, CostHandler, GrpcHandler, MiniServiceHandler, MotorErrorHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler
+from app.decorators.handlers import AgentHandler, AgenticHandler, DataSourceHandler, LLMHandler, AsyncIOHandler, CostHandler, GrpcHandler, MiniServiceHandler, MongooseHandler, MotorErrorHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, AgentPermission, ClientTypesPermission, JWTRouteHTTPPermission, MCPPermission
 from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe, SanitizePathParameterPipe
@@ -49,7 +49,7 @@ base_attr = {'id','revision_id','created_at','last_modified','version'}
 @PingService([MongooseService])
 @UsePermission(JWTRouteHTTPPermission)
 @LockService(MongooseService,lockType='reader',check_status=False)
-@UseHandler(ServiceAvailabilityHandler,AsyncIOHandler,MotorErrorHandler)
+@UseHandler(ServiceAvailabilityHandler,AsyncIOHandler,MongooseHandler,MotorErrorHandler)
 @HTTPRessource('agents')
 class AgentsRessource(BaseHTTPRessource):
     

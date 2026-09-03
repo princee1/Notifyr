@@ -31,7 +31,7 @@ from app.definition import _service
 from ...config_service import ApplicationMode, ConfigService
 import ssl
 
-from app.models.email_model import EmailStatus, EmailTrackingORM, TrackingEmailEventORM, map_smtp_error_to_status
+from app.models.orm.email_model import EmailStatus, EmailTrackingORM, TrackingEmailEventORM, map_smtp_error_to_status
 
 from app.utils.constant import StreamConstant
 from email import message_from_bytes

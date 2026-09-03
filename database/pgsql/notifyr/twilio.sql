@@ -2,7 +2,7 @@
 SET search_path = twilio;
 
 -- Create domain for SMS Status
-CREATE DOMAIN SMSStatus AS VARCHAR(50) CHECK (
+CREATE DOMAIN SMSStatus AS VARCHAR(15) CHECK (
     VALUE IN (
         'QUEUED',
         'SENT',
@@ -23,7 +23,7 @@ CREATE DOMAIN Direction AS VARCHAR(1) CHECK (
 );
 
 -- Create domain for Call Status
-CREATE DOMAIN CallStatus AS VARCHAR(50) CHECK (
+CREATE DOMAIN CallStatus AS VARCHAR(15) CHECK (
     VALUE IN (
         'RECEIVED',
         'INITIATED',
@@ -41,7 +41,7 @@ CREATE DOMAIN CallStatus AS VARCHAR(50) CHECK (
 
 -- Update table for SMS Tracking
 CREATE TABLE IF NOT EXISTS SMSTracking (
-    sms_id UUID DEFAULT uuid_generate_v1mc (),
+    sms_id UUID DEFAULT public.uuid_generate_v1mc (),
     sms_sid VARCHAR(60) UNIQUE DEFAULT NULL,
     contact_id UUID DEFAULT NULL,
     recipient VARCHAR(100) NOT NULL,
@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS SMSTracking (
 
 -- Update table for Call Tracking
 CREATE TABLE IF NOT EXISTS CallTracking (
-    call_id UUID DEFAULT uuid_generate_v1mc (),
+    call_id UUID DEFAULT public.uuid_generate_v1mc (),
     call_sid VARCHAR(60) UNIQUE DEFAULT NULL,
     contact_id UUID DEFAULT NULL,
     recipient VARCHAR(100) NOT NULL,
@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS CallTracking (
 
 -- Update table for SMS Events
 CREATE TABLE IF NOT EXISTS SMSEvent (
-    event_id UUID DEFAULT uuid_generate_v1mc (),
+    event_id UUID DEFAULT public.uuid_generate_v1mc (),
     sms_id UUID DEFAULT NULL,
     sms_sid VARCHAR(60) DEFAULT NULL,
     direction Direction,
@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS SMSEvent (
 
 -- Update table for Call Events to include location details
 CREATE TABLE IF NOT EXISTS CallEvent (
-    event_id UUID DEFAULT uuid_generate_v1mc (),
+    event_id UUID DEFAULT public.uuid_generate_v1mc (),
     call_id UUID DEFAULT NULL,
     call_sid VARCHAR(60) DEFAULT NULL,
     direction Direction,
@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS CallEvent (
 
 -- Create table for SMS Analytics
 CREATE TABLE IF NOT EXISTS SMSAnalytics (
-    analytics_id UUID DEFAULT uuid_generate_v1mc (),
+    analytics_id UUID DEFAULT public.uuid_generate_v1mc (),
     week_start_date DATE NOT NULL DEFAULT DATE_TRUNC('week', NOW()),
     direction Direction NOT NULL,
     sms_received INT DEFAULT 0,
@@ -123,7 +123,7 @@ CREATE TABLE IF NOT EXISTS SMSAnalytics (
 
 -- Update table for Call Analytics to include location details
 CREATE TABLE IF NOT EXISTS CallAnalytics (
-    analytics_id UUID DEFAULT uuid_generate_v1mc (),
+    analytics_id UUID DEFAULT public.uuid_generate_v1mc (),
     week_start_date DATE NOT NULL DEFAULT DATE_TRUNC('week', NOW()),
     direction Direction NOT NULL,
     country VARCHAR(100) DEFAULT NULL, -- Added country column
@@ -446,25 +446,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Schedule the weekly cron job
-SELECT cron.schedule (
-        'create_weekly_sms_analytics_row', '0 0 * * 0', -- Every Sunday at midnight
-        'SELECT twilio.create_weekly_sms_analytics_row();'
-    );
-
--- Schedule the functions using pg_cron
-SELECT cron.schedule (
-        'set_sms_delivered_every_hour', '0 * * * *', 'SELECT twilio.set_sms_delivered();'
-    );
-
-SELECT cron.schedule (
-        'set_call_completed_every_hour', '0 * * * *', 'SELECT twilio.set_call_completed();'
-    );
-
-SELECT cron.schedule (
-        'delete_expired_tracking_every_day', '0 0 * * *', 'SELECT twilio.delete_expired_tracking();'
-    );
-
 CREATE OR REPLACE VIEW FetchCallAnalyticsByWeek AS
 SELECT
     analytics_id,
@@ -490,3 +471,33 @@ SELECT
 FROM CallAnalytics
 ORDER BY week_start_date ASC;
 -- Sort by oldest to newest week
+
+
+INSERT INTO
+    twilio.SMSAnalytics (
+        analytics_id,
+        week_start_date,
+        direction,
+        sms_sent,
+        sms_delivered,
+        sms_failed,
+        total_price
+    )
+VALUES (
+        DEFAULT,
+        DATE_TRUNC('week', NOW()),
+        'O',
+        0,
+        0,
+        0,
+        0
+    ),
+    (
+        DEFAULT,
+        DATE_TRUNC('week', CURRENT_DATE),
+        'I',
+        0,
+        0,
+        0,
+        0
+    );

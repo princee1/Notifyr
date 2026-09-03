@@ -289,7 +289,7 @@ pyOpenSSL==25.3.0
 pyparsing==3.2.1
 pypdf==6.5.0
 pypdfium2==4.30.0
-pypika-tortoise==0.5.0
+pypika-tortoise==0.6.5
 python-dateutil==2.9.0.post0
 python-docx==1.2.0
 python-dotenv==1.0.1
@@ -354,7 +354,7 @@ tomli==2.4.1
 torch==2.9.1
 torchvision==0.24.1
 tornado==6.4.2
-tortoise-orm==0.24.0
+tortoise-orm==1.1.7
 tqdm==4.67.1
 traitlets==5.14.3
 transformers==4.57.3

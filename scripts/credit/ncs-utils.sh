@@ -11,7 +11,7 @@ JQ_NTFR_FILTER='.credits | to_entries[] | select(.key==chat or .key=="phone" or 
 JQ_FILTER='.credits | to_entries[] | "\(.key)=\(.value)"'
 
 VAULT_TOKEN_FILE="/run/secrets/credit_token.txt"
-VAULT_REDIS_PATH="notifyr-database/creds/credit-redis-ntfr-role"
+VAULT_REDIS_PATH="notifyr-database/creds/ncs-redis-ntfr-role"
 
 REDIS_PORT="6379"
 REDIS_DB="1"

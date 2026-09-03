@@ -15,7 +15,7 @@ from app.depends.class_dep import  LinkQuery
 from app.depends.orm_cache import LinkORMCache
 from app.manager.broker_manager import Broker
 from app.manager.merchant_manager import Merchant
-from app.models.email_model import EmailStatus, TrackingEmailEventORM
+from app.models.orm.email_model import EmailStatus, TrackingEmailEventORM
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.database.redis_service import RedisService

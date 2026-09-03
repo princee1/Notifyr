@@ -13,7 +13,7 @@ from app.depends.class_dep import  EmailTracker
 from app.depends.funcs_dep import get_agent, get_profile, get_template
 from app.interface.email import EmailSendInterface
 from app.manager.broker_manager import Broker
-from app.models.email_model import BaseEmailSchedulerModel, CustomEmailSchedulerModel, EmailTemplateSchedulerModel
+from app.models.orm.email_model import BaseEmailSchedulerModel, CustomEmailSchedulerModel, EmailTemplateSchedulerModel
 from app.services.agent.remote_agent_service import RemoteAgentMiniService, RemoteAgentService
 from app.services.worker.celery_service import CeleryService, ChannelMiniService
 from app.services.profile_service import ProfileService

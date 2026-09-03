@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from app.classes.auth_permission import AuthPermission, Role, Scope
 from app.definition._interface import Interface, IsInterface
-from app.models.security_model import ChallengeORM, ClientORM, raw_revoke_challenges
+from app.models.orm.security_model import ChallengeORM, ClientORM, raw_revoke_challenges
 from app.services.admin_service import AdminService
 import uuid
 

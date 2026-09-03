@@ -4,7 +4,7 @@ from app.classes.template import HTMLTemplate
 from app.definition._cost import Cost, TaskCost
 from app.depends.class_dep import TrackerInterface
 from app.manager.task_manager import TaskManager
-from app.models.email_model import EmailTemplateSchedulerModel,  CustomEmailSchedulerModel  
+from app.models.orm.email_model import EmailTemplateSchedulerModel,  CustomEmailSchedulerModel  
 from app.utils.helper import PointerIterator
 
 

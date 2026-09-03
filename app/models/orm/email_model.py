@@ -187,7 +187,7 @@ class EmailTrackingORM(models.Model):
     recipient = fields.CharField(max_length=100)
     subject = fields.CharField(max_length=150)
     contact = fields.ForeignKeyField(
-        "models.ContactORM", 'contact', null=True, on_delete=fields.NO_ACTION)
+        "default.ContactORM", 'contact', null=True, on_delete=fields.NO_ACTION)
     esp_provider = fields.CharField(max_length=30)
     date_sent = fields.DatetimeField(auto_now=True)
     last_update = fields.DatetimeField(auto_now_add=True)
@@ -222,7 +222,7 @@ class EmailTrackingORM(models.Model):
 class TrackingEmailEventORM(models.Model):
     event_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     email = fields.ForeignKeyField(
-        "models.EmailTrackingORM", related_name="events", on_delete=fields.CASCADE)
+        "default.EmailTrackingORM", related_name="events", on_delete=fields.CASCADE)
     description = fields.CharField(max_length=100, null=True)
     current_event = fields.CharEnumField(EmailStatus)
     date_event_received = fields.DatetimeField(auto_now_add=True)
@@ -254,7 +254,7 @@ class TrackingEmailEventORM(models.Model):
 class TrackedLinksORM(models.Model):
     link_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     email = fields.ForeignKeyField(
-        "models.EmailTrackingORM", related_name="tracked_links", on_delete=fields.CASCADE)
+        "default.EmailTrackingORM", related_name="tracked_links", on_delete=fields.CASCADE)
     link_url = fields.CharField(max_length=150, unique=True)
     click_count = fields.IntField(default=0)
 

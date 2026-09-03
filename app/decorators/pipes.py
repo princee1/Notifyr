@@ -19,11 +19,11 @@ from app.manager.merchant_manager import Merchant
 from app.manager.task_manager import TaskManager
 from app.models.call_model import CallCustomSchedulerModel
 from app.models.orm.contacts_model import Status, SubscriptionORM
-from app.models.email_model import BaseEmailSchedulerModel
+from app.models.orm.email_model import BaseEmailSchedulerModel
 from app.models.file_model import FileResponseUploadModel
 from app.models.ingest_model import DataIngestModel
 from app.models.otp_model import OTPModel
-from app.models.security_model import ClientORM, GroupClientORM
+from app.models.orm.security_model import ClientORM, GroupClientORM
 from app.models.sms_model import SMSCustomSchedulerModel
 from app.services.custom_service import CustomService, NoEdgesCustomSchemaError, NoEntitiesCustomSchemaError
 from app.services.worker.celery_service import CeleryService, ChannelMiniService

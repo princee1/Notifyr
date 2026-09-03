@@ -53,7 +53,7 @@ CLIENT_MAP:Dict[LLMProviderConstant.LLMProvider,Type[LLMClient]] = {
 }
 
 GRAPHITI_BUILD_STATE = 421
-GRAPHITI_INIT_KEY= 'graphiti'
+GRAPHITI_INIT_KEY= 'graphiti-init'
 
 GroupType = Literal['domain','contact']
 
