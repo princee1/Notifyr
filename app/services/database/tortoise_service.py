@@ -1,8 +1,10 @@
 import asyncio
-from contextlib import asynccontextmanager
-
+from contextlib import asynccontextmanager, contextmanager
+from typing import Literal
 import psycopg2
+from psycopg2 import sql
 from tortoise import Tortoise
+from tortoise.models import Model
 from app.definition._service import DEFAULT_BUILD_STATE, LinkDep, Service, ServiceLockType
 from app.errors.db_error import TortoiseTransactionFailureError, VaultCredentialNameDoesNotExistError
 from app.errors.service_error import BuildFailureError
@@ -14,6 +16,7 @@ from app.utils.constant import HostConstant, PostgresConstant, VaultConstant, Va
 from app.utils.toolbox import RunInThreadPool
 from tortoise.transactions import in_transaction
 from tortoise.exceptions import OperationalError,ConfigurationError,IntegrityError
+from pydantic import BaseModel
 
 
 SECURITY_CREDS='security'
@@ -81,6 +84,24 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
             },
         }
 
+    def sync_find(self,model:Model,projection:list[str]=None,mode:Literal['json','orm']='json',listing:Literal['list','generator']='generator'):
+        proj = projection or []
+        columns = list(set(proj))
+        query = sql.SQL("""SELECT {columns}FROM {schema}.{table}""").format(columns=sql.SQL(", ").join(sql.Identifier(column) for column in columns),
+                schema=sql.Identifier(model.Meta.schema),
+                table=sql.Identifier(model.Meta.table),)
+        with self.conn_ctx() as cur:
+            cur.execute(query)
+            response = []
+            for obj in cur.fetchall():
+                if listing == 'generator':
+                    yield obj
+                else:
+                    response.append(obj)
+            
+            if listing == 'list':
+                return response
+
     def init_sync_connection(self):
         self.sync_conn = psycopg2.connect(
                             dbname=PostgresConstant.SECURITY_DATABASE_NAME,
@@ -102,6 +123,12 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
     async def close_connections(self):
         await Tortoise.close_connections()
         await RunInThreadPool(self.close_sync_connection)()  
+
+    @contextmanager
+    def conn_ctx(self):
+        with self.sync_conn:
+            with self.sync_conn.cursor() as cur:
+                yield cur
 
     async def _creds_rotator(self):
         await self.close_connections()

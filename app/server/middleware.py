@@ -125,9 +125,6 @@ class JWTAuthMiddleware(MiddleWare):
 
         return await call_next(request)
          
-class CustomSlowApiMiddleware(SlowAPIMiddleware):
-    priority = MiddlewarePriority.LIMITER
-
 class ChallengeMatchMiddleware(MiddleWare):
     priority = MiddlewarePriority.CHALLENGE
 
@@ -148,5 +145,8 @@ class ChallengeMatchMiddleware(MiddleWare):
         
         return await call_next(request)
 
+
+class CustomSlowApiMiddleware(SlowAPIMiddleware):
+    priority = MiddlewarePriority.LIMITER
 
 MIDDLEWARE[CustomSlowApiMiddleware.__name__] = CustomSlowApiMiddleware

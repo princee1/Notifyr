@@ -1,7 +1,8 @@
 from datetime import timedelta
-from app.definition._service import BaseMiniService, BaseMiniServiceManager, BaseService, BuildFailureError, MiniService, Service, ServiceStatus
+from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BaseService, BuildFailureError, LinkDep, MiniService, Service, ServiceStatus
 from app.errors.security_error import CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError,AlreadyBlacklistedClientError
 from app.models.orm.security_model import ChallengeORM, ClientORM, GroupClientORM, BlacklistORM
+from app.services.config_service import ConfigService
 from app.services.database.redis_service import RedisService
 from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.security_service import JWTAuthService
@@ -10,24 +11,49 @@ from app.services.vault_service import VaultService
 
 @MiniService()
 class ClientMiniService(BaseMiniService):
-    ...
 
-@Service()
+    def __init__(self,vaultService:VaultService,configService:ConfigService,id=...):
+        super().__init__(None, id)
+        self.vaultService = vaultService
+        self.configService = configService
+    
+    def build(self, build_state = DEFAULT_BUILD_STATE):
+        return super().build(build_state)
+
+    def fetch_info(self):
+        ...
+
+
+@Service(is_manager=True,links=[
+            LinkDep(VaultService),
+            LinkDep(TortoiseConnectionService),
+         ])
 class AdminService(BaseMiniServiceManager[ClientMiniService]):
 
-    def __init__(self,jwtAuthService:JWTAuthService,tortoiseConnService:TortoiseConnectionService,vaultService:VaultService,redisService:RedisService):
+    def __init__(self,configService:ConfigService,jwtAuthService:JWTAuthService,tortoiseConnService:TortoiseConnectionService,vaultService:VaultService,redisService:RedisService):
         super().__init__()
+        self.configService = configService
         self.jwtAuthService = jwtAuthService
         self.tortoiseConnService = tortoiseConnService
         self.vaultService = vaultService
         self.redisService = redisService
 
+        self.policies = {}
+        self.policies_mapping = {}
+
     def build(self,build_state=-1):
+        for client in self.tortoiseConnService.sync_find(ClientORM):
+            print(client)
+
+    def lookup_policy(self):
         ...
     
     def verify_dependency(self):
         if self.tortoiseConnService.service_status != ServiceStatus.AVAILABLE:
-            raise BuildFailureError
+            raise BuildFailureError('Could not retrieve security information')
+        
+        if self.redisService.service_status != ServiceStatus.AVAILABLE:
+            raise BuildFailureError("Could not synchronize secruity updates")
     
     async def is_blacklisted(self, client: ClientORM) -> tuple[bool, float | None]:
         blacklist = await BlacklistORM.filter(client=client).first()

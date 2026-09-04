@@ -164,7 +164,6 @@ client_password_validator = PasswordValidator(12,60,)
 
 ClientModelBase = pydantic_model_creator(ClientORM, name="ClientORM", exclude=('created_at', 'updated_at','client_id',"authenticated","client_scope","group","password_salt","can_login","current_connection_count","client_username",))
 
-
 class GroupModel(BaseModel):
     group_name: str
     policy_ids: list[str] = []
@@ -218,7 +217,6 @@ class ClientModel(ClientModelBase):
         if len(description)>500:
             raise ValueError('Description must be less than 500 characters')
         return description.strip()
-
 
 class UpdateClientModel(ClientModel):
     client_scope:Scope|None = None
