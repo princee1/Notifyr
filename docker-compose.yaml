@@ -1,5 +1,7 @@
 version: "3.8"
 
+name: "Notifyr"
+
 services:
 
   # ==========================================
@@ -549,6 +551,63 @@ services:
       NEO4J_PLUGINS: '["apoc"]'
     volumes:
       - neo4j_data:/data
+
+
+  flower:
+    image: notifyr:flower
+    command: ["make", "flower"]
+    #container_name: ntfyr-flower
+    # labels:
+    #   - com.docker.compose.servie=flower
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.celery
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "5555:5555"
+
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    restart: always
+    hostname: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: test@test.com
+      PGADMIN_DEFAULT_PASSWORD: test
+    ports:
+      - "7070:7070"
+
+  mongo-express:
+    image: mongo-express:1
+    container_name: mongo-express
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=${MONGO_REPLICA_NAME:-nrp}
+      ME_CONFIG_BASICAUTH: "false"
+    networks:
+      - data_net
+
+  redis-commander:
+    container_name: redis-commander
+    hostname: redis-commander
+    image: rediscommander/redis-commander:latest
+    restart: always
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - 6060:6060
 
 volumes:
   qdrant_storage:
