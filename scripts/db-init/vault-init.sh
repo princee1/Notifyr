@@ -173,6 +173,7 @@ setup_engine(){
   # Enable core KV, Transit, Database, RabbitMQ, AWS engines
   vault secrets enable -path=notifyr-generation -seal-wrap -version=2 kv
   vault secrets enable -path=notifyr-secrets -seal-wrap -version=1 kv
+  vault secrets enable -path=notifyr-security -seal-wrap -version=1 kv
   vault secrets enable -path=notifyr-transit -seal-wrap transit
   vault secrets enable -path=notifyr-database -seal-wrap database
   vault secrets enable -path=notifyr-rabbitmq -seal-wrap rabbitmq
@@ -190,6 +191,7 @@ setup_engine(){
   vault write -f notifyr-transit/keys/messages-key
   vault write -f notifyr-transit/keys/chat-key
   vault write -f notifyr-transit/keys/s3-rest-key
+  vault write -f notifyr-transit/keys/security-key
 }
 
 set_approle(){
@@ -477,6 +479,12 @@ setup_database_config(){
       default_ttl="35d" \
       max_ttl="35d" \
       creation_statements='["~notifyr/credit:*","+@transaction", "+GET", "+SET", "+INCRBY", "+LPUSH", "+LTRIM", "+LRANGE", "+SELECT", "+FCALL", "+EVAL", "+EXISTS"]'
+
+    vault write notifyr-database/roles/app-redis-security-ntfr-role \
+      db_name="redis-notifyr" \
+      default_ttl="35d" \
+      max_ttl="35d" \
+      creation_statements='["~notifyr/security:*","+@transaction","+@string" "+EXISTS"]'
 
     vault write notifyr-database/roles/app-redis-ntfr-role \
       db_name="redis-notifyr" \

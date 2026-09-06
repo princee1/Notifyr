@@ -34,6 +34,7 @@ CELERY_BACKEND_CREDS='celery-backend'
 CELERY_BROKER_CREDS='celery-broker'
 AGENTIC_CREDS='agentic'
 CREDIT_CREDS='credit'
+SECURITY_CREDS='security'
 
 AGENTIC_APP_MODE_CRED = {ApplicationMode.arq,ApplicationMode.agentic,ApplicationMode.server}
 
@@ -49,7 +50,7 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         self.workerService = workerService
         self.to_shutdown = False
         self.callbacks = CALLBACKS_CONFIG.copy()
-        self.db:Dict[Literal['celery','limiter','events','cache','config','agentic',0,1,2,3,4,5],Redis] = {}
+        self.db:Dict[Literal['celery','limiter','events','cache','config','agentic','cost','security',0,1,2,3,4,5,6,7],Redis] = {}
 
         self.consumer_name = f'notifyr-consumer={self.workerService.INSTANCE_ID}'
 
@@ -237,6 +238,9 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         self.add_credentials(VaultConstant.REDIS_ROLE,CREDIT_CREDS,prefix='app',suffix='credit')
         self.add_credentials(VaultConstant.REDIS_ROLE,CELERY_BACKEND_CREDS,suffix='celery-backend')
 
+        if self.configService.SECURITY_FLAG:
+            self.add_credentials(VaultConstant.REDIS_ROLE,SECURITY_CREDS,suffix='security')
+
         if self.configService.CELERY_BROKER_PROVIDER == 'redis':
             self.add_credentials(VaultConstant.REDIS_ROLE,CELERY_BROKER_CREDS,suffix='celery-broker')
         
@@ -251,6 +255,9 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         self.redis_limiter = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.LIMITER_DB,username=self.db_user(),password=self.db_password())
         self.redis_cache = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.CACHE_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
         self.redis_config = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.CONFIG_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
+
+        if self.configService.SECURITY_FLAG:
+            self.redis_security = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.SECURITY_DB,decode_responses=True,username=self.db_user(SECURITY_CREDS),password=self.db_password(SECURITY_CREDS))
 
         if CAPABILITIES['agentic'] and APP_MODE in AGENTIC_APP_MODE_CRED:
             self.redis_agentic = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.AGENTIC_DB,decode_responses=True,username=self.db_user(AGENTIC_CREDS),password=self.db_password(AGENTIC_CREDS))        
@@ -276,6 +283,10 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
             'cost':self.redis_cost
         })
 
+        if self.configService.SECURITY_FLAG:
+            self.db['security'] = self.redis_security
+            self.db[RedisConstant.SECURITY_DB] = self.redis_security
+
         if CAPABILITIES['agentic'] and APP_MODE in AGENTIC_APP_MODE_CRED:
             self.db['agentic']=self.redis_agentic
             self.db[RedisConstant.AGENTIC_DB]= self.redis_agentic
@@ -291,6 +302,16 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
 
         if name == None or name == CELERY_BACKEND_CREDS:
             super().revoke_lease(CELERY_BACKEND_CREDS)
+
+        if name == None or name == SECURITY_CREDS:
+            super().revoke_lease(SECURITY_CREDS)
+
+        if name == None or name == CREDIT_CREDS:
+            super().revoke_lease(CREDIT_CREDS)
+
+        if CAPABILITIES['agentic'] and APP_MODE in AGENTIC_APP_MODE_CRED:
+            if (name == None or name == AGENTIC_CREDS):
+                super().revoke_lease(AGENTIC_CREDS)
         
         if name == None or name == 'default':
             super().revoke_lease()

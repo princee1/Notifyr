@@ -250,8 +250,6 @@ class VaultConstant:
     ROLE_ID_FILE = 'app-role_id.txt' # in the secrets shared by the vault
     SUPERCRONIC_SEED_TIME_FILE = 'seed-time.txt'
     
-
-    
     @staticmethod
     def VAULT_SECRET_DIR(file:str)->str:
         return f'/run/secrets/{file}'
@@ -261,7 +259,7 @@ class VaultConstant:
         return f'/vault/shared/{file}'
 
 
-    NotifyrSecretType = Literal['tokens','webhook','messages','generation-id','communication','setting','internal']
+    NotifyrSecretType = Literal['tokens','webhook','messages','generation-id','communication','setting','internal','policies','clients']
     TOKENS_SECRETS = 'tokens'
     MESSAGES_SECRETS = 'messages'
     GENERATION_ID = 'generation-id'
@@ -269,15 +267,16 @@ class VaultConstant:
     LLM_SECRETS = 'llm'
     OUTBOUND_SECRETS='outbound'
     WEBHOOK_SECRETS = 'webhook'
+
     SETTINGS_SECRETS='setting'
     INTERNAL_API_SECRETS='internal'
-
 
     NotifyrTransitKeyType = Literal['profiles-key','messages-key','chat-key','s3-rest-key']
     SECRETS_MESSAGE_KEY = 'messages-key'
     PROFILES_KEY = 'profiles-key'
     CHAT_KEY='chat-key'
     S3_REST_KEY='s3-rest-key'
+    SECURITY_KEY='security-key'
 
     NotifyrDynamicSecretsRole= Literal['postgres','mongo','redis','neo4j']
     MONGO_ROLE='mongo'
@@ -293,7 +292,7 @@ class VaultConstant:
     NOTIFYR_GENERATION_MOUNT_POINT ='notifyr-generation'
     NOTIFYR_MINIO_MOUNT_POINT = 'notifyr-minio'
     NOTIFYR_RABBITMQ_MOUNT_POINT='notifyr-rabbitmq'
-
+    NOTIFYR_SECURITY_MOUNT_POINT='notifyr-security'
 
     @staticmethod
     def KV_ENGINE_BASE_PATH(sub_mount:NotifyrSecretType='',path:str=''):
@@ -348,6 +347,7 @@ class RedisConstant:
     CONFIG_DB=4
     AGENTIC_DB=5
     LIMITER_DB=6
+    SECURITY_DB=7
 
 ########################                     ########################################
 

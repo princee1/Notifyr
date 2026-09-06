@@ -101,7 +101,10 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
     
     def revoke_lease(self,name:CredentialName='default'):
         try:
-            return self.vaultService.revoke_lease(self.lease_id(name))
+            lease_id = self.lease_id(name)
+            if not lease_id:
+                return
+            return self.vaultService.revoke_lease(lease_id)
         except Exception as e:
             print(e)
 

@@ -111,6 +111,7 @@ class VaultService(BaseService,SchedulerInterface):
         self.database_engine = DatabaseVaultEngine(self.client,VaultConstant.NOTIFYR_DB_MOUNT_POINT)
         self.minio_engine = MinioS3VaultEngine(self.client,VaultConstant.NOTIFYR_MINIO_MOUNT_POINT)
         self.rabbitmq_engine = RabbitMQVaultEngine(self.client,VaultConstant.NOTIFYR_RABBITMQ_MOUNT_POINT)
+        self.security_engine = KV1VaultEngine(self.client,VaultConstant.NOTIFYR_SECURITY_MOUNT_POINT)
 
         return True
 

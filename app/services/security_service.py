@@ -15,7 +15,7 @@ import jwt
 import base64
 from fastapi import HTTPException, Request, status
 import time
-from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission, Scope, WSPermission
+from app.classes.auth_permission import AuthPermission, ClientTokenInfo, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission, Scope, WSPermission
 from random import randint, random
 from app.utils.helper import generateId, b64_encode, b64_decode
 import os
@@ -72,13 +72,12 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         self.settingService = settingService
         self.vaultService = vaultService
 
-    def encode_auth_token(self,authz_id, client_id:str, challenge: str, group_id: str | None) -> str:
+    def encode_auth_token(self,authz_id:str, client_id:str, group_id: str | None,auth_type:str) -> str:
         try:
             salt = str(self.salt)
             created_time = time.time()
-            permission = AuthPermission(generation_id=self.GENERATION_ID, created_at=created_time,expired_at=created_time + self.settingService.AUTH_EXPIRATION*0.5,
-                                        salt=salt, group_id=group_id, challenge=challenge,client_id=client_id,
-                                        authz_id=authz_id)
+            permission = ClientTokenInfo(generation_id=self.GENERATION_ID, created_at=created_time,expired_at=created_time + self.settingService.AUTH_EXPIRATION*0.5,
+                                        salt=salt, group_id=group_id,client_id=client_id,authz_id=authz_id,auth_type=auth_type)
             token = self._encode_token(permission)
             return token
         except Exception as e:
@@ -177,36 +176,16 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
 
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Invalid token")
-
-    def verify_client_origin(self,permission:AuthPermission,issued_for,origin=None):
-        match permission['scope']:
-            case Scope.SoloDolo:
-                if issued_for != permission["issued_for"]:
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN, detail="Token not issued for this user")
-            case Scope.Organization:
-                # TODO verify subnet
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN, detail="Token not issued for this user")
-            case Scope.Domain:
-                if origin == None:
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN, detail="Origin header missing")
-            
-            case Scope.Free:
-                ...
                 
-    def verify_auth_permission(self, token: str, issued_for: str) -> AuthPermission:
+    def verify_client_token_permission(self, token: str) -> ClientTokenInfo:
 
         token = self._decode_token(token)
-        permission: AuthPermission = AuthPermission(**token)
+        permission: ClientTokenInfo = ClientTokenInfo(**token)
         try:
-
             self.set_status(permission,'auth')
             # if permission['status'] == 'expired': # NOTE might accept expired
             #     raise HTTPException(
             #         status_code=status.HTTP_403_FORBIDDEN,  detail="Token expired")
-
             if permission["generation_id"] != self.GENERATION_ID:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN, detail="Old Token not valid anymore")
@@ -242,19 +221,6 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
     def read_generation_id(self):
         data=self.vaultService.generation_engine.read('',self.gen_id_path)
         self.generation_id_data = data
-
-    @RunInThreadPool
-    def revoke_all_tokens(self) -> None:
-        new_generation_id = generateId(self.GENERATION_ID_LEN)
-        self.vaultService.generation_engine.put('',{
-            'GENERATION_ID':new_generation_id,
-        },path=self.gen_id_path)
-        self.read_generation_id()
-    
-    @RunInThreadPool
-    def unrevoke_all_tokens(self,version:int|None,destroy:bool,delete:bool,version_to_delete:list[int]=[]):
-        self.vaultService.generation_engine.rollback('',self.gen_id_path,version,destroy,delete,version_to_delete)
-        self.read_generation_id()
 
     def verify_dependency(self):
         if self.vaultService.service_status not in {ServiceStatus.AVAILABLE,ServiceStatus.PARTIALLY_AVAILABLE}:
@@ -296,7 +262,6 @@ class SecurityService(BaseService, EncryptDecryptInterface):
 
     def build(self,build_state=-1):
         api_key = self.fileService.readFile('/run/secrets/api_key.txt',flag=FDFlag.READ)
-
         if api_key == None:
             raise BuildWarningError()
         
@@ -309,25 +274,13 @@ class SecurityService(BaseService, EncryptDecryptInterface):
             print(e)
             raise BuildWarningError()
 
-        
-    def hash_value_with_salt(self, value, key, salt):
+    def hash(self, value, key, salt):
         value_with_salt = value.encode() + salt
         hmac_obj = hmac.new(key.encode(), value_with_salt, hashlib.sha256)
         return hmac_obj.hexdigest()
 
-    def store_password(self, password, key):
-        salt = generate_salt()
-        hashed_password = self.hash_value_with_salt(password, key, salt)
-        # salt = b64_encode(salt)
-        hashed_password = b64_encode(hashed_password)
-        return hashed_password, salt
-
-    def verify_password(self, stored_hash, stored_salt, provided_password, key):
-        stored_hash = b64_decode(stored_hash)
-        stored_salt = bytes(stored_salt.encode())
-        # stored_salt = b64_decode(stored_salt)
-        hashed_provided_password = self.hash_value_with_salt(provided_password, key, stored_salt)
-        return hmac.compare_digest(stored_hash, hashed_provided_password)
+    def compare_hash(self, stored_hash:str,provided_hash:str):
+        return hmac.compare_digest(stored_hash, provided_hash)
     
     def verify_admin_signature(self,):
         ...

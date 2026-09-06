@@ -6,7 +6,7 @@ from uuid import UUID
 
 from aiohttp_retry import List
 from app.classes.auth_permission import AuthPermission
-from app.depends.funcs_dep import GetClient, GetLink, GetPolicy, get_challenge,Get_Contact, get_combined_policies
+from app.depends.funcs_dep import GetClient, GetLink, GetPolicy,Get_Contact
 from app.models.orm.contacts_model import ContactORM, ContactSummary, ContentSubscriptionORM
 from app.models.orm.link_model import LinkORM
 from app.services.admin_service import AdminService
@@ -17,7 +17,7 @@ from app.services.database.redis_service import RedisService
 from app.utils.constant import RedisConstant
 from app.utils.helper import KeyBuilder
 from app.utils.toolbox import Time
-from app.models.orm.security_model import ClientORM,ChallengeORM, PolicyORM
+from app.models.orm.security_model import ClientORM
 import typing
 from typing import Any, Callable, Generic, Type,TypeVar, TypedDict
 from tortoise.models import Model,ModelMeta
@@ -134,7 +134,7 @@ class CacheInterface(Generic[T]):
     def When(cond:Any)->bool:
         ...
 
-def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],index:int = 0,prefix:str|list[str]='orm-cache',sep:str|list[str]='/',expiry:int|str|Callable[[T],int|float] = 0,nx:bool=False, when:Callable[[Any],bool]|None=None,use_to_json:bool=True,max_size_memory_cache=1000)->Type[CacheInterface[T]]:
+def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],cache_key:int=RedisConstant.CACHE_DB,index:int = 0,prefix:str|list[str]='orm-cache',sep:str|list[str]='/',expiry:int|str|Callable[[T],int|float] = 0,nx:bool=False, when:Callable[[Any],bool]|None=None,use_to_json:bool=True,max_size_memory_cache=1000)->Type[CacheInterface[T]]:
     """
         Generates a cache interface class for managing cached objects with a consistent key-building mechanism.
             type_ (Type[T]): The type of the object to be cached. If it is a model, it should support initialization with keyword arguments.
@@ -314,12 +314,9 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],index:int = 0,p
 
     return ORMCache
 
-ClientORMCache = generate_cache_type(ClientORM,GetClient(True,True),prefix=['orm-group','client'])
-BlacklistORMCache = generate_cache_type(bool,adminService.is_blacklisted,prefix=['orm-blacklist','client'],expiry=lambda o:o[1])
-ChallengeORMCache = generate_cache_type(ChallengeORM,get_challenge,prefix='orm-challenge',expiry=lambda o:o.expired_at_auth.timestamp()-time.time())
 LinkORMCache = generate_cache_type(LinkORM,GetLink(True,False),prefix='orm-link')
+ClientORMCache = generate_cache_type(ClientORM,GetClient(True,True),prefix=['orm-group','client'])
 ContactORMCache = generate_cache_type(ContactORM,Get_Contact(True,True,),prefix='orm-contact',use_to_json=True)
 ContactSummaryORMCache = generate_cache_type(ContactSummary,contactService.read_contact,prefix='orm-contact-summary',use_to_json=False)
-PolicyORMCache = generate_cache_type(PolicyORM,GetPolicy(True),prefix='orm-policy',)
-AuthPermissionCache = generate_cache_type(AuthPermission,get_combined_policies,prefix=['auth-group','client'],use_to_json=False)
-#ContentSubORMCache = generate_cache_type(ContentSubscriptionORM,)
+
+BlacklistORMCache = generate_cache_type(bool,adminService.is_blacklisted,RedisConstant.SECURITY_DB,prefix=['orm-blacklist','client'],expiry=lambda o:o[1])

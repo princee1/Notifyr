@@ -93,28 +93,25 @@ class MCPPermissionDef(TypedDict):
     tags: list[str]|set[str]
     operations: list[str]|set[str]
 
-class AuthPermission(TypedDict):
-    generation_id: str
-    client_username: str
-    client_id: str
-    client_type:ClientTypeLiteral = 'User'
-    roles:list[str|Role]
-    issued_for: str # Subnets
+class ClientTokenInfo(TypedDict):
     group_id:str | None = None
-    auth_type:AuthType
     created_at: float
     expired_at: float
+    generation_id: str
+    client_id: str
+    status:PermissionStatus= 'active'
+    auth_type:AuthType
+    salt:str
+    authz_id:str
+
+class AuthPermission(TypedDict):
     allowed_routes: Dict[str, RoutePermission]
     allowed_assets:List[str] | AssetsPermission
     allowed_profiles:List[str]=[]
     allowed_agents:List[str]=[]
     allowed_blogs: List[str] = []
     allowed_mcp: Optional[MCPPermissionDef] = None
-    challenge: str
-    scope:str
-    salt:str
-    status:PermissionStatus= 'active'
-    authz_id:str
+    roles:list[str|Role]=[]
 
 class RefreshPermission(TypedDict): # NOTE if someone from an organization change the auth permission, the refresh token will be invalid for other people in the organization
     generation_id: str
@@ -175,8 +172,54 @@ class PolicyModel(BaseModel):
         #return roles
         return [r.value for r in roles]
 
+
+def get_combined_policies(policies:list[PolicyModel]):
+    roles= set()
+    allowed_assets = set()
+    allowed_profiles = set()
+    allowed_blogs = set()
+    allowed_routes = {}
+    allowed_agents = set()
+
+    for p in policies:
+        roles.update(p.roles)
+        allowed_assets.update(p.allowed_assets)
+        allowed_profiles.update(p.allowed_profiles)
+        allowed_agents.update(p.allowed_agents)
+        allowed_blogs.update(p.allowed_blog)
+
+        for k,r in p.allowed_routes.items():
+
+            if k not in allowed_routes:
+                allowed_routes[k] = r
+            else:
+                if r['scope'] == 'all':
+                    if allowed_routes['scope'] !='all':
+                        allowed_routes['scope'] = 'all'
+                        allowed_routes['custom_routes'] = []
+                else:
+                    if allowed_routes['scope'] == 'custom':
+                        allowed_routes['custom_routes'] = list[set(allowed_routes['custom_routes']).union(r['scope'])]
+
+    print(allowed_assets)
+
+    allowed_assets = filter_paths(list(allowed_assets),'/')
+    allowed_profiles = list(allowed_profiles)
+    allowed_agents = list(allowed_agents)
+    roles = list(roles)
+    allowed_blogs=list(allowed_blogs)
+
+    return AuthPermission(
+        roles=roles,
+        allowed_routes=allowed_routes,
+        allowed_profiles=allowed_profiles,
+        allowed_assets=allowed_assets,
+        allowed_agents=allowed_agents,
+        allowed_blogs=allowed_blogs
+    )
+
 def parse_authPermission_enum(authPermission:AuthPermission):
-        authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]
+    authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]
         
 def filter_asset_permission(authPermission:AuthPermission):
     files = set()

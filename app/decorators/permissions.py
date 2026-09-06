@@ -5,7 +5,7 @@ from app.definition._cost import Cost
 from app.manager.task_manager import TaskManager
 from app.models.orm.contacts_model import ContactORM
 from app.models.orm.email_model import BaseEmailSchedulerModel
-from app.models.orm.security_model import ChallengeORM, ClientORM
+from app.models.orm.security_model import ClientORM
 from app.definition._utils_decorator import Permission
 from app.container import InjectInMethod, Get
 from app.services.config_service import ConfigService
@@ -203,10 +203,6 @@ class JWTRefreshTokenPermission(Permission):
 
         if permission['group_id'] != authPermission['group_id']:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Group ID mismatch")
-
-        challenge = await ChallengeORM.filter(client=client_id).first()
-        if challenge.challenge_refresh != permission['challenge']:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Challenge not valid")
         
         return True
 

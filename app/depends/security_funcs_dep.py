@@ -13,19 +13,6 @@ async def verify_admin_token(x_admin_token: Annotated[str, Header()]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="X-Admin-Token header invalid")
 
-
-async def verify_admin_signature(x_admin_signature: Annotated[str, Header()]):
-    adminService: AdminService = Get(AdminService)
-    securityService: SecurityService = Get(SecurityService)
-    configService: ConfigService = Get(ConfigService)
-
-    if x_admin_signature == None:
-        ...
-
-    if securityService.verify_admin_signature():
-        ...
-
-
 def verify_dashboard_token(x_dashboard_token:Annotated[str,Header()]):
     ...
 

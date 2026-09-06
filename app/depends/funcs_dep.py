@@ -7,7 +7,7 @@ from app.container import Get
 from app.definition._error import ServerFileError
 from app.models.orm.contacts_model import ContactORM, ContentSubscriptionORM
 from app.models.orm.link_model import LinkORM
-from app.models.orm.security_model import BlacklistORM, ChallengeORM, ClientORM, GroupClientORM, PolicyMappingORM, PolicyORM
+from app.models.orm.security_model import ClientORM, GroupClientORM, PolicyMappingORM
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.depends.dependencies import get_auth_permission, get_query_params, get_request_id, wrapper_auth_permission
@@ -209,18 +209,6 @@ async def get_client_by_password(credentials: Annotated[HTTPBasicCredentials, De
         headers={"WWW-Authenticate": "Basic"},
     )
 
-    try:
-        client: ClientORM = await GetClient(skip=True, raise_=False)(client_id=credentials.username, cid=cid, authPermission=None)
-    except OperationalError:
-        raise error
-
-    if client == None:
-        raise error
-    stored_hash, stored_salt = client.password, client.password_salt
-
-    if not security.verify_password(stored_hash, stored_salt, credentials.password, key):
-        error
-
     if not client.can_login:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -276,11 +264,6 @@ def GetLink(raise_file_error:bool,raise_err:bool=True):
 
     return get_link
 
-
-async def get_challenge(client:ClientORM):
-    return await ChallengeORM.filter(client=client).first()
-
-
 def get_template(template:str):
     return template
 
@@ -295,75 +278,5 @@ def get_agent(agent:str):
 def GetPolicy(skipPermission:bool):
 
     async def get_policy(policy:str,authPermission:AuthPermission=Depends(wrapper_auth_permission)):
-
-        if not skipPermission:
-            print('Auth Permission',authPermission)
-            if authPermission['client_type'] != ClientType.Admin:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,)
-        try:
-            p = await PolicyORM.filter(policy_id=policy).first()
-            if p == None:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f'Policy does not exists'
-                )
-            return p
-        except OperationalError as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(e.args[0])
-            )
-
+        ...
     return get_policy
-
-
-async def get_combined_policies(client:ClientORM):
-
-    client_id = str(client.client_id)
-    group_id = None if client.group == None else str(client.group.group_id)
-    policies:list[PolicyORM] = [pm.policy for pm in  await PolicyMappingORM.filter(client_id=client_id,group_id=group_id)]
-
-    roles= set()
-    allowed_assets = set()
-    allowed_profiles = set()
-    allowed_blogs = set()
-    allowed_routes = {}
-    allowed_agents = set()
-
-    for p in policies:
-        p = await p
-        roles.update(p.roles)
-        allowed_assets.update(p.allowed_assets)
-        allowed_profiles.update(p.allowed_profiles)
-        allowed_agents.update(p.allowed_agents)
-        allowed_blogs.update(p.allowed_blogs)
-
-        for k,r in p.allowed_routes.items():
-
-            if k not in allowed_routes:
-                allowed_routes[k] = r
-            else:
-                if r['scope'] == 'all':
-                    if allowed_routes['scope'] !='all':
-                        allowed_routes['scope'] = 'all'
-                        allowed_routes['custom_routes'] = []
-                else:
-                    if allowed_routes['scope'] == 'custom':
-                        allowed_routes['custom_routes'] = list[set(allowed_routes['custom_routes']).union(r['scope'])]
-
-    print(allowed_assets)
-
-    allowed_assets = filter_paths(list(allowed_assets),'/')
-    allowed_profiles = list(allowed_profiles)
-    allowed_agents = list(allowed_agents)
-    roles = list(roles)
-    allowed_blogs=list(allowed_blogs)
-
-    return AuthPermission(
-        roles=roles,
-        allowed_routes=allowed_routes,
-        allowed_profiles=allowed_profiles,
-        allowed_assets=allowed_assets,
-        allowed_agents=allowed_agents,
-        allowed_blogs=allowed_blogs
-    )

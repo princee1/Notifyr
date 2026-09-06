@@ -1,9 +1,9 @@
 from uuid import uuid4
 from fastapi.responses import JSONResponse
-from app.classes.auth_permission import AuthPermission, ClientType, filter_asset_permission, parse_authPermission_enum
+from app.classes.auth_permission import AuthPermission, ClientTokenInfo, ClientType, filter_asset_permission, parse_authPermission_enum
 from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE
-from app.depends.orm_cache import AuthPermissionCache, BlacklistORMCache, ChallengeORMCache, ClientORMCache
-from app.models.orm.security_model import BlacklistORM, ChallengeORM, ClientORM
+from app.depends.orm_cache import BlacklistORMCache, ClientORMCache
+from app.errors.service_error import MiniServiceDoesNotExistsError
 from app.services.admin_service import AdminService
 from app.services.monitoring_service import MonitoringService
 from app.services.config_service import ConfigService, WorkerService
@@ -73,13 +73,6 @@ class JWTAuthMiddleware(MiddleWare):
         self.configService: ConfigService = Get(ConfigService)
         self.adminService: AdminService = Get(AdminService)
 
-    def _copy_client_into_auth(self,client:ClientORM,permission:AuthPermission):
-        permission['client_type'] = client.client_type
-        permission['scope'] = client.client_scope
-        permission['issued_for'] = client.issued_for
-        permission['auth_type'] = client.auth_type
-        permission['client_username'] = client.client_username
-
     @BypassOn(not configService.SECURITY_FLAG)
     @ExcludeOn(['/auth/generate/*','/contacts/manage/*'])
     @ExcludeOn(['/link/visits/*','/link/email-track/*'])
@@ -91,61 +84,30 @@ class JWTAuthMiddleware(MiddleWare):
             client_ip = get_client_ip(request) #TODO : check wether we must use the scope to verify the client
             origin = ...
 
-            authPermission: AuthPermission = self.jwtService.verify_auth_permission(token, client_ip)
-          
-            client_id = authPermission['client_id']
-            group_id = authPermission['group_id']
+            clientInfo: ClientTokenInfo = self.jwtService.verify_client_token_permission(token)
+            client_id = clientInfo['client_id']
+            group_id = clientInfo['group_id']
 
-            client:ClientORM = await ClientORMCache.Cache([group_id,client_id],client_id=client_id,cid="id",authPermission=authPermission)
+            async with self.adminService.lock('reader',client_id) as clientService:
+                client = clientService.client
+                #TODO check group id
+                if not client.authenticated:
+                    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Client is not authenticated")
 
-            self._copy_client_into_auth(client,authPermission)
-            self.jwtService.verify_client_origin(authPermission,client_ip,origin)
+                if client.client_type != ClientType.Admin: 
+                    if await BlacklistORMCache.Cache([group_id,client_id],client):
+                        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Client is blacklisted")
 
-            #TODO check group id
-            if not client.authenticated:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Client is not authenticated")
-
-            if client.client_type != ClientType.Admin: 
-
-                if await BlacklistORMCache.Cache([group_id,client_id],client):
-                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Client is blacklisted")
-
-            request.state.client = client
-
-            policies = await AuthPermissionCache.Cache([group_id,client_id],client)
-            authPermission= AuthPermission(**{**authPermission,**policies})
-
-            filter_asset_permission(authPermission)
-            parse_authPermission_enum(authPermission)
-            
-            request.state.authPermission = authPermission
+                request.state.clientInfo = clientInfo
+                request.state.authPermission = client.authPermission
 
         except HTTPException as e:
             return JSONResponse(e.detail,e.status_code,e.headers)
 
+        except MiniServiceDoesNotExistsError as e:
+            return 
+
         return await call_next(request)
-         
-class ChallengeMatchMiddleware(MiddleWare):
-    priority = MiddlewarePriority.CHALLENGE
-
-    @BypassOn(not configService.SECURITY_FLAG)
-    @ExcludeOn(['/docs/*','/openapi.json','/contacts/manage/*'])
-    @ExcludeOn(['/auth/generate/*','/auth/refresh/*'])
-    @ExcludeOn(['/link/visits/*','/link/email-track/*'])
-    @ExcludeOn(['/'])
-    async def dispatch(self, request:Request, call_next:Callable[[Request],Response]):
-        authPermission: AuthPermission = await get_auth_permission(request)
-        client:ClientORM = await get_client_from_request(request)
-        challenge = authPermission['challenge']
-
-        db_challenge:ChallengeORM = await ChallengeORMCache.Cache(client.client_id,client) 
-
-        if challenge != db_challenge.challenge_auth:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Challenge does not match") 
-        
-        return await call_next(request)
-
-
 class CustomSlowApiMiddleware(SlowAPIMiddleware):
     priority = MiddlewarePriority.LIMITER
 
