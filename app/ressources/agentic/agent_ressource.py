@@ -218,7 +218,7 @@ class AgentsRessource(BaseHTTPRessource):
         await self.mongooseService.exists_unique(agentModel,True)
 
         if 'description' in body and embeddingLookup.mode == 'hard':
-            embedding = await self.semantic_lookup(request_id,authPermission['client_id'] , agentModel,embeddingLookup.threshold)
+            embedding = await self.semantic_lookup(request_id,clientInfo['client_id'] , agentModel,embeddingLookup.threshold)
             agentModel.embeddings = embedding
         
         if 'tools' in body:
@@ -239,8 +239,8 @@ class AgentsRessource(BaseHTTPRessource):
     @PingService([{'cls':RemoteAgentService,'kwargs':{'grpc':True}}],is_manager=True,infinite_wait=True)
     @BaseHTTPRessource.HTTPRoute('/prompt/{agent}/',methods=[HTTPMethod.POST],mount=False,response_model=Reply)
     async def prompt_playground(self,request:Request,agent:Annotated[RemoteAgentMiniService,Depends(get_agent)],prompt:PromptPlaygroundModel, response:Response,profile:str=Depends(get_agent),request_id:str = Depends(get_request_id),authPermission:AuthPermission= Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
-        message = Message(agent=agent,thread=authPermission['client_id'],**prompt.model_dump(exclude_none=True))
-        user = User(authPermission['client_id'],'guest',None)
+        message = Message(agent=agent,thread=clientInfo['client_id'],**prompt.model_dump(exclude_none=True))
+        user = User(clientInfo['client_id'],'guest',None)
         session = Session(request_id,...,'live-chat',[])
 
         prompt_request = message_to_request(message,session,user)
@@ -258,8 +258,8 @@ class AgentsRessource(BaseHTTPRessource):
     @PingService([{'cls':RemoteAgentService,'kwargs':{'grpc':True}}],is_manager=True,infinite_wait=True)
     @BaseHTTPRessource.HTTPRoute('/stream/prompt/{agent}/',methods=[HTTPMethod.POST],mount=False,response_class=EventSourceResponse)
     async def stream_prompt_playground(self,request:Request,response:Response,prompt:PromptPlaygroundModel,agent:Annotated[RemoteAgentMiniService,Depends(get_agent)],profile:str=Depends(get_agent),request_id:str = Depends(get_request_id),last_event_id: Annotated[int | None, Header()] = None,authPermission:AuthPermission= Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info))->AsyncIterable[ServerSentEvent]:
-        message = Message(agent=agent,thread=authPermission['client_id'],**prompt.model_dump(exclude_none=True))
-        user = User(authPermission['client_id'],'guest',None)
+        message = Message(agent=agent,thread=clientInfo['client_id'],**prompt.model_dump(exclude_none=True))
+        user = User(clientInfo['client_id'],'guest',None)
         session = Session(request_id,...,'live-chat',[])
         prompt_request = message_to_request(message,session,user)
 
