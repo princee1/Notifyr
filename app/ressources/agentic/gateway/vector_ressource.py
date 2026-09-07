@@ -41,7 +41,7 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @LockService(RemoteAgentService,lockType='reader')
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
-    async def create_collection(self, request:Request,response:Response,collection:QdrantCollectionModel, autPermission:AuthPermission=Depends(get_auth_permission)):
+    async def create_collection(self, request:Request,response:Response,collection:QdrantCollectionModel, autPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         collection = collection.model_dump()
         await self.remoteAgentService.request('POST', AgenticConstant.VECTOR_ROUTER('/'),
                                             json=collection,
@@ -54,7 +54,7 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @UseHandler(AgenticHandler,GatewayHandler)
     @LockService(RemoteAgentService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/{collection_name}/',methods=[HTTPMethod.GET])
-    async def get_collection(self, request:Request,response:Response,collection_name:str,autPermission:AuthPermission=Depends(get_auth_permission)):
+    async def get_collection(self, request:Request,response:Response,collection_name:str,autPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         
         path = f'/' if not collection_name else f'/s/{collection_name}'
         path = AgenticConstant.VECTOR_ROUTER(path)
@@ -71,7 +71,7 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @LockService(RedisService,RemoteAgentService,ArqIngestTaskService,lockType='reader')
     @UseHandler(AgenticHandler,CostHandler,ArqHandler,GatewayHandler,RedisHandler,DataIngestHandler)
     @BaseHTTPRessource.HTTPRoute('/{collection_name}/',methods=[HTTPMethod.DELETE],response_model=DeleteCollectionModel)
-    async def delete_collection(self, request:Request,response:Response,collection_name:str,cost:Annotated[DeleteDocumentIngestCost,Depends(DeleteDocumentIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],broker:Annotated[Broker,Depends(Broker)],mode:DeleteMode = Depends(source_mode_query), autPermission:AuthPermission=Depends(get_auth_permission)):
+    async def delete_collection(self, request:Request,response:Response,collection_name:str,cost:Annotated[DeleteDocumentIngestCost,Depends(DeleteDocumentIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],broker:Annotated[Broker,Depends(Broker)],mode:DeleteMode = Depends(source_mode_query), autPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         """Delete all results and delete all enqueued job matching the collection_name filtered by the task_name """
 
         meta,jobs_done,jobs_queue,errors =  await self.delete_section('vector_config','collection_name',collection_name)
@@ -107,7 +107,7 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @LockService(RedisService,RemoteAgentService,ArqIngestTaskService,lockType='reader')
     @UseHandler(AgenticHandler,CostHandler,ArqHandler,GatewayHandler,RedisHandler,DataIngestHandler)
     @BaseHTTPRessource.HTTPRoute('/docs/{job_id}/',methods=[HTTPMethod.DELETE],response_model=DeleteCollectionModel)
-    async def delete_documents(self,job_id:str, request:Request,response:Response,cost:Annotated[DeleteDocumentIngestCost,Depends(DeleteDocumentIngestCost)],broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],autPermission:AuthPermission=Depends(get_auth_permission)):
+    async def delete_documents(self,job_id:str, request:Request,response:Response,cost:Annotated[DeleteDocumentIngestCost,Depends(DeleteDocumentIngestCost)],broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],autPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         """Delete result and the point associated with the job_id filtered by the task_name """
 
         meta,collection_name = await self.delete_single_document(job_id,'vector_config','vector','collection_name')

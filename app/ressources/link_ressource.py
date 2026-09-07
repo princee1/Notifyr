@@ -68,7 +68,7 @@ class CRUDLinkRessource(BaseHTTPRessource):
     @UseInterceptor(DataCostInterceptor(CostConstant.LINK_CREDIT))
     @UseHandler(ORMCacheHandler,CostHandler,RedisHandler)
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.POST])
-    async def add_link(self, request: Request, linkModel: LinkModel,cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)], response: Response,authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def add_link(self, request: Request, linkModel: LinkModel,cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)], response: Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         link = linkModel.model_dump()
 
         async def transaction():
@@ -86,7 +86,7 @@ class CRUDLinkRessource(BaseHTTPRessource):
 
     @UseRoles([Role.PUBLIC])
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.GET])
-    async def read_link(self, request: Request, link: Annotated[LinkORM, Depends(get_link)],authPermission=Depends(get_auth_permission)):
+    async def read_link(self, request: Request, link: Annotated[LinkORM, Depends(get_link)],authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         return link.to_json
 
     @UseRoles([Role.ADMIN])
@@ -96,7 +96,7 @@ class CRUDLinkRessource(BaseHTTPRessource):
     @UseHandler(ORMCacheHandler,CostHandler,RedisHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.LINK_CREDIT,'refund'))
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.DELETE])
-    async def delete_link(self,response:Response,request:Request,cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)], link: Annotated[LinkORM, Depends(get_link)], archive: bool = Query(False),authPermission=Depends(get_auth_permission)):
+    async def delete_link(self,response:Response,request:Request,cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)], link: Annotated[LinkORM, Depends(get_link)], archive: bool = Query(False),authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         link_data = link.to_json.copy()
 
         if not archive:
@@ -124,7 +124,7 @@ class CRUDLinkRessource(BaseHTTPRessource):
     @HTTPStatusCode(200)
     @UseHandler(ORMCacheHandler)
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.PUT])
-    async def update_link(self, link: Annotated[LinkORM, Depends(get_link)], linkUpdateModel: UpdateLinkModel,request:Request,response:Response,authPermission=Depends(get_auth_permission)):
+    async def update_link(self, link: Annotated[LinkORM, Depends(get_link)], linkUpdateModel: UpdateLinkModel,request:Request,response:Response,authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         if linkUpdateModel.archived != None:
             link.archived = linkUpdateModel.archived
         
@@ -143,7 +143,7 @@ class CRUDLinkRessource(BaseHTTPRessource):
     @UseRoles([Role.PUBLIC])
     @HTTPStatusCode(200)
     @BaseHTTPRessource.HTTPRoute('/code/{link_id}/', methods=[HTTPMethod.GET,HTTPMethod.POST], mount=True)
-    async def get_qrcode(self,response:Response, link_id: str, qrModel: QRCodeModel, link: Annotated[LinkORM, Depends(get_link)], link_query: Annotated[LinkQuery, Depends(LinkQuery)], media_type: MediaType = Depends(media_type_query), authPermission=Depends(get_auth_permission)):
+    async def get_qrcode(self,response:Response, link_id: str, qrModel: QRCodeModel, link: Annotated[LinkORM, Depends(get_link)], link_query: Annotated[LinkQuery, Depends(LinkQuery)], media_type: MediaType = Depends(media_type_query), authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         path: str = None
         url = link_query.create_link(link, path, ("contact_id", "message_id", "session_id"))
         img_data = await self.linkService.generate_qr_code(url, qrModel)

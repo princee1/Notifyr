@@ -59,7 +59,7 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     @UsePermission(UserPermission,JWTRefreshTokenPermission)
     @UseGuard(BlacklistClientGuard, AuthenticatedClientGuard,)
     @BaseHTTPRessource.HTTPRoute('/client/', methods=[HTTPMethod.GET, HTTPMethod.POST])
-    async def refresh_auth_token(self,tokens:TokensModel, client: Annotated[ClientORM, Depends(get_client_from_request)], request: Request,client_id:str=Query(""), authPermission=Depends(get_auth_permission)):
+    async def refresh_auth_token(self,tokens:TokensModel, client: Annotated[ClientORM, Depends(get_client_from_request)], request: Request,client_id:str=Query(""), authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         refreshPermission:RefreshPermission = tokens
         async with in_transaction():    
             await raw_revoke_auth_token(client)
@@ -78,7 +78,7 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     @UseRoles(roles=[Role.ADMIN,Role.REFRESH],options=[MustHave(Role.ADMIN)])
     @UsePermission(AdminPermission,JWTRefreshTokenPermission)
     @BaseHTTPRessource.HTTPRoute('/admin/', methods=[HTTPMethod.GET, HTTPMethod.POST] )
-    async def refresh_admin_token(self,tokens:TokensModel, client: Annotated[ClientORM, Depends(get_client_from_request)], request: Request,client_id:str=Query(""), authPermission=Depends(get_auth_permission)):
+    async def refresh_admin_token(self,tokens:TokensModel, client: Annotated[ClientORM, Depends(get_client_from_request)], request: Request,client_id:str=Query(""), authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         async with in_transaction():    
             refreshPermission:RefreshPermission = tokens
             await raw_revoke_auth_token(client)
@@ -95,7 +95,7 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         @UseRoles(roles=[Role.ADMIN,Role.REFRESH,Role.TWILIO],options=[MustHaveRoleSuchAs(Role.ADMIN,Role.TWILIO)])
         @UsePermission(TwilioPermission,JWTRefreshTokenPermission)
         @BaseHTTPRessource.HTTPRoute('/admin/', methods=[HTTPMethod.GET, HTTPMethod.POST], dependencies=[Depends(verify_twilio_token)],mount=False )
-        async def refresh_twilio_token(self,tokens:TokensModel, client: Annotated[ClientORM, Depends(get_client_from_request)], request: Request,client_id:str=Query(""), authPermission=Depends(get_auth_permission)):
+        async def refresh_twilio_token(self,tokens:TokensModel, client: Annotated[ClientORM, Depends(get_client_from_request)], request: Request,client_id:str=Query(""), authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
             return
             twilioService:TwilioService = Get(TwilioService)
             async with in_transaction():    
@@ -247,5 +247,5 @@ class AuthRessource(BaseHTTPRessource):
     @UseLimiter(limit_value='1/week')
     @UsePermission(JWTRouteHTTPPermission,AdminPermission,same_client_authPermission)
     @BaseHTTPRessource.Get('/{client_id}')
-    def route(self,client_id:str,request:Request,client:Annotated[ClientORM,Depends(get_client_from_request)],authPermission=Depends(get_auth_permission)):
+    def route(self,client_id:str,request:Request,client:Annotated[ClientORM,Depends(get_client_from_request)],authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         return 

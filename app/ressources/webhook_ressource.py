@@ -18,5 +18,5 @@ class WebhookIncomingRessource(BaseHTTPRessource):
     
 
     @BaseHTTPRessource.Post('/{profile}')
-    async def process_events(self,profile:str,request:Response,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def process_events(self,profile:str,request:Response,response:Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         ...

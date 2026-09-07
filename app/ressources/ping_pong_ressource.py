@@ -62,14 +62,14 @@ class PingPongRessource(BaseHTTPRessource):
     @UseRoles([Role.ADMIN])
     @UsePermission(JWTRouteHTTPPermission)
     @BaseHTTPRessource.Get('/')
-    def check_health(self, authPermission: AuthPermission = Depends(get_auth_permission)):
+    def check_health(self, authPermission: AuthPermission = Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         ...
 
     @UseLimiter(limit_value="5/minutes")
     @UseRoles([Role.ADMIN])
     @UsePermission(JWTRouteHTTPPermission)
     @BaseHTTPRessource.Get('/report')
-    def check_report(self, request: Request, authPermission: AuthPermission = Depends(get_auth_permission)):
+    def check_report(self, request: Request, authPermission: AuthPermission = Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         return {
             'instance_id':self.workerService.INSTANCE_ID,
             'parent_pid':PARENT_PID,
@@ -81,7 +81,7 @@ class PingPongRessource(BaseHTTPRessource):
     @UseRoles([Role.ADMIN])
     @UsePermission(JWTRouteHTTPPermission)
     @BaseHTTPRessource.Post('/')
-    def set_health_config(self, authPermission: AuthPermission = Depends(get_auth_permission)):
+    def set_health_config(self, authPermission: AuthPermission = Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         ...
 
 

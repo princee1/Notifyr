@@ -54,14 +54,14 @@ class BlogsRessource(BaseHTTPRessource):
     @UsePermission(AdminPermission)
     @UseInterceptor(DataCostInterceptor(CostConstant.BLOG_CREDIT))
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
-    async def create_blog(self,request:Request, response:Response,cost:Annotated[DataCost,Depends(DataCost)],authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def create_blog(self,request:Request, response:Response,cost:Annotated[DataCost,Depends(DataCost)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         ...
 
     @UseRoles([Role.STATIC])
     @UsePermission(JWTStaticObjectPermission)
     @UseInterceptor(ResponseCacheInterceptor('invalid-only'))
     @BaseHTTPRessource.HTTPRoute('/{blog}/',methods=[HTTPMethod.GET])
-    async def modify_blog(self,blog:str,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def modify_blog(self,blog:str,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         ...
 
     @UseRoles([Role.PUBLIC])
@@ -75,5 +75,5 @@ class BlogsRessource(BaseHTTPRessource):
     @UseInterceptor(DataCostInterceptor(CostConstant.BLOG_CREDIT,'refund'))
     @UseInterceptor(ResponseCacheInterceptor('invalid-only'))
     @BaseHTTPRessource.HTTPRoute('/{blog}/',methods=[HTTPMethod.DELETE])
-    async def delete_blog(self,blog:str,request:Request,response:Response,cost:Annotated[DataCost,Depends(DataCost)],authPermission:AuthPermission=Depends(get_auth_permission)): # type: ignore
+    async def delete_blog(self,blog:str,request:Request,response:Response,cost:Annotated[DataCost,Depends(DataCost)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)): # type: ignore
         ...

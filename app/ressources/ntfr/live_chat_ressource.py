@@ -63,17 +63,17 @@ class LiveChatRessource(BaseHTTPRessource):
         ...
 
     @UsePermission(JWTRouteHTTPPermission)
-    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.DELETE],authPermission=Depends(get_auth_permission))
+    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.DELETE],authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info))
     async def dequeue_chat(self):
         ...
     
     @UsePermission(JWTRouteHTTPPermission)
-    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.GET],authPermission=Depends(get_auth_permission))
+    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.GET],authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info))
     async def check_priority(self):
         ...
 
     @UsePermission(JWTRouteHTTPPermission)
-    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.PUT],authPermission=Depends(get_auth_permission))
+    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.PUT],authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info))
     async def modify_priority(self):
         ...
 

@@ -35,7 +35,7 @@ class CostRessource(BaseHTTPRessource):
 
     @UseRoles([Role.PUBLIC])
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.GET])
-    def show_cost_file(self, request: Request, response: Response,authPermission:AuthPermission=Depends(get_auth_permission)):
+    def show_cost_file(self, request: Request, response: Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         """Return a summary of the currently loaded cost definitions.
         Implementation note: this is a light placeholder — change to expose full file or a filtered view as needed.
         """
@@ -55,7 +55,7 @@ class CostRessource(BaseHTTPRessource):
     @PingService([RedisService])
     @LockService(RedisService)
     @BaseHTTPRessource.HTTPRoute('/credits/', methods=[HTTPMethod.GET])
-    async def show_current_credits(self, request: Request,authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def show_current_credits(self, request: Request,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         """Return current credits for all plan keys. May be restricted in production via permissions in future.
         """
         return await self.costService.get_all_credits_balance()
@@ -66,7 +66,7 @@ class CostRessource(BaseHTTPRessource):
     @UseGuard(CreditPlanGuard)
     @UsePipe(JSONLoadsPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/bills/{credit}/', methods=[HTTPMethod.GET],)
-    async def get_bills(self,credit:CostConstant.Credit, request: Request,start:int = Query(0),stop:int=Query(-1), authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def get_bills(self,credit:CostConstant.Credit, request: Request,start:int = Query(0),stop:int=Query(-1), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         """Placeholder for billing/history endpoint. Implement retrieval from DB/audit store when available."""
         credit = (await self.credit_pipe(credit))['credit']
         bill_key = self.costService.bill_key(credit)
@@ -78,7 +78,7 @@ class CostRessource(BaseHTTPRessource):
     @UsePipe(JSONLoadsPipe,before=False)
     @PingService([CostService,RedisService])
     @BaseHTTPRessource.HTTPRoute('/receipts/{credit}/', methods=[HTTPMethod.GET],)
-    async def get_receipts(self,credit:CostConstant.Credit, request: Request,start:int = Query(0),stop:int=Query(-1),authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def get_receipts(self,credit:CostConstant.Credit, request: Request,start:int = Query(0),stop:int=Query(-1),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         
         credit = (await self.credit_pipe(credit))['credit']
         receipt_key =  self.costService.receipts_key(credit)

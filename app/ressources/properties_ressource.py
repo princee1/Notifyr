@@ -53,7 +53,7 @@ class SettingsRessource(BaseHTTPRessource):
     @UseLimiter(limit_value='1000/minutes')
     @LockService(SettingService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.GET],)
-    async def get_settings(self,response: Response,request:Request,authPermission=Depends(get_auth_permission)):
+    async def get_settings(self,response: Response,request:Request,authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         return self.settingService.data
     
     @PingService([VaultService],infinite_wait=True)
@@ -61,7 +61,7 @@ class SettingsRessource(BaseHTTPRessource):
     @UseLimiter(limit_value='1/minutes')
     @LockService(VaultService,SettingService,lockType='writer')
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.POST, HTTPMethod.PUT],)
-    async def modify_settings(self,response: Response,request:Request, settingsModel:SettingsModel, broker: Annotated[Broker, Depends(Broker)], authPermission=Depends(get_auth_permission),default = Query(False)):
+    async def modify_settings(self,response: Response,request:Request, settingsModel:SettingsModel, broker: Annotated[Broker, Depends(Broker)], authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info),default = Query(False)):
         if default:
             settings = DEFAULT_SETTING
         else:
@@ -111,7 +111,7 @@ if CAPABILITIES['object']:
         @UseRoles([Role.PUBLIC])
         @UsePipe(GlobalPointerIteratorPipe(PARAMS_KEY_SEPARATOR))
         @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.GET],)
-        async def read_global(self, response: Response, request: Request, globalIter: PointerIterator = Depends(global_var_key[GLOBAL_KEY]), wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission)):
+        async def read_global(self, response: Response, request: Request, globalIter: PointerIterator = Depends(global_var_key[GLOBAL_KEY]), wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
 
             data = self.assetService.globals.data
             if globalIter == None:
@@ -135,7 +135,7 @@ if CAPABILITIES['object']:
         @UseRoles([Role.ADMIN])
         @UsePipe(GlobalPointerIteratorPipe(PARAMS_KEY_SEPARATOR))
         @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.DELETE],mount=to_mount_modify_obj)
-        async def delete_global(self, response: Response, request: Request, broker: Annotated[Broker, Depends(Broker)], wait_timeout: int | float = Depends(wait_timeout_query), globalIter: PointerIterator = Depends(global_var_key[GLOBAL_KEY_RAISE]), authPermission=Depends(get_auth_permission)):
+        async def delete_global(self, response: Response, request: Request, broker: Annotated[Broker, Depends(Broker)], wait_timeout: int | float = Depends(wait_timeout_query), globalIter: PointerIterator = Depends(global_var_key[GLOBAL_KEY_RAISE]), authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
             if globalIter == None:
                 ...
             else:
@@ -160,7 +160,7 @@ if CAPABILITIES['object']:
         @UseRoles([Role.ADMIN])
         @UsePipe(GlobalPointerIteratorPipe(PARAMS_KEY_SEPARATOR))
         @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.POST, HTTPMethod.PUT],mount=to_mount_modify_obj)
-        async def upsert_global(self, response: Response, request: Request, broker: Annotated[Broker, Depends(Broker)], globalModel: GlobalVarModel, wait_timeout: int | float = Depends(wait_timeout_query), globalIter: PointerIterator = Depends(global_var_key[GLOBAL_KEY]), force: bool = Depends(force_update_query), authPermission=Depends(get_auth_permission)):
+        async def upsert_global(self, response: Response, request: Request, broker: Annotated[Broker, Depends(Broker)], globalModel: GlobalVarModel, wait_timeout: int | float = Depends(wait_timeout_query), globalIter: PointerIterator = Depends(global_var_key[GLOBAL_KEY]), force: bool = Depends(force_update_query), authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
 
             if globalIter == None:
                 ptr = self.assetService.globals.data
@@ -213,7 +213,7 @@ if CAPABILITIES['agentic']:
         @UseHandler(TemplateHandler,PydanticHandler)
         @LockService(CustomService,lockType='reader')
         @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
-        async def add_custom_model(self,custom:CustomModel,response: Response,request:Request,broker: Annotated[Broker, Depends(Broker)],authPermission=Depends(get_auth_permission)):
+        async def add_custom_model(self,custom:CustomModel,response: Response,request:Request,broker: Annotated[Broker, Depends(Broker)],authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
             
             self.customService.verify_edge(custom)
 
@@ -236,7 +236,7 @@ if CAPABILITIES['agentic']:
         @UseHandler(TemplateHandler,PydanticHandler)
         @LockService(CustomService,lockType='reader')
         @BaseHTTPRessource.HTTPRoute('/{model}/',methods=[HTTPMethod.PUT])
-        async def update_custom_model(self,model:str,custom:UpdateCustomModel, response: Response,request:Request,broker: Annotated[Broker, Depends(Broker)],authPermission=Depends(get_auth_permission)):
+        async def update_custom_model(self,model:str,custom:UpdateCustomModel, response: Response,request:Request,broker: Annotated[Broker, Depends(Broker)],authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
 
             model:CustomModel = await self.mongooseService.get(CustomModel,model,True)
             
@@ -261,7 +261,7 @@ if CAPABILITIES['agentic']:
         @UsePipe(DocumentFriendlyPipe,before=False)
         @LockService(CustomService,lockType='reader')
         @BaseHTTPRessource.HTTPRoute('/s/{model}',methods=[HTTPMethod.GET])
-        async def fetch_custom_model(self,model:str,response: Response,request:Request,authPermission=Depends(get_auth_permission)):
+        async def fetch_custom_model(self,model:str,response: Response,request:Request,authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
             model:CustomModel = await self.mongooseService.get(CustomModel,model,True)
             return model
 
@@ -269,7 +269,7 @@ if CAPABILITIES['agentic']:
         @UsePipe(DocumentFriendlyPipe,before=False)
         @LockService(CustomService,lockType='reader')
         @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.GET])
-        async def fetch_all(self,response: Response,request:Request,authPermission=Depends(get_auth_permission)):
+        async def fetch_all(self,response: Response,request:Request,authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
             models = await self.mongooseService.find_all(CustomModel)
             return models
 
@@ -277,7 +277,7 @@ if CAPABILITIES['agentic']:
         @UseRoles([Role.ADMIN])
         @LockService(CustomService,lockType='reader')
         @BaseHTTPRessource.HTTPRoute('/{model}',methods=[HTTPMethod.DELETE])
-        async def delete_custom_model(self,model:str,response: Response,request:Request,broker: Annotated[Broker, Depends(Broker)],authPermission=Depends(get_auth_permission)):
+        async def delete_custom_model(self,model:str,response: Response,request:Request,broker: Annotated[Broker, Depends(Broker)],authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
             model:CustomModel = await self.mongooseService.get(CustomModel,model,True)
             await self.mongooseService.delete(model)
             

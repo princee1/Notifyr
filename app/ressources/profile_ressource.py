@@ -72,7 +72,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT))
     @UseHandler(VaultHandler,MiniServiceHandler,PydanticHandler,CostHandler,CeleryControlHandler,RedisHandler)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
-    async def create_profile(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def create_profile(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         profileModel = await self.pipe_profil_model(request,'model')
         
         if self.Model._singleton:
@@ -115,7 +115,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT,'refund'))
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),MerchantPipe(-1))
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.DELETE])
-    async def delete_profile(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def delete_profile(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         profileModel = await self.mongooseService.get(self.Model,profile,True)
         creds = await self.profileService._read_encrypted_creds(profileModel.profile_id)
 
@@ -146,7 +146,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
     @LockService(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PUT])
-    async def update_profile(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def update_profile(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         
         profileModel = await self.mongooseService.get(self.Model,profile,True)
         modelUpdate = await self.pipe_profil_model(request,'model_update')
@@ -169,7 +169,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @LockService(VaultService,lockType='reader',check_status=False)
     @LockService(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PATCH])
-    async def set_credentials(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)], authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def set_credentials(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)], authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         
         profileModel:BaseProfileModel = await self.mongooseService.get(self.Model,profile,True)
         modelCreds = await self.pipe_profil_model(request,'model_creds')
@@ -192,7 +192,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @LockService(ProfileService,lockType='reader',as_manager=False,motor_fallback=True)
     @UseRoles([Role.PUBLIC],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
     @BaseHTTPRessource.HTTPRoute('/{profile:path}',methods=[HTTPMethod.GET],to_mcp_tool=True,operation_id='get_profile_information')
-    async def read_profile(self,profile:str,request:Request, response:Response,mongoFilter:Optional[MongoFindFilter],source:SourceMode=Depends(source_mode_query), authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def read_profile(self,profile:str,request:Request, response:Response,mongoFilter:Optional[MongoFindFilter],source:SourceMode=Depends(source_mode_query), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         match source:
             case 'database':
                 if profile != '':
@@ -221,7 +221,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
     @LockService(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
     @BaseHTTPRessource.HTTPRoute('/refresh/{profile}/',methods=[HTTPMethod.PATCH])
-    async def refresh_memory_state(self,profile:str,request:Request,channel:Annotated[ChannelMiniService,Depends(get_profile)],broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def refresh_memory_state(self,profile:str,request:Request,channel:Annotated[ChannelMiniService,Depends(get_profile)],broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         await channel.refresh_worker_state()
         broker.propagate(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
 
@@ -233,7 +233,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @LockService(ProfileService,'reader',as_manager=True,miniLockType='reader')
     @UseRoles([Role.PUBLIC],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
     @BaseHTTPRessource.HTTPRoute('/errors/{profile}/',methods=[HTTPMethod.GET],to_mcp_tool=True,operation_id='get_profile_errors')
-    async def read_error(self,profile:str,error:ErrorProfileMap,service:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response, authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def read_error(self,profile:str,error:ErrorProfileMap,service:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         return await service.fetch_errors(**error.model_dump())
 
     @classmethod
@@ -288,7 +288,7 @@ class ProfilRessource(BaseHTTPRessource):
     
     @UsePipe(DocumentFriendlyPipe(include={'ignore'}),before=False)
     @BaseHTTPRessource.HTTPRoute('/error/{error}/',methods=[HTTPMethod.PATCH])
-    async def toggle_ignore(self,error:str,request:Request,authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def toggle_ignore(self,error:str,request:Request,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         
         errorModel = await self.mongooseService.get(ErrorProfileModel,error)
         errorModel.ignore = not errorModel.ignore
@@ -298,9 +298,9 @@ class ProfilRessource(BaseHTTPRessource):
     
     @UsePipe(DocumentFriendlyPipe(include={'ignore'}),before=False)
     @BaseHTTPRessource.HTTPRoute('/all/',methods=[HTTPMethod.GET])
-    async def get_all(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def get_all(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         return await self.mongooseService.find_all(BaseProfileModel)
     
     @BaseHTTPRessource.HTTPRoute('/types/',methods=[HTTPMethod.GET])
-    async def get_profile_type(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def get_profile_type(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         ...

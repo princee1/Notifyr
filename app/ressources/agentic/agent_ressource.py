@@ -115,7 +115,7 @@ class AgentsRessource(BaseHTTPRessource):
     @UseHandler(LLMHandler,RedisHandler,CostHandler,AgentHandler)
     @LockService(LLMService,lockType='reader',as_manager=False)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
-    async def create_agent(self,agentModel:AgentModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],similarity:Annotated[EmbeddingSimilarity,Depends(EmbeddingSimilarity)], profile:str=Depends(get_agent), authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def create_agent(self,agentModel:AgentModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],similarity:Annotated[EmbeddingSimilarity,Depends(EmbeddingSimilarity)], profile:str=Depends(get_agent), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         await self.mongooseService.primary_key_constraint(agentModel,True)
         await self.mongooseService.exists_unique(agentModel,True)
         
@@ -145,7 +145,7 @@ class AgentsRessource(BaseHTTPRessource):
     @LockService(RemoteAgentService,lockType='reader',as_manager=False)
     @UseRoles([Role.PUBLIC],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
     @BaseHTTPRessource.HTTPRoute('/{agent:path}/',methods=[HTTPMethod.GET],to_mcp_tool=True,operation_id='read_agent_information')
-    async def read_agent(self,agent:str,request:Request,response:Response,mongoFilter:Optional[MongoFindFilter],profile:str=Depends(get_agent),source:SourceMode=Depends(source_mode_query), authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def read_agent(self,agent:str,request:Request,response:Response,mongoFilter:Optional[MongoFindFilter],profile:str=Depends(get_agent),source:SourceMode=Depends(source_mode_query), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         match source:
             case 'database':
                 if agent != '':
@@ -174,7 +174,7 @@ class AgentsRessource(BaseHTTPRessource):
     @LockService(LLMService,lockType='reader',as_manager=False)
     @UseInterceptor(DataCostInterceptor(CostConstant.AGENT_CREDIT,'refund'))
     @BaseHTTPRessource.HTTPRoute('/{agent}/',methods=[HTTPMethod.DELETE])
-    async def delete_agent(self,agent:str,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],profile:str=Depends(get_agent),authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def delete_agent(self,agent:str,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],profile:str=Depends(get_agent),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         agentModel = await self.mongooseService.get(AgentModel,agent,True)
 
         agentModels = await self.mongooseService.find_all(AgentModel)
@@ -206,7 +206,7 @@ class AgentsRessource(BaseHTTPRessource):
     @UseHandler(PydanticHandler,LLMHandler,AgentHandler)
     @LockService(LLMService,lockType='reader',as_manager=False)
     @BaseHTTPRessource.HTTPRoute('/{agent}/',methods=[HTTPMethod.PUT])
-    async def update_agent(self,agent:str,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],embeddingLookup:Annotated[EmbeddingSimilarity,Depends(EmbeddingSimilarity)],body: dict = Body(...),request_id:str=Depends(get_request_id),profile:str=Depends(get_agent),authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def update_agent(self,agent:str,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],embeddingLookup:Annotated[EmbeddingSimilarity,Depends(EmbeddingSimilarity)],body: dict = Body(...),request_id:str=Depends(get_request_id),profile:str=Depends(get_agent),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         
         agentModel = await self.mongooseService.get(AgentModel,agent,True)
         agentUpdateModel = self.UpdateAgentModel.model_validate(body)
@@ -238,7 +238,7 @@ class AgentsRessource(BaseHTTPRessource):
     @UsePermission(ClientTypesPermission([ClientType.User,ClientType.Admin]),AgentPermission)
     @PingService([{'cls':RemoteAgentService,'kwargs':{'grpc':True}}],is_manager=True,infinite_wait=True)
     @BaseHTTPRessource.HTTPRoute('/prompt/{agent}/',methods=[HTTPMethod.POST],mount=False,response_model=Reply)
-    async def prompt_playground(self,request:Request,agent:Annotated[RemoteAgentMiniService,Depends(get_agent)],prompt:PromptPlaygroundModel, response:Response,profile:str=Depends(get_agent),request_id:str = Depends(get_request_id),authPermission:AuthPermission= Depends(get_auth_permission)):
+    async def prompt_playground(self,request:Request,agent:Annotated[RemoteAgentMiniService,Depends(get_agent)],prompt:PromptPlaygroundModel, response:Response,profile:str=Depends(get_agent),request_id:str = Depends(get_request_id),authPermission:AuthPermission= Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         message = Message(agent=agent,thread=authPermission['client_id'],**prompt.model_dump(exclude_none=True))
         user = User(authPermission['client_id'],'guest',None)
         session = Session(request_id,...,'live-chat',[])
@@ -257,7 +257,7 @@ class AgentsRessource(BaseHTTPRessource):
     @UsePermission(ClientTypesPermission([ClientType.User,ClientType.Admin]),AgentPermission)
     @PingService([{'cls':RemoteAgentService,'kwargs':{'grpc':True}}],is_manager=True,infinite_wait=True)
     @BaseHTTPRessource.HTTPRoute('/stream/prompt/{agent}/',methods=[HTTPMethod.POST],mount=False,response_class=EventSourceResponse)
-    async def stream_prompt_playground(self,request:Request,response:Response,prompt:PromptPlaygroundModel,agent:Annotated[RemoteAgentMiniService,Depends(get_agent)],profile:str=Depends(get_agent),request_id:str = Depends(get_request_id),last_event_id: Annotated[int | None, Header()] = None,authPermission:AuthPermission= Depends(get_auth_permission))->AsyncIterable[ServerSentEvent]:
+    async def stream_prompt_playground(self,request:Request,response:Response,prompt:PromptPlaygroundModel,agent:Annotated[RemoteAgentMiniService,Depends(get_agent)],profile:str=Depends(get_agent),request_id:str = Depends(get_request_id),last_event_id: Annotated[int | None, Header()] = None,authPermission:AuthPermission= Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info))->AsyncIterable[ServerSentEvent]:
         message = Message(agent=agent,thread=authPermission['client_id'],**prompt.model_dump(exclude_none=True))
         user = User(authPermission['client_id'],'guest',None)
         session = Session(request_id,...,'live-chat',[])
