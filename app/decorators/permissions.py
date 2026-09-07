@@ -42,7 +42,7 @@ class JWTRouteHTTPPermission(Permission):
             if clientInfo['status'] == 'expired' and not self.accept_expired:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Permission expired")
         
-        if authPermission['client_type'] == ClientType.Admin:
+        if clientInfo['client_type'] == ClientType.Admin:
             return True
 
         operation_id = func_meta["operation_id"]
@@ -98,8 +98,8 @@ if CAPABILITIES['object']:
             self.extension = extension
             self.accept_none= accept_none_template
 
-        def permission(self,authPermission:AuthPermission,template:str,scheduler:SchedulerModel=None,template_type:RouteAssetType=None):
-            if authPermission['client_type'] == ClientType.Admin:
+        def permission(self,authPermission:AuthPermission,clientInfo:ClientTokenInfo,template:str,scheduler:SchedulerModel=None,template_type:RouteAssetType=None):
+            if clientInfo['client_type'] == ClientType.Admin:
                 return True
             
             template_type = self.template_type if template_type == None else template_type
@@ -131,8 +131,8 @@ if CAPABILITIES['object']:
 
     class JWTStaticObjectPermission(Permission):
             
-        def permission(self,authPermission:AuthPermission,blog:str):
-            if authPermission['client_type'] == ClientType.Admin:
+        def permission(self,authPermission:AuthPermission,clientInfo:ClientTokenInfo,blog:str):
+            if clientInfo['client_type'] == ClientType.Admin:
                 return True
             
             if blog not in authPermission['allowed_blogs']:
@@ -145,13 +145,13 @@ if CAPABILITIES['object']:
         def __init__(self):
             super().__init__('email')
         
-        def permission(self, authPermission:AuthPermission, scheduler:BaseEmailSchedulerModel):
+        def permission(self, authPermission:AuthPermission, clientInfo:ClientTokenInfo, scheduler:BaseEmailSchedulerModel):
             if  scheduler.signature == None:
                 return True
             if scheduler.signature.template == "":
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Signature template not provided")
             
-            return super().permission(authPermission, scheduler.signature, None, None)
+            return super().permission(authPermission, clientInfo, scheduler.signature, None, None)
 
 
 class JWTContactPermission(Permission):
@@ -187,7 +187,7 @@ class JWTRefreshTokenPermission(Permission):
         self.accept_inactive = accept_inactive
         self.jwtAuthService:JWTAuthService = Get(JWTAuthService)
     
-    async def permission(self,tokens:TokensModel,authPermission:AuthPermission):
+    async def permission(self,tokens:TokensModel,authPermission:AuthPermission,clientInfo:ClientTokenInfo):
         permission:RefreshPermission = self.jwtAuthService.verify_refresh_permission(tokens.tokens)
 
         client_id = permission['client_id']
@@ -213,15 +213,15 @@ class AbstractClientTypePermission(Permission):
         self.ensure =ensure
         self.client_type = client_type
 
-    async def permission(self,authPermission:AuthPermission):
+    async def permission(self,authPermission:AuthPermission,clientInfo:ClientTokenInfo):
 
-        client_id = authPermission['client_id']
+        client_id = clientInfo['client_id']
         if self.ensure:
             client = await ClientORM.get(client=client_id)
             if client.client_type != self.client_type:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Client is not an {self.client_type.value}")
 
-        if not authPermission['client_type'] == self.client_type.value:
+        if not clientInfo['client_type'] == self.client_type.value:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Client type is not {self.client_type.value}")
 
         return True
@@ -255,11 +255,11 @@ class ClientTypesPermission(Permission):
         self.client_types=set([ c.value for c in set(client_types)])
         self.slice = slice
 
-    async def permission(self,authPermission:AuthPermission):
-        if self.slice == 'include' and authPermission['client_type'] not in self.client_types:
+    async def permission(self,authPermission:AuthPermission,clientInfo:ClientTokenInfo):
+        if self.slice == 'include' and clientInfo['client_type'] not in self.client_types:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Client is not in those client_types {self.client_types}")
 
-        if self.slice == 'exclude' and authPermission['auth_type'] in self.client_types:
+        if self.slice == 'exclude' and clientInfo['client_type'] in self.client_types:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Client is in those forbidden client_types {self.client_types}")
         
         return True
@@ -269,7 +269,6 @@ async def same_client_authPermission(authPermission:AuthPermission, client:Clien
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client ID mismatch")
     
     return True
-
 
 class BalancerPermission(Permission):
     
@@ -285,7 +284,6 @@ class BalancerPermission(Permission):
                 detail='Balancer Not authorized'
             )
         return True
-
 
 class ProfilePermission(Permission):
 
@@ -314,7 +312,6 @@ class AgentPermission(Permission):
         super().__init__()
         self.allow_empty = allow_empty
 
-
     async def permission(self,authPermission:AuthPermission,agent:str):
         if agent == '' and self.allow_empty:
             return True
@@ -329,7 +326,6 @@ class AgentPermission(Permission):
     @staticmethod
     async def predicate(agent:str,authPermission:AuthPermission):
         return agent in authPermission['allowed_agents']
-
 
 class TaskCostPermission(Permission):
     """
@@ -371,7 +367,6 @@ class TaskCostPermission(Permission):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Retry not allowed by pricing policy")
 
         return True
-
 
 class MCPPermission(Permission):
 

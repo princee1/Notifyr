@@ -87,6 +87,7 @@ class JWTAuthMiddleware(MiddleWare):
 
             async with self.adminService.lock('reader',client_id) as clientService:
                 client = clientService.client
+                clientInfo['client_type'] = client.client_type
                 client_ip = get_client_ip(request) #TODO : check wether we must use the scope to verify the client
                 
                 clientService.verify_client_origin(client_ip)

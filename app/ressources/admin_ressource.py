@@ -24,11 +24,11 @@ from app.services.setting_service import SettingService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.services.config_service import ConfigService
 from app.utils.constant import ConfigAppConstant, CostConstant
-from app.depends.dependencies import get_auth_permission, get_query_params, get_request_id
+from app.depends.dependencies import get_auth_permission, get_client_info, get_query_params, get_request_id
 from app.container import InjectInMethod, Get
 from app.definition._ressource import PingService, UseInterceptor, LockService, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter,HTTPStatusCode
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
-from app.classes.auth_permission import AuthPermission, AuthType, ClientType, PoliciesNotMatchingError, PolicyModel, PolicyUpdateMode, Role, Scope
+from app.classes.auth_permission import AuthPermission, AuthType, ClientTokenInfo, ClientType, PoliciesNotMatchingError, PolicyModel, PolicyUpdateMode, Role, Scope
 from app.decorators.handlers import AsyncIOHandler, CostHandler, DataSourceHandler, MiniServiceHandler, ORMCacheHandler, PydanticHandler, RedisHandler, AuthClientHandler, SecurityHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler, VaultHandler
 from app.decorators.pipes import  ForceClientPipe, ForceGroupPipe, FunctionInjectorPipe, MiniServiceInjectorPipe, ObjectRelationalFriendlyPipe
 from app.utils.helper import  generateId

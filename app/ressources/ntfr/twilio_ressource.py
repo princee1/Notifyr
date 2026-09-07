@@ -1,13 +1,13 @@
 from typing import Annotated
 from aiohttp_retry import Callable
 from fastapi import Depends, HTTPException, Request
-from app.classes.auth_permission import Role
+from app.classes.auth_permission import AuthPermission, ClientTokenInfo, Role
 from app.container import GetDependsFunc, InjectInMethod
 from app.decorators.handlers import AsyncIOHandler, MiniServiceHandler, ProfileHandler, ServiceAvailabilityHandler, TwilioHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import MiniServiceInjectorPipe, parse_phone_number
 from app.definition._ressource import HTTPRessource,HTTPMethod,BaseHTTPRessource, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles, LockService
-from app.depends.dependencies import get_auth_permission, get_query_params
+from app.depends.dependencies import get_auth_permission, get_client_info, get_query_params
 from app.depends.funcs_dep import get_profile
 from app.ressources.twilio.sms_ressource import SMSRessource
 from app.ressources.twilio.call_ressource import CallRessource
@@ -46,7 +46,7 @@ class TwilioRessource(BaseHTTPRessource):
     @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio'))
     @LockService(TwilioService,as_manager=True)
     @BaseHTTPRessource.HTTPRoute('/balance/{profile}/',methods=[HTTPMethod.GET])
-    async def check_balance(self,profile:str,twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],request:Request,authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    async def check_balance(self,profile:str,twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],request:Request,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         return await twilio.fetch_balance()
     
     @PingService([TwilioService])
@@ -54,7 +54,7 @@ class TwilioRessource(BaseHTTPRessource):
     @UseLimiter(limit_value= '10/day')
     @UseRoles([Role.PUBLIC])
     @BaseHTTPRessource.HTTPRoute('/lookup/{phone_number}',methods=[HTTPMethod.GET])
-    async def phone_lookup(self,phone_number:str,request:Request,carrier:Annotated[bool,Depends(carrier_info)],callee:Annotated[bool,Depends(callee_info)],authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    async def phone_lookup(self,phone_number:str,request:Request,carrier:Annotated[bool,Depends(carrier_info)],callee:Annotated[bool,Depends(callee_info)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         if not carrier and not callee:
             raise HTTPException(status_code=400,detail="At least one of carrier or callee must be true")
         

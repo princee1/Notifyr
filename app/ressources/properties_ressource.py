@@ -1,7 +1,7 @@
 from typing import Annotated, Callable
 from fastapi import Depends, Request, Response, status
 from fastapi.params import Query
-from app.classes.auth_permission import Role
+from app.classes.auth_permission import ClientTokenInfo, Role
 from app.container import Get, InjectInMethod
 from app.decorators.guards import MongooseHardLimitGuard
 from app.decorators.handlers import AsyncIOHandler, GlobalVarHandler, MongooseHandler, MotorErrorHandler, PydanticHandler, ServiceAvailabilityHandler, TemplateHandler
@@ -9,7 +9,7 @@ from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import DocumentFriendlyPipe, GlobalPointerIteratorPipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, LockService, UseRoles
 from app.definition._service import StateProtocol, ServiceStatus
-from app.depends.dependencies import get_auth_permission, get_query_params
+from app.depends.dependencies import get_auth_permission, get_client_info, get_query_params
 from app.errors.properties_error import GlobalKeyDoesNotExistsError
 from app.manager.broker_manager import Broker
 from app.models.odm.custom_model import CustomModel, UpdateCustomModel

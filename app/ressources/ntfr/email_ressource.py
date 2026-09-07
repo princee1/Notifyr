@@ -1,7 +1,7 @@
 from typing import Annotated, Callable, Literal, get_args
 import aiohttp
 from aiohttp_retry import Tuple
-from app.classes.auth_permission import BypassRole, MustHave, MustHaveWhen, Role
+from app.classes.auth_permission import BypassRole, ClientTokenInfo, MustHave, MustHaveWhen, Role
 from app.classes.email import MimeType, parse_mime_content
 from app.classes.mail_provider import get_email_provider_name
 from app.classes.template import CONTENT_HTML, CONTENT_TEXT, HTMLTemplate
@@ -26,7 +26,7 @@ from app.container import Get, InjectInMethod
 from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, UseInterceptor, LockService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse, UsePipe, UseRoles
 from app.services.ntfr.email_service import EmailReaderService, EmailSenderService
 from fastapi import Request, Response, status
-from app.depends.dependencies import Depends, get_auth_permission, get_query_params
+from app.depends.dependencies import Depends, get_auth_permission, get_client_info, get_query_params
 from app.decorators import permissions, handlers,pipes,guards
 from app.depends.variables import _wrap_checker, wait_timeout_query
 from app.services.worker.task_service import TaskService

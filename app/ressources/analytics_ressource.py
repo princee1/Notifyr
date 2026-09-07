@@ -1,10 +1,10 @@
 
 from fastapi import Depends, Request
-from app.classes.auth_permission import Role
+from app.classes.auth_permission import ClientTokenInfo, Role
 from app.decorators.handlers import AsyncIOHandler, TortoiseHandler
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPRessource, PingService, LockService, UseHandler, UsePermission, UseRoles,HTTPMethod
-from app.depends.dependencies import get_auth_permission
+from app.depends.dependencies import get_auth_permission, get_client_info
 from app.services.database.tortoise_service import TortoiseConnectionService
 
 @PingService([TortoiseConnectionService])

@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Annotated
 from fastapi import Depends, Request, Response
-from app.classes.auth_permission import AuthPermission, BypassRole, MustHave, MustHaveWhen, Role
+from app.classes.auth_permission import AuthPermission, BypassRole, ClientTokenInfo, MustHave, MustHaveWhen, Role
 from app.classes.celery import  TaskHeaviness, s
 from app.classes.template import SMSTemplate
 from app.cost.sms_cost import SMSCost
@@ -27,7 +27,7 @@ from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.worker.task_service import TaskService
 from app.services.ntfr.twilio_service import SMSService, TwilioAccountMiniService, TwilioService
-from app.depends.dependencies import  get_auth_permission
+from app.depends.dependencies import  get_auth_permission, get_client_info
 from app.depends.variables import profile_query,mcp_configuration
 from app.depends.funcs_dep import get_profile, get_template,wait_timeout_query
 from app.utils.constant import CostConstant, StreamConstant

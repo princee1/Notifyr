@@ -1,4 +1,4 @@
-from app.classes.auth_permission import AuthPermission, Role
+from app.classes.auth_permission import AuthPermission, ClientTokenInfo, Role
 from app.container import InjectInMethod
 from app.decorators.guards import CreditPlanGuard
 from app.decorators.handlers import AsyncIOHandler, CostHandler, RedisHandler, ServiceAvailabilityHandler, TortoiseHandler
@@ -6,7 +6,7 @@ from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import JSONLoadsPipe
 from app.definition._ressource import BaseHTTPRessource, HTTPRessource, HTTPMethod, PingService, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles, LockService
 from app.definition._utils_decorator import Pipe
-from app.depends.dependencies import get_auth_permission
+from app.depends.dependencies import get_auth_permission, get_client_info
 from app.services.cost_service import CostService,REDIS_CREDIT_KEY_BUILDER
 from app.services.database.redis_service import RedisService
 from app.services.reactive_service import ReactiveService

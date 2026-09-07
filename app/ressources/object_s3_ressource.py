@@ -4,7 +4,7 @@ import zipfile
 from aiohttp_retry import List
 from fastapi import BackgroundTasks, Body, Depends, File, HTTPException, Query, Request, Response, UploadFile,status
 from fastapi.responses import StreamingResponse
-from app.classes.auth_permission import AuthPermission, MustHaveWhen,Role, filter_asset_permission
+from app.classes.auth_permission import AuthPermission, ClientTokenInfo, MustHaveWhen,Role, filter_asset_permission
 from app.cost.file_cost import FileCost
 from app.cost.object_cost import ObjectCost
 from app.errors.depends_error import DataSourceNotSupportedError
@@ -21,7 +21,7 @@ from app.decorators.pipes import MerchantPipe, ObjectS3OperationResponsePipe, Sa
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, LockService
 from app.definition._service import StateProtocol
 from app.depends.class_dep import ObjectsSearch
-from app.depends.dependencies import get_auth_permission, is_mcp_request
+from app.depends.dependencies import get_auth_permission, get_client_info, is_mcp_request
 from app.depends.res_cache import MinioResponseCache
 from app.manager.broker_manager import Broker
 from app.services.assets_service import EXTENSION_TO_ASSET_TYPE, AssetConfusionError, AssetService, AssetType, AssetTypeNotAllowedError

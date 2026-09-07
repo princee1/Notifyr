@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Annotated
 from fastapi import BackgroundTasks, Depends, HTTPException, Request, Response
-from app.classes.auth_permission import AuthPermission, BypassRole, MustHave, MustHaveWhen, Role
+from app.classes.auth_permission import AuthPermission, BypassRole, ClientTokenInfo, MustHave, MustHaveWhen, Role
 from app.classes.celery import TaskHeaviness, s
 from app.classes.stream_data_parser import StreamContinuousDataParser, StreamSequentialDataParser
 from app.classes.template import PhoneTemplate
@@ -29,7 +29,7 @@ from app.services.worker.task_service import TaskService
 from app.services.ntfr.twilio_service import CallService, TwilioAccountMiniService, TwilioService
 from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseInterceptor, LockService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.container import Get, InjectInMethod
-from app.depends.dependencies import get_auth_permission
+from app.depends.dependencies import get_auth_permission, get_client_info
 from app.depends.funcs_dep import Get_Contact,get_template,wait_timeout_query,get_profile
 from app.depends.class_dep import SubjectParams, TwilioTracker
 from app.utils.constant import CostConstant, StreamConstant

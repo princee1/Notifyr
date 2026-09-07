@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Header, Query, Request,status
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from app.classes.auth_permission import AuthPermission, ClientType, FuncMetaData, MustHave, MustHaveRoleSuchAs, RefreshPermission, Role, TokensModel, parse_authPermission_enum
+from app.classes.auth_permission import AuthPermission, ClientTokenInfo, ClientType, FuncMetaData, MustHave, MustHaveRoleSuchAs, RefreshPermission, Role, TokensModel, parse_authPermission_enum
 from app.container import Get, InjectInMethod
 from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard
 from app.decorators.handlers import AsyncIOHandler, ORMCacheHandler, AuthClientHandler, ServiceAvailabilityHandler, TortoiseHandler
@@ -22,7 +22,7 @@ from app.services.config_service import ConfigService
 from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.security_service import JWTAuthService
 from app.services.setting_service import SettingService
-from app.depends.dependencies import get_auth_permission, get_client_from_request, get_client_ip
+from app.depends.dependencies import get_auth_permission, get_client_from_request, get_client_info, get_client_ip
 from app.utils.constant import ConfigAppConstant
 from tortoise.transactions import in_transaction
 from app.utils.globals import CAPABILITIES

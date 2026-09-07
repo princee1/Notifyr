@@ -9,8 +9,8 @@ from app.services.database.redis_service import RedisService
 from app.services.worker.task_service import TaskService
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService
-from app.depends.dependencies import get_auth_permission
-from app.classes.auth_permission import AuthPermission, MustHave, Role
+from app.depends.dependencies import get_auth_permission, get_client_info
+from app.classes.auth_permission import AuthPermission, ClientTokenInfo, MustHave, Role
 from apscheduler.job import Job
 
 from app.utils.constant import APSchedulerConstant, CeleryConstant, RedisConstant

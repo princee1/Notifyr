@@ -101,6 +101,7 @@ class ClientTokenInfo(TypedDict):
     client_id: str
     status:PermissionStatus= 'active'
     auth_type:AuthType
+    client_type:ClientType
     salt:str
     authz_id:str
 

@@ -2,7 +2,7 @@ from typing import Annotated, Literal, Optional, Type
 from beanie import Document
 from fastapi import Depends,Request, Response,status
 from pydantic import ConfigDict
-from app.classes.auth_permission import AuthPermission, MustHaveWhen, Role
+from app.classes.auth_permission import AuthPermission, ClientTokenInfo, MustHaveWhen, Role
 from app.classes.mongo import MongoFindFilter
 from app.container import InjectInMethod,Get
 from app.decorators.handlers import AsyncIOHandler, CostHandler, DataSourceHandler, MiniServiceHandler, MongooseHandler, MotorErrorHandler, ProfileHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler, VaultHandler,CeleryControlHandler
@@ -12,7 +12,7 @@ from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniService
 from app.definition._cost import DataCost
 from app.definition._ressource import BaseHTTPRessource, ClassMetaData, HTTPMethod,HTTPRessource, HTTPStatusCode, PingService, Throttle, UseInterceptor, UseLimiter, LockService, UseHandler, UsePermission, UsePipe, UseRoles
 from app.definition._service import MiniStateProtocol, StateProtocol
-from app.depends.dependencies import get_auth_permission
+from app.depends.dependencies import get_auth_permission, get_client_info
 from app.depends.funcs_dep import get_profile
 from app.classes.profiles import ErrorProfileMap, ProfilModelValues, BaseProfileModel, ErrorProfileModel
 from app.errors.db_error import DocumentSingletonLimitReachedError

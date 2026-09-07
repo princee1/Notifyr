@@ -4,7 +4,7 @@ from fastapi import Body, Depends, Header, Request, Response,status
 from fastapi.responses import StreamingResponse
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import ConfigDict
-from app.classes.auth_permission import AuthPermission, ClientType, MustHaveWhen, Role
+from app.classes.auth_permission import AuthPermission, ClientTokenInfo, ClientType, MustHaveWhen, Role
 from app.classes.conversation import Message, Reply, Session, User
 from app.classes.embeddings import EmbeddingModel, EmbeddingWrapper
 from app.classes.mongo import MongoFindFilter
@@ -22,7 +22,7 @@ from app.depends.variables import SourceMode,source_mode_query
 from app.errors.agent_error import AgentDependencyError, AgentToolDoesNotExistError, SemanticAgentAlreadyExistError, SubAgentContainsSubAgentError
 from app.errors.depends_error import DataSourceNotSupportedError
 from app.manager.broker_manager import Broker
-from app.depends.dependencies import get_auth_permission, get_request_id
+from app.depends.dependencies import get_auth_permission, get_client_info, get_request_id
 from app.manager.merchant_manager import Merchant
 from app.models.odm.agents_model import AgentModel, PromptPlaygroundModel
 from app.models.odm.tools_model import SubAgentToolModel, ToolModel

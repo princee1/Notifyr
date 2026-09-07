@@ -1,7 +1,7 @@
 from typing import Annotated, List
 from fastapi import Depends, File, HTTPException, Request, Response, UploadFile,status
 from validators.uri import uri
-from app.classes.auth_permission import AuthPermission, Role
+from app.classes.auth_permission import AuthPermission, ClientTokenInfo, Role
 from app.classes.embeddings import ComparableEmbeddings, EmbeddingWrapper, EmbeddingModel
 from app.container import Get, InjectInMethod
 from app.cost.ingest_cost import DeleteDocumentIngestCost, FileIngestCost, CrawlMarkdownIngestCost, ResearchMarkdownIngestCost
@@ -11,7 +11,7 @@ from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.pipes import  DataClassToDictPipe, GraphRelationshipPipe, MerchantPipe, MiniServiceInjectorPipe, QueryToModelPipe, update_status_upon_no_metadata_pipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, LockService
 from app.depends.class_dep import EmbeddingSimilarity, FileDataIngestQuery
-from app.depends.dependencies import get_auth_permission, get_request_id
+from app.depends.dependencies import get_auth_permission, get_client_info, get_request_id
 from app.depends.funcs_dep import get_profile
 from app.manager.broker_manager import Broker
 from app.manager.merchant_manager import Merchant

@@ -1,9 +1,9 @@
 from fastapi import Depends, Response
 
-from app.classes.auth_permission import AuthPermission
+from app.classes.auth_permission import AuthPermission, ClientTokenInfo
 from app.container import InjectInMethod
 from app.definition._ressource import BaseHTTPRessource, HTTPRessource
-from app.depends.dependencies import get_auth_permission
+from app.depends.dependencies import get_auth_permission, get_client_info
 from app.services.config_service import ConfigService
 from app.services.workflow_service import WorkflowService
 

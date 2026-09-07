@@ -1,11 +1,11 @@
 from fastapi import Depends, Response, Request, status
 from pydantic import BaseModel
-from app.classes.auth_permission import AuthPermission, Role
+from app.classes.auth_permission import AuthPermission, ClientTokenInfo, Role
 from app.container import InjectInMethod
 from app.decorators.handlers import FastAPIHandler, WebSocketHandler
 from app.decorators.permissions import BalancerPermission, JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPRessource, HTTPStatusCode, UseHandler, UseLimiter, UsePermission, UseRoles
-from app.depends.dependencies import get_auth_permission
+from app.depends.dependencies import get_auth_permission, get_client_info
 from app.services.worker.celery_service import CeleryService
 from app.services.worker.task_service import  TaskService
 from app.services.config_service import ConfigService, WorkerService
