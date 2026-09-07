@@ -15,7 +15,7 @@ from app.services.cost_service import CostService
 from app.services.database.redis_service import RedisService
 from app.services.vault_service import VaultService
 from app.services.security_service import SecurityService,JWTAuthService
-from app.classes.auth_permission import AuthPermission, AuthType, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission,FuncMetaData, TokensModel, filter_asset_permission
+from app.classes.auth_permission import AuthPermission, AuthType, ClientTokenInfo, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission,FuncMetaData, TokensModel, filter_asset_permission
 from app.utils.constant import HTTPHeaderConstant
 from app.utils.globals import CAPABILITIES
 from app.utils.helper import SliceMode, flatten_dict
@@ -29,17 +29,17 @@ class JWTRouteHTTPPermission(Permission):
         self.accept_inactive = accept_inactive
         self.accept_expired = accept_expired
     
-    def permission(self,class_name:str, func_meta:FuncMetaData, authPermission:AuthPermission):
+    def permission(self,class_name:str, func_meta:FuncMetaData, authPermission:AuthPermission,clientInfo:ClientTokenInfo):
         
         if authPermission == None:
             raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED,detail="Auth Permission not implemented")
         
-        if authPermission['auth_type'] == AuthType.ACCESS_TOKEN:
+        if clientInfo['auth_type'] == AuthType.ACCESS_TOKEN:
 
-            if authPermission['status'] == 'inactive' and not self.accept_inactive:
+            if clientInfo['status'] == 'inactive' and not self.accept_inactive:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Permission not active")
             
-            if authPermission['status'] == 'expired' and not self.accept_expired:
+            if clientInfo['status'] == 'expired' and not self.accept_expired:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Permission expired")
         
         if authPermission['client_type'] == ClientType.Admin:

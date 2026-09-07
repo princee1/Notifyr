@@ -32,7 +32,7 @@ from app.errors.service_error import MiniServiceAlreadyExistsError,MiniServiceDo
 from app.errors.async_error import KeepAliveTimeoutError, LockNotFoundError, ReactiveSubjectNotFoundError
 from app.errors.contact_error import ContactAlreadyExistsError, ContactMissingInfoKeyError, ContactNotExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
 from app.errors.properties_error import GlobalKeyAlreadyExistsError, GlobalKeyDoesNotExistsError
-from app.errors.security_error import AlreadyBlacklistedClientError, AuthzIdMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError
+from app.errors.security_error import IdentityAlreadyBlacklistedError, AuthzSignatureMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupDoesNotExistError, GroupIdNotMatchError, IdentityBlacklistedError, ProvidedHashNotEquivalentError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError
 from app.errors.twilio_error import TwilioCallBusyError, TwilioCallFailedError, TwilioCallNoAnswerError, TwilioPhoneNumberParseError
 from app.classes.profiles import ProfileModelRequestBodyError, ProfileDoesNotExistsError, ProfileHasNotCapabilitiesError, ProfileModelTypeDoesNotExistsError, ProfileNotAvailableError, ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
 from app.services.assets_service import AssetConfusionError, AssetNotFoundError, AssetTypeNotAllowedError, AssetTypeNotFoundError
@@ -395,18 +395,11 @@ class TortoiseHandler(Handler):
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
                                 'message': 'ORM error', 'detail': mess, })
 
-class SecurityClientHandler(Handler):
+class AuthClientHandler(Handler):
 
     async def handle(self, function, *args, **kwargs):
         try:
             return await function(*args, **kwargs)
-
-        except GroupAlreadyBlacklistedError as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
-                'message': f'Group {e.group_id} is already blacklisted',
-                'group_id': e.group_id,
-                'group_name': e.group_name
-            })
 
         except CouldNotCreateRefreshTokenError as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
@@ -435,7 +428,7 @@ class SecurityClientHandler(Handler):
                 'message': 'Client does not exist'
             })
 
-        except AlreadyBlacklistedClientError as e:
+        except IdentityAlreadyBlacklistedError as e:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={
                 'message': 'Client is already blacklisted'if not e.reversed_ else 'Client is not blacklisted yet',
             })
@@ -445,10 +438,24 @@ class SecurityClientHandler(Handler):
                 'message': 'Client token header not provided',
             })
 
-        except AuthzIdMisMatchError as e:
+        except AuthzSignatureMisMatchError as e:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={
-                'message': 'Authorization ID mismatch',
+                'message': 'Authorization Signature mismatch',
             })
+        
+        except GroupDoesNotExistError as e:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={
+                'message': 'Group does not exist',
+                'group_id': e.group_id
+            })
+    
+        except IdentityBlacklistedError as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={
+                'message': f'{e.identity_type} {e.identity} is blacklisted',
+                'identity': e.identity,
+                'identity_type': e.identity_type
+            })
+
 
 class ValueErrorHandler(Handler):
 
@@ -1419,3 +1426,14 @@ class DataSourceHandler(Handler):
             return await super().handle(function, *args, **kwargs)
         except DataSourceNotSupportedError as e:
             raise  
+
+class SecurityHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await super().handle(function, *args, **kwargs)
+        except ProvidedHashNotEquivalentError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={'message': 'Provided value does not match the expected hash'}
+            )

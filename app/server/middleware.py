@@ -81,25 +81,26 @@ class JWTAuthMiddleware(MiddleWare):
     async def dispatch(self,  request: Request, call_next: Callable[..., Response]):
         try:  
             token = get_bearer_token_from_request(request)
-            client_ip = get_client_ip(request) #TODO : check wether we must use the scope to verify the client
-            origin = ...
-
             clientInfo: ClientTokenInfo = self.jwtService.verify_client_token_permission(token)
             client_id = clientInfo['client_id']
-            group_id = clientInfo['group_id']
+            group_id = clientInfo.get('group_id',None)
 
             async with self.adminService.lock('reader',client_id) as clientService:
                 client = clientService.client
-                #TODO check group id
+                client_ip = get_client_ip(request) #TODO : check wether we must use the scope to verify the client
+                
+                clientService.verify_client_origin(client_ip)
+                clientService.compare_auth_signature(clientInfo['auth_signature'])
+
                 if not client.authenticated:
                     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Client is not authenticated")
-
+                
                 if client.client_type != ClientType.Admin: 
                     if await BlacklistORMCache.Cache([group_id,client_id],client):
                         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Client is blacklisted")
-
+                
                 request.state.clientInfo = clientInfo
-                request.state.authPermission = client.authPermission
+                request.state.authPermission = clientService.authPermission
 
         except HTTPException as e:
             return JSONResponse(e.detail,e.status_code,e.headers)

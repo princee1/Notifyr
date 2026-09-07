@@ -271,7 +271,7 @@ class VaultConstant:
     SETTINGS_SECRETS='setting'
     INTERNAL_API_SECRETS='internal'
 
-    NotifyrTransitKeyType = Literal['profiles-key','messages-key','chat-key','s3-rest-key']
+    NotifyrTransitKeyType = Literal['profiles-key','messages-key','chat-key','s3-rest-key','security-key']
     SECRETS_MESSAGE_KEY = 'messages-key'
     PROFILES_KEY = 'profiles-key'
     CHAT_KEY='chat-key'

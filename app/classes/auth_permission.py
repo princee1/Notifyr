@@ -1,5 +1,5 @@
 from typing import Any, Callable, List, Literal,Dict,NotRequired, Optional, Self
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
 from typing_extensions import TypedDict
 from enum import Enum
 
@@ -7,7 +7,7 @@ from app.classes.cost_definition import SimpleTaskCostDefinition
 from .template import Extension
 from app.definition._error import BaseError
 from app.utils.fileIO import is_file
-from app.utils.helper import filter_paths, subset_model
+from app.utils.helper import filter_paths, generateId, subset_model
 
 PermissionScope= Literal['custom','all']
 
@@ -154,9 +154,11 @@ class PolicyModel(BaseModel):
     allowed_agents:List[str] = Field(default_factory=list)
     allowed_routes: Dict[str, RoutePermissionModel] = Field(default_factory=dict)
     allowed_mcp: Optional[MCPPermissionModel] = None
-    allowed_assets: List[str] =[]
-    allowed_blog: List[str] = []
-    roles: Optional[List[Role]] = [Role.PUBLIC]
+    allowed_assets: List[str] = Field(default_factory=list)
+    allowed_blog: List[str] = Field(default_factory=list)
+    roles: Optional[List[Role]] = Field(default_factory=lambda:[Role.PUBLIC])
+
+    _policy_id:str = PrivateAttr(default=None)
 
     @field_validator('allowed_assets')
     def filter_assets_paths(cls,allowed_assets):
@@ -172,6 +174,31 @@ class PolicyModel(BaseModel):
         #return roles
         return [r.value for r in roles]
 
+    def update(self,model:'PolicyModel',mode:PolicyUpdateMode):
+        match mode:
+            case 'merge':    
+                self.allowed_assets = list(set(model.allowed_assets + self.allowed_assets))
+                self.allowed_profiles = list(set(model.allowed_profiles +self.allowed_profiles))
+                self.allowed_agents = list(set(model.allowed_agents +self.allowed_agents))
+                self.allowed_blog = list(set(model.allowed_blog +self.allowed_blog))
+                self.roles = list(set(model.roles + self.roles))
+                self.allowed_routes = {**self.allowed_routes,**model.allowed_routes}
+            
+            case 'set':
+                self.allowed_assets = model.allowed_assets
+                self.allowed_profiles = model.allowed_profiles
+                self.roles = model.roles
+                self.allowed_routes = model.allowed_routes
+                self.allowed_blog = model.allowed_blog
+                self.allowed_agents = model.allowed_agents
+            
+            case 'delete':
+                self.allowed_assets = list(set(self.allowed_assets) - set(model.allowed_assets))
+                self.allowed_profiles = list(set(self.allowed_profiles) - set(model.allowed_profiles))
+                self.roles = list(set(self.roles) - set(model.roles))
+                self.allowed_blog = list(set(self.allowed_blog)-set(model.allowed_blog))
+                self.allowed_agents = list(set(self.allowed_agents) - set(model.allowed_agents))
+                self.allowed_routes = {k: v for k, v in self.allowed_routes.items() if k not in model.allowed_routes}
 
 def get_combined_policies(policies:list[PolicyModel]):
     roles= set()
@@ -252,6 +279,12 @@ class WSPermission(TypedDict):
 class WSPathNotFoundError(BaseError):
     ...
 
+class PoliciesNotMatchingError(BaseError):
+    ...
+
+    def __init__(self,policies:list[str]):
+        super().__init__(policies)
+        self.policies= policies
 
 def MustHave(role:Role):
 

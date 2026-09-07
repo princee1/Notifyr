@@ -1,9 +1,9 @@
-from typing import Optional, Self
+from typing import Any, Literal, Optional, Self
 from tortoise import Tortoise, fields, models
 from tortoise.contrib.pydantic import pydantic_model_creator
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
 from app.classes.auth_permission import AuthType, ClientType, Scope
-from app.utils.helper import generateId, uuid_v1_mc
+from app.utils.helper import generateId, subset_model, uuid_v1_mc
 from app.utils.validation import ipv4_subnet_validator, ipv4_validator,PasswordValidator
 from tortoise.contrib.postgres.fields import ArrayField
 
@@ -31,21 +31,22 @@ class GroupClientORM(models.Model):
 class ClientORM(models.Model):
     client_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     client_name = fields.CharField(max_length=50, unique=True, null=True)
+    client_email = fields.CharField(max_length=200,unique=True,null=False)
     client_username = fields.CharField(max_length=30, unique=True, null=False)
     client_description = fields.TextField()
     client_scope = fields.CharEnumField(enum_type=Scope, default=Scope.SoloDolo, max_length=25)
-    authenticated = fields.BooleanField(default=False)
-    password = fields.TextField()
-    password_salt = fields.TextField()
-    max_connection = fields.IntField(default=1)
-    current_connection_count = fields.IntField(default=0)
-    can_login = fields.BooleanField(default=False)
     client_type = fields.CharEnumField(enum_type=ClientType, default=ClientType.User, max_length=25)
+
     auth_type = fields.CharEnumField(enum_type=AuthType, default=AuthType.ACCESS_TOKEN, max_length=30)
     issued_for = fields.CharField(max_length=50, null=False, unique=True)
     group = fields.ForeignKeyField("security.GroupClientORM", related_name="group", on_delete=fields.SET_NULL, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
+
+    authenticated = fields.BooleanField(default=False)
+    max_connection = fields.IntField(default=1)
+    current_connection_count = fields.IntField(default=0)
+    can_login = fields.BooleanField(default=False)
 
     class Meta:
         schema = SCHEMA
@@ -72,7 +73,7 @@ class ClientORM(models.Model):
 
 class PolicyMappingORM(models.Model):
     mapping_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    policy = fields.ForeignKeyField("security.PolicyORM", related_name="mappings", on_delete=fields.CASCADE)
+    policy_id = fields.CharField(max_length=30, unique=True, null=False)
     client = fields.ForeignKeyField("security.ClientORM", related_name="policy_mappings", on_delete=fields.CASCADE, null=True)
     group = fields.ForeignKeyField("security.GroupClientORM", related_name="policy_mappings", on_delete=fields.CASCADE, null=True)
 
@@ -95,11 +96,11 @@ class PolicyMappingORM(models.Model):
 
 client_password_validator = PasswordValidator(12,60,)
 
-ClientModelBase = pydantic_model_creator(ClientORM, name="ClientORM", exclude=('created_at', 'updated_at','client_id',"authenticated","client_scope","group","password_salt","can_login","current_connection_count","client_username",))
+ClientModelBase = pydantic_model_creator(ClientORM, name="ClientORM", exclude=('created_at', 'updated_at','client_id',"authenticated","client_scope","group","can_login","current_connection_count","client_username",))
 
 class GroupModel(BaseModel):
     group_name: str
-    policy_ids: list[str] = []
+    policies: list[str] = []
 
     @field_validator('group_name')
     def parse_name(cls,group_name:str):
@@ -109,12 +110,15 @@ class GroupModel(BaseModel):
         return group_name.capitalize()
 
 class ClientModel(ClientModelBase):
-    
-    client_scope:Scope
-    group_id:str | None = None
-    policy_ids:list[str] =[]
-    client_description:str = ''
-    auth_type:AuthType = AuthType.ACCESS_TOKEN
+    password:str
+    client_scope:Scope = Field(Scope.SoloDolo)
+    group:str | None = Field(None)
+    client_description:str = Field(default=None,max_length=500)
+    policies:list[str] = Field(default_factory=list,max_length=30)
+    auth_type:AuthType = Field(AuthType.ACCESS_TOKEN)
+    max_connection:int =  Field(gt=1,le=5)
+
+    _client_id:str = PrivateAttr(default_factory=uuid_v1_mc)
 
     @model_validator(mode="after")
     def validate_ip_issuance(self)->Self:
@@ -125,20 +129,19 @@ class ClientModel(ClientModelBase):
         elif self.client_scope == Scope.SoloDolo:
             if not ipv4_validator(self.issued_for):
                 raise ValueError('Invalid ipv4 address')
+        else:
+            if self.issued_for !=None:
+                raise ValueError('Issued For must be Null')
         return self
+
+    @field_validator('policies')
+    def normalize_policies(self,val):
+        return list(set(val))
 
     @field_validator('password')
     def check_password(cls,password:str):
         return client_password_validator(password)
     
-    @field_validator('max_connection')
-    def validate_max_connection(cls,max_connection:int)->int:
-        if max_connection <1:
-            raise ValueError('max_connection must be greater than 0')
-        if max_connection >5:
-            raise ValueError('max_connection must be less than or equal to 5')
-        return max_connection
-
     @field_validator('client_type')
     def validate_client_type(cls,clientType:AuthType):
         if clientType == ClientType.Admin:
@@ -147,36 +150,27 @@ class ClientModel(ClientModelBase):
     
     @field_validator('client_description')
     def validate_description(cls,description:str)->str:
-        if len(description)>500:
-            raise ValueError('Description must be less than 500 characters')
         return description.strip()
 
-class UpdateClientModel(ClientModel):
-    client_scope:Scope|None = None
-    password:str|None = None
-    client_name:str | None = None
-    issued_for:str | None = None
-    client_description :str | None = None
 
-    #### Fields that wont be updated ######
-    auth_type:Optional[AuthType] = None
-    max_connection:Optional[int] = None
+UpdateClientModelBase = subset_model(ClientModel,'UpdateClientModelBase',include={'client_name','issued_for','client_email','client_description','client_scope','client_scope','password','policies'})
+class UpdateClientModel(UpdateClientModelBase):
 
-
+    remove_group:bool = Field(default=False)
+    
     @model_validator(mode="after")
     def validate_ip_issuance(self)->Self:
         if self.client_scope != None and self.issued_for!=None:
             return super().validate_ip_issuance()
-        if self.client_scope in [Scope.Domain,Scope.Free] and self.issued_for != None:
-            self.issued_for = generateId(20,True)
         
         return self
-    
-    @model_validator(mode="after")
-    def force_non_update(self):
-        self.auth_type = None
-        self.max_connection = None
 
+    @model_validator(mode="after")
+    def validate_group_modification(self):
+        if self.remove_group and self.group:
+            raise ValueError('We cant remove the group if the group is set to be modified')
+        return self
+    
     @field_validator('password')
     def check_password(cls, password):
         if password!=None:
@@ -188,12 +182,29 @@ class UpdateClientModel(ClientModel):
         if description!=None:
             return super().validate_description(description)
         return description
+
+    @field_validator('client_type')
+    def validate_client_type(cls,x:Any):
+        return x
+
+    @model_validator('policies')
+    def normalize_policies(cls,val):
+        if val!=None:
+            return super().normalize_policies(val)
+        return val
     
     # @model_validator(mode="after")
     # def final_validate(self) -> Self:
     #     if all([self.client_scope is None, self.password is None, self.client_name is None, self.issued_for is None,self.group_id]):
     #         raise ValueError('At least one field must be provided for update.')
     #     return self
+
+
+class BlacklistModel(BaseModel):
+    mode:Literal['group','client','token']
+    identity:str  = Field(min_length=1,max_length=500)
+    time:float = Field(3600,le=36000,ge=3600)
+    force:bool = Field(False)
 
 
 async def raw_revoke_challenges(client:ClientORM):

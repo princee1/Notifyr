@@ -2,18 +2,18 @@ import functools
 from typing import Annotated, Callable
 from fastapi import Depends, HTTPException, Header, Query, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, Role, filter_asset_permission
+from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, PolicyModel, Role, filter_asset_permission
 from app.container import Get
 from app.definition._error import ServerFileError
 from app.models.orm.contacts_model import ContactORM, ContentSubscriptionORM
 from app.models.orm.link_model import LinkORM
-from app.models.orm.security_model import ClientORM, GroupClientORM, PolicyMappingORM
+from app.models.orm.security_model import BlacklistModel, ClientORM, GroupClientORM, PolicyMappingORM
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.depends.dependencies import get_auth_permission, get_query_params, get_request_id, wrapper_auth_permission
-from tortoise.exceptions import OperationalError
 
-from app.utils.helper import filter_paths
+from app.services.vault_service import VaultService
+from app.utils.toolbox import RunInThreadPool
 from .variables import *
 
 
@@ -59,22 +59,10 @@ def ByPassAdminRole(bypass=False, skip=False):
     return depends
 
 
-@ByPassAdminRole()
-@AcceptNone('group_id')
-async def _get_group(group_id: str = None, gid: str = None, authPermission: AuthPermission = None) -> GroupClientORM:
-    if gid == 'id':
-        group = await GroupClientORM.filter(group_id=group_id).first()
-
-    elif gid == 'name':
-        group = await GroupClientORM.filter(group_name=group_id).first()
-
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid GID type")
-
+async def fetch_group(group:str) -> GroupClientORM:
+    group = await GroupClientORM.filter(group_id=group).first()
     if group == None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Group does not exist")
+        raise GroupDoesNotExistError(group)
 
     return group
 
@@ -179,25 +167,6 @@ async def get_subs_content(content_id: str, content_idtype: str = Query('id'), a
         raise HTTPException(
             404, {"message": "Subscription Content does not exists with those information"})
 
-async def get_client(client_id: str = Depends(get_query_params('client_id')), cid: str = Depends(get_query_params('cid', 'id')), authPermission: AuthPermission = Depends(get_auth_permission)):
-    try:
-        return await GetClient()(client_id=client_id, cid=cid, authPermission=authPermission)
-    except OperationalError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e.args[0])
-        )
-
-
-async def get_group(group_id: str = Query(''), gid: str = Query('id'), authPermission: AuthPermission = Depends(get_auth_permission)):
-    try:
-        return await _get_group(group_id=group_id, gid=gid, authPermission=authPermission)
-    except OperationalError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e.args[0])
-        )
-
 
 async def get_client_by_password(credentials: Annotated[HTTPBasicCredentials, Depends(HTTPBasic())], cid: str = Depends(get_query_params('cid', 'id'))):
     security: SecurityService = Get(SecurityService)
@@ -218,20 +187,6 @@ async def get_client_by_password(credentials: Annotated[HTTPBasicCredentials, De
     await client.save()
 
     return client
-
-
-@ByPassAdminRole()
-@AcceptNone('blacklist_id')
-async def _get_blacklist(blacklist_id: str = None):
-    blacklist = await BlacklistORM.filter(blacklist_id=blacklist_id).first()
-    if blacklist == None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail='Blacklist does not exists')
-    return blacklist
-
-
-async def get_blacklist(blacklist_id: str = Depends(get_query_params('blacklist_id', None))):
-    return await _get_blacklist(blacklist_id=blacklist_id)
 
 
 def GetLink(raise_file_error:bool,raise_err:bool=True):
@@ -264,9 +219,16 @@ def GetLink(raise_file_error:bool,raise_err:bool=True):
 
     return get_link
 
+@RunInThreadPool
+def fetch_policy(policy:str):
+    vaultService = Get(VaultService) 
+    params = vaultService.security_engine.read('policies',policy)
+    policy_obj = PolicyModel(**params)
+    policy_obj._policy_id = policy
+    return policy_obj
+
 def get_template(template:str):
     return template
-
 
 def get_profile(profile:str):
     return profile
@@ -274,9 +236,14 @@ def get_profile(profile:str):
 def get_agent(agent:str):
     return agent
 
+def get_policy(policy:str):
+    return policy
 
-def GetPolicy(skipPermission:bool):
+def get_group(group:str):
+    return group
 
-    async def get_policy(policy:str,authPermission:AuthPermission=Depends(wrapper_auth_permission)):
-        ...
-    return get_policy
+def get_client(client:str):
+    return client
+
+def get_blacklist(blacklist:BlacklistModel):
+    return blacklist

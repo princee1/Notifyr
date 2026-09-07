@@ -141,3 +141,8 @@ class TortoiseTransactionFailureError(BaseError):
         self.connection = connection
         self.attempts = attempts
         self.error = error
+
+class TortoiseTableRowsLimitReachedError(BaseError):
+    def __init__(self,limit:str,table:str):
+        self.limit = limit
+        self.table = table

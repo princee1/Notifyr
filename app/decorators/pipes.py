@@ -679,13 +679,29 @@ class DocumentFriendlyPipe(Pipe):
 
 class ObjectRelationalFriendlyPipe(Pipe):
 
-    def __init__(self,):
+    def __init__(self,mode:Literal['list','dict']='list',key:str=None):
+        self.mode = mode
+        self.key = key
         super().__init__(False)
     
-    def pipe(self,result):
-        if hasattr(result,'to_json'):
-            return result.to_json
-        return None
+    def pipe(self,result:list|Any):
+        if self.mode == 'list':
+            res = []
+        else:
+            res = {}
+        if not isinstance(result,list):
+            result = [result]
+
+        for r in result:
+            if hasattr(result,'to_json'):
+                if self.mode == 'list':
+                    res.append(r.to_json)
+                else:
+                    key = getattr(r,self.key,None)
+                    if not key:
+                        continue
+                    res[key] = r.to_json
+        return res
 
 class MiniServiceInjectorPipe(Pipe):
     def __init__(self,cls:Type[BaseMiniServiceManager],key:str='profile',strict_value:str=None):
@@ -840,13 +856,13 @@ class SParams(TypedDict):
     space:bool
 class SanitizePathParameterPipe(Pipe):
 
-    def __init__(self,params:SParams, service:bool = False,agent:bool=False,profile:bool=False,template:bool=False):
+    def __init__(self,params:SParams, service:bool = False,agent:bool=False,profile:bool=False,template:bool=False,client:bool=False):
         super().__init__(True)
         self.service = service
         self.agent = agent
         self.profile = profile
         self.template = template
-
+        self.client = client
         self.params = params
 
     def sanitize(self,text:str):
@@ -858,7 +874,7 @@ class SanitizePathParameterPipe(Pipe):
             text = text.replace(' ','')
         return text
 
-    async def pipe(self,service:str=None,agent:str=None,profile:str=None,template:str=None):
+    async def pipe(self,service:str=None,agent:str=None,profile:str=None,template:str=None,client:str=None):
         data = {}
         if service != None:
             data['service'] = self.sanitize(service)
@@ -868,5 +884,19 @@ class SanitizePathParameterPipe(Pipe):
             data['profile'] = self.sanitize(profile)
         if template!=None:
             data['template'] = self.sanitize(template)
+        if client != None:
+            data['client'] = self.sanitize(client)
+        
         return data
-    
+
+class FunctionInjectorPipe(Pipe):
+
+    def __init__(self,callable:Callable[...,Any],key:str):
+        super().__init__(True)
+        self.callable = callable
+        self.key = key
+        self.filter = False #NOTE Override the base parameter
+
+    async def pipe(self,*args,**kwargs):
+        result = await AsyncAPIFilterInject(self.callable)(*args,**kwargs)
+        return {self.key:result}

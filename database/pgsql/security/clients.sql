@@ -40,18 +40,20 @@ CREATE TABLE IF NOT EXISTS GroupClient (
 CREATE TABLE IF NOT EXISTS Client (
     client_id UUID DEFAULT public.uuid_generate_v1mc (),
     client_name VARCHAR(50) UNIQUE,
-    client_email VARCHAR(120) UNIQUE DEFAULT NULL,
+    client_email VARCHAR(200) UNIQUE,
     client_description TEXT DEFAULT NULL,
     client_username VARCHAR(30) UNIQUE DEFAULT 'notifyr-user-' || secure_random_string(12),
     client_scope Scope DEFAULT 'SoloDolo',
     auth_type AuthType DEFAULT 'ACCESS_TOKEN',
     client_type ClientType DEFAULT 'User',
     group_id UUID DEFAULT NULL,
+
     can_login BOOLEAN DEFAULT FALSE,
     max_connection INT DEFAULT 1,
     current_connection_count INT DEFAULT 0,
     issued_for VARCHAR(50) UNIQUE DEFAULT secure_random_string(20),
     authenticated BOOLEAN DEFAULT FALSE,
+    
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (client_id),
@@ -61,7 +63,7 @@ CREATE TABLE IF NOT EXISTS Client (
 
 CREATE TABLE IF NOT EXISTS PolicyMapping(
     mapping_id UUID DEFAULT public.uuid_generate_v1mc(),
-    policy_id UUID,
+    policy_id VARCHAR(30),
     client_id UUID DEFAULT NULL,
     group_id UUID DEFAULT NULL,
     PRIMARY KEY (mapping_id),
@@ -69,7 +71,6 @@ CREATE TABLE IF NOT EXISTS PolicyMapping(
         (client_id IS NOT NULL AND group_id IS NULL) OR
         (client_id IS NULL AND group_id IS NOT NULL)
     ),
-    FOREIGN KEY (policy_id) REFERENCES Policy (policy_id) ON DELETE CASCADE ON UPDATE CASCADE,
     FOREIGN KEY (group_id) REFERENCES GroupClient (group_id) ON DELETE CASCADE ON UPDATE CASCADE,
     FOREIGN KEY (client_id) REFERENCES Client (client_id) ON DELETE CASCADE ON UPDATE CASCADE
 );

@@ -7,7 +7,7 @@ from app.definition._service import BaseService
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
 from app.depends.class_dep import TrackerInterface
-from app.errors.db_error import CollectionHardLimitReachedError
+from app.errors.db_error import CollectionHardLimitReachedError, TortoiseTableRowsLimitReachedError
 from app.errors.ingest_error import AgenticDatabaseNotAllowedError
 from app.errors.llm_error import LLMModelMaxTokenExceededError, LLMModelNotPermittedError, LLMProviderDoesNotExistError, LLMConfigNotConfiguredError
 from app.errors.service_error import MiniServiceDoesNotExistsError
@@ -20,8 +20,10 @@ from app.models.odm.llm_model import LLMProfileModel
 from app.models.otp_model import OTPModel
 from app.models.orm.security_model import ClientORM
 from app.services.admin_service import AdminService
+from app.services.agent.remote_agent_service import RemoteAgentService
 from app.services.cost_service import CostService
 from app.services.database.mongoose_service import MongooseService
+from app.services.database.object_service import ObjectS3Service
 from app.services.file.file_service import FileService
 from app.services.profile_service import ProfileService
 from app.services.worker.task_service import TaskService
@@ -42,6 +44,8 @@ from app.errors.upload_error import (
 )
 from app.utils.globals import CAPABILITIES
 from app.services.agent.llm_service import LLMService
+
+from tortoise import models
 
 class CeleryTaskGuard(Guard):
     def __init__(self,task_names:list[str],task_types:list[TaskType]=[]):
@@ -266,10 +270,16 @@ class TrackGuard(Guard):
         return True,''
 
 class PolicyGuard(Guard):
+
+    @InjectInMethod()
+    def __init__(self,profileService:ProfileService,objectService:ObjectS3Service,remoteAgentService:RemoteAgentService):
+        super().__init__()
+        self.profileService = profileService
+        self.objectService = objectService
+        self.remoteAgentService = remoteAgentService
     
     def guard(self,policyModel:PolicyModel):
-        profileService:ProfileService = Get(ProfileService)
-        profiles_set=set(policyModel.allowed_profiles).difference(profileService.MiniServiceStore.ids)
+        profiles_set=set(policyModel.allowed_profiles).difference(self.profileService.MiniServiceStore.ids)
         if len(profiles_set) >= 1:
             return False,f'Those profiles does not exists at the moment: {profiles_set}'
     
@@ -466,6 +476,7 @@ class DataIngestDatabaseGuard(Guard):
 class MongooseHardLimitGuard(Guard):
     
     def __init__(self,limit:int |str,model:Type[BaseDocument]):
+        super().__init__()
         self.limit = limit
         self.model = model
         self.mongooseService = Get(MongooseService)
@@ -475,6 +486,19 @@ class MongooseHardLimitGuard(Guard):
         if count >= self.limit:
             raise CollectionHardLimitReachedError(self.limit,self.model._collection)
         
+        return True,''
+
+class TortoiseHardLimitGuard(Guard):
+    def __init__(self,limit:int,orm:Type[models.Model]):
+        super().__init__()
+        self.limit = limit
+        self.orm = orm
+
+    async def guard(self):
+        count = len(await self.orm.all())
+        if count >=self.limit:
+            raise TortoiseTableRowsLimitReachedError(self.limit,self.orm.meta.table)
+    
         return True,''
 
 

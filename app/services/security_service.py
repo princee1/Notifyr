@@ -3,6 +3,7 @@ from cachetools import cached,TTLCache
 from typing import Any, Dict, Literal
 from app.classes.secrets import ChaCha20SecretsWrapper
 from app.definition._interface import Interface, IsInterface
+from app.errors.security_error import ProvidedHashNotEquivalentError
 from app.errors.service_error import BuildWarningError
 from app.services.setting_service import SettingService
 from app.utils.constant import VaultConstant
@@ -274,13 +275,22 @@ class SecurityService(BaseService, EncryptDecryptInterface):
             print(e)
             raise BuildWarningError()
 
-    def hash(self, value, key, salt):
+    def hash(self, value:str, key:str, salt:bytes|str=None,algorithm=None):
+        if salt == None:
+            salt = generate_salt()
+        elif isinstance(salt,str):
+            salt = salt.encode()
+        else:
+            ...
         value_with_salt = value.encode() + salt
         hmac_obj = hmac.new(key.encode(), value_with_salt, hashlib.sha256)
-        return hmac_obj.hexdigest()
+        return hmac_obj.hexdigest(),salt.decode()
 
-    def compare_hash(self, stored_hash:str,provided_hash:str):
-        return hmac.compare_digest(stored_hash, provided_hash)
+    def compare_hash(self, stored_hash:str,provided:str,key:str,salt:bytes|str=None,algorithm=None):
+        provided_hash,_ = self.hash(provided,key,salt)
+        if not hmac.compare_digest(stored_hash, provided_hash):
+            raise ProvidedHashNotEquivalentError()
+        return True
     
     def verify_admin_signature(self,):
         ...

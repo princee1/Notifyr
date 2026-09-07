@@ -6,7 +6,7 @@ from uuid import UUID
 
 from aiohttp_retry import List
 from app.classes.auth_permission import AuthPermission
-from app.depends.funcs_dep import GetClient, GetLink, GetPolicy,Get_Contact
+from app.depends.funcs_dep import GetClient, GetLink,Get_Contact
 from app.models.orm.contacts_model import ContactORM, ContactSummary, ContentSubscriptionORM
 from app.models.orm.link_model import LinkORM
 from app.services.admin_service import AdminService

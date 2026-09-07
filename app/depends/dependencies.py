@@ -79,10 +79,6 @@ def get_bearer_token_from_request(request: Request):
     except KeyError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization header missing")
 
-def get_admin_token(request: Request = None):
-    if request:
-        return request.headers.get(HTTPHeaderConstant.ADMIN_KEY)
-    return APIKeyHeader(name=HTTPHeaderConstant.ADMIN_KEY)
 
 def get_auth_permission(request: Request):
     if not configService.SECURITY_FLAG:
@@ -131,11 +127,13 @@ def get_query_params(name,default=None,parse=False,return_none=False,raise_excep
         return value
     return depends
 
-
 def get_contact_token():
     return APIKeyHeader(name=HTTPHeaderConstant.CONTACT_TOKEN)
 
-
+def get_client_info(request:Request):
+    if not hasattr(request.state, "clientInfo") or request.state.clientInfo is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return request.state.clientInfo
 
 def get_session_id(request: Request):
     ...
