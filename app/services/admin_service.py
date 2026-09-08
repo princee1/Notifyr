@@ -129,15 +129,24 @@ class ClientMiniService(BaseMiniService):
         await self.client.save(ctx)
         return is_revoked
 
-    async def revoke_client(self,ctx=None):
+    async def revoke_client(self,ctx=None,authenticated:bool=False,can_login:bool=False):
         await self.create_auth_signature()
-        self.client.authenticated = False
+        self.client.authenticated = authenticated
+        if False:
+            self.client.can_login = can_login
         await self.client.save(ctx)
 
     async def delete_itself(self,ctx=None):
         await self.client.delete(ctx)
         await RunInThreadPool(self.vaultService.security_engine.delete('clients',self.miniService_id))
 
+    @property
+    def client_id(self):
+        return self.miniService_id
+
+    @property
+    def group_id(self):
+        return None if self.client.group == None else str(self.client.group.group_id)
 
 @Service(is_manager=True,links=[
             LinkDep(VaultService),
@@ -188,7 +197,7 @@ class AdminService(BaseMiniServiceManager[ClientMiniService]):
         if self.redisService.service_status != ServiceStatus.AVAILABLE:
             raise BuildFailureError("Could not synchronize secruity updates")
     
-    async def is_blacklisted(self, client: ClientORM) -> tuple[bool, float | None]:
+    async def is_blacklisted(self, client: ClientORM,token:str=True) -> tuple[bool, float | None]:
         ...
     
     @RunInThreadPool
@@ -202,15 +211,15 @@ class AdminService(BaseMiniServiceManager[ClientMiniService]):
     def unrevoke_all_tokens(self,version:int|None,destroy:bool,delete:bool,version_to_delete:list[int]=[]):
         self.vaultService.generation_engine.rollback('',self.jwtAuthService.gen_id_path,version,destroy,delete,version_to_delete)
 
-    def issue_auth(self,challenge:ChallengeORM,client:ClientORM):
+    def issue_auth(self,client:ClientMiniService):
 
-        group_id = None if not client.group_id else str(client.group_id)
-        refresh_token = self.jwtAuthService.encode_refresh_token(client_id=str(client.client_id),challenge=challenge.challenge_refresh, group_id=group_id)
+
+        refresh_token = self.jwtAuthService.encode_refresh_token()
 
         if refresh_token == None:
             raise CouldNotCreateRefreshTokenError()
 
-        auth_token = self.jwtAuthService.encode_auth_token(str(challenge.last_authz_id),str(client.client_id),challenge.challenge_auth, group_id)
+        auth_token = self.jwtAuthService.encode_auth_token()
 
         if auth_token == None:
             raise CouldNotCreateAuthTokenError()

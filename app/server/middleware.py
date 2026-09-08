@@ -2,9 +2,10 @@ from uuid import uuid4
 from fastapi.responses import JSONResponse
 from app.classes.auth_permission import AuthPermission, ClientTokenInfo, ClientType, filter_asset_permission, parse_authPermission_enum
 from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE
-from app.depends.orm_cache import BlacklistORMCache, ClientORMCache
+from app.depends.orm_cache import BlacklistClientCache, BlacklistGroupCache, ClientORMCache
 from app.errors.service_error import MiniServiceDoesNotExistsError
 from app.services.admin_service import AdminService
+from app.services.database.redis_service import RedisService
 from app.services.monitoring_service import MonitoringService
 from app.services.config_service import ConfigService, WorkerService
 from app.services.security_service import SecurityService, JWTAuthService
@@ -72,6 +73,7 @@ class JWTAuthMiddleware(MiddleWare):
         self.jwtService:JWTAuthService = Get(JWTAuthService)
         self.configService: ConfigService = Get(ConfigService)
         self.adminService: AdminService = Get(AdminService)
+        self.redisService: RedisService = Get(RedisService)
 
     @BypassOn(not configService.SECURITY_FLAG)
     @ExcludeOn(['/auth/generate/*','/contacts/manage/*'])
@@ -97,9 +99,15 @@ class JWTAuthMiddleware(MiddleWare):
                     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Client is not authenticated")
                 
                 if client.client_type != ClientType.Admin: 
-                    if await BlacklistORMCache.Cache([group_id,client_id],client):
-                        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Client is blacklisted")
-                
+                    async with self.redisService.redis_security.pipeline() as pipe:
+                        await BlacklistGroupCache.Get([group_id],redis=pipe) # group 
+                        await BlacklistClientCache.Get([client_id,''],redis=pipe) # client
+                        await BlacklistClientCache.Get([client_id,token],redis=pipe) # token
+                        flags = await pipe.execute()
+
+                    if any(flags):
+                        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"message": "Client is blacklisted","flags":flags})
+                       
                 request.state.clientInfo = clientInfo
                 request.state.authPermission = clientService.authPermission
 

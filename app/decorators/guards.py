@@ -7,6 +7,7 @@ from app.definition._service import BaseService
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
 from app.depends.class_dep import TrackerInterface
+from app.depends.orm_cache import BlacklistClientCache, BlacklistGroupCache
 from app.errors.db_error import CollectionHardLimitReachedError, TortoiseTableRowsLimitReachedError
 from app.errors.ingest_error import AgenticDatabaseNotAllowedError
 from app.errors.llm_error import LLMModelMaxTokenExceededError, LLMModelNotPermittedError, LLMProviderDoesNotExistError, LLMConfigNotConfiguredError
@@ -19,11 +20,12 @@ from app.models.orm.link_model import LinkORM
 from app.models.odm.llm_model import LLMProfileModel
 from app.models.otp_model import OTPModel
 from app.models.orm.security_model import ClientORM
-from app.services.admin_service import AdminService
+from app.services.admin_service import AdminService, ClientMiniService
 from app.services.agent.remote_agent_service import RemoteAgentService
 from app.services.cost_service import CostService
 from app.services.database.mongoose_service import MongooseService
 from app.services.database.object_service import ObjectS3Service
+from app.services.database.redis_service import RedisService
 from app.services.file.file_service import FileService
 from app.services.profile_service import ProfileService
 from app.services.worker.task_service import TaskService
@@ -167,11 +169,15 @@ class BlacklistClientGuard(Guard):
     def __init__(self):
         super().__init__()
         self.adminService = Get(AdminService)
+        self.redisService = Get(RedisService)
     
-    async def guard(self,client:ClientORM):
-        is_blacklist,_ =await self.adminService.is_blacklisted(client)
-
-        if is_blacklist:
+    async def guard(self,client:ClientMiniService):
+        async with self.redisService.redis_security.pipeline() as pipe:
+            if client.group_id!= None: 
+                await BlacklistGroupCache.Get([client.group_id],pipe)
+            await BlacklistClientCache.Get([client.client_id,''],pipe)
+            flags = await pipe.execute()
+        if any(flags):
             return False,'Client is blacklisted'
         return True,''
 

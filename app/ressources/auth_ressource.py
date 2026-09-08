@@ -15,7 +15,6 @@ from app.decorators.pipes import ForceClientPipe, RefreshTokenPipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, LockService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.depends.orm_cache import ClientORMCache
 from app.errors.security_error import AuthzSignatureMisMatchError, ClientDoesNotExistError,ClientTokenHeaderNotProvidedError, CouldNotCreateAuthTokenError
-from app.interface.issue_auth import IssueAuthInterface
 from app.models.orm.security_model import ClientORM, raw_revoke_auth_token, raw_revoke_challenges
 from app.services.admin_service import AdminService
 from app.services.config_service import ConfigService
@@ -43,12 +42,11 @@ AUTH_PREFIX = 'auth'
 @UseHandler(ServiceAvailabilityHandler,AuthClientHandler,AsyncIOHandler)
 @UsePermission(JWTRouteHTTPPermission(True))
 @HTTPRessource(REFRESH_AUTH_PREFIX)
-class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
+class RefreshAuthRessource(BaseHTTPRessource):
     
     @InjectInMethod()
     def __init__(self,adminService:AdminService,jwtService:JWTAuthService):
         BaseHTTPRessource.__init__(self)
-        IssueAuthInterface.__init__(self,adminService)
         self.jwtService = jwtService
 
     @UseLimiter(limit_value='1/day')  # VERIFY Once a month
@@ -116,7 +114,7 @@ class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
 @UseRoles([Role.ADMIN])
 @UseHandler(TortoiseHandler,ServiceAvailabilityHandler,AsyncIOHandler)
 @HTTPRessource(GENERATE_AUTH_PREFIX)
-class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
+class GenerateAuthRessource(BaseHTTPRessource):
     admin_roles = [Role.ADMIN,Role.CUSTOM,Role.CONTACTS,Role.SUBSCRIPTION,Role.REFRESH,Role.CLIENT,Role.PUBLIC]
     twilio_roles = admin_roles + [Role.TWILIO]
 
@@ -124,7 +122,6 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
     def __init__(self,adminService:AdminService,configService:ConfigService,jwtAuthService:JWTAuthService):
         BaseHTTPRessource.__init__(self)
         #BaseHTTPRessource.__init__(self,dependencies=[Depends(verify_admin_signature),Depends(verify_admin_token)])
-        IssueAuthInterface.__init__(self,adminService)
         self.configService = configService
         self.jwtAutService = jwtAuthService
 
@@ -183,7 +180,7 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         async def issue_twilio_auth(self,request:Request):
             twilioService:TwilioService = Get(TwilioService)
             auth_token, refresh_token = await self._create_superuser_auth(ClientType.Twilio)
-            status_code = await twilioService.update_env_variable(auth_token,refresh_token)
+            status_code = await twilioService.update_env_variable(auth_token,refresh_token) 
 
             if status_code == status.HTTP_200_OK:
                     return JSONResponse(status_code=status.HTTP_200_OK, content={ "message": "Tokens successfully issued"})
@@ -206,11 +203,11 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
         parse_authPermission_enum(authPermission)
         async with in_transaction():    
 
-            if not self.compare_authz_id(challenge,authPermission['authz_id']):
+            if not self.compare_authz_id(challenge,authPermission['authz_id']): # BUG
                 raise AuthzSignatureMisMatchError
             
             await raw_revoke_auth_token(client)
-            auth_token, refresh_token = await self.issue_auth(client)
+            auth_token, refresh_token = await self.issue_auth(client) # BUG
             
             await client.save()
         
@@ -236,7 +233,7 @@ class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
             
             funcMetaData:FuncMetaData = getattr(self.self_revoke_by_connect,'meta')
             jwtAuthPermission.permission(self.__class__.__name__,funcMetaData,authPermission)
-            await self._revoke_client(client)
+            await self._revoke_client(client) # BUG
         
         return JSONResponse(status_code=status.HTTP_200_OK,content={'message':'Successfully disconnect'})
 

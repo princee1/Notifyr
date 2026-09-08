@@ -178,22 +178,21 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Invalid token")
                 
-    def verify_client_token_permission(self, token: str) -> ClientTokenInfo:
+    def verify_client_token_permission(self, token: str,raise_on_expired=False) -> ClientTokenInfo:
 
         token = self._decode_token(token)
-        permission: ClientTokenInfo = ClientTokenInfo(**token)
+        clientInfo: ClientTokenInfo = ClientTokenInfo(**token)
         try:
-            self.set_status(permission,'auth')
-            # if permission['status'] == 'expired': # NOTE might accept expired
-            #     raise HTTPException(
-            #         status_code=status.HTTP_403_FORBIDDEN,  detail="Token expired")
-            if permission["generation_id"] != self.GENERATION_ID:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN, detail="Old Token not valid anymore")
-            return permission
+            self.set_status(clientInfo,'auth')
+            if clientInfo['status'] == 'expired' and raise_on_expired:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,  detail="Token expired")
+            
+            if clientInfo["generation_id"] != self.GENERATION_ID:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Old Token not valid anymore")
+            
+            return clientInfo
         except KeyError as e:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail='Data missing')
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Data missing')
 
     def verify_refresh_permission(self,tokens:str):
         token =self._decode_token(tokens)

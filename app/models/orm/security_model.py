@@ -199,7 +199,6 @@ class UpdateClientModel(UpdateClientModelBase):
     #         raise ValueError('At least one field must be provided for update.')
     #     return self
 
-
 class BlacklistModel(BaseModel):
     mode:Literal['group','client','token']
     identity:str  = Field(min_length=1,max_length=500)

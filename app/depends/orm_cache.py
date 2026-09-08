@@ -41,7 +41,7 @@ contactService:ContactsService = Get(ContactsService)
 class CacheInterface(Generic[T]):
 
     @staticmethod
-    async def Get(key:str|list[str])->T|None:
+    async def Get(key:str|list[str],redis=None)->T|None:
         """
         Retrieves an object from the Redis cache.
         Args:
@@ -52,7 +52,7 @@ class CacheInterface(Generic[T]):
         ...
 
     @staticmethod
-    async def Invalid(key:str|list[str])->None:
+    async def Invalid(key:str|list[str],redis=None)->None:
         """
         Invalidates (deletes) an object from the Redis cache.
         Args:
@@ -63,7 +63,7 @@ class CacheInterface(Generic[T]):
         ...
 
     @staticmethod
-    async def Store(key:str|list[str],obj:T=None,exp:int=0,**kwargs):
+    async def Store(key:str|list[str],obj:T=None,exp:int=0,redis=None,**kwargs):
         """
         Stores an object in the Redis cache.
         Args:
@@ -75,7 +75,7 @@ class CacheInterface(Generic[T]):
         ...
 
     @staticmethod
-    async def InvalidAll(mask:list[str]=None):
+    async def InvalidAll(mask:list[str]=None,redis=None):
         """
             Invalidates all cached ORM data.
 
@@ -207,7 +207,7 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],cache_key:int=R
         
         @kb
         @staticmethod
-        async def Store(key:str|list[str],obj:T=None,exp=expiry,**kwargs):
+        async def Store(key:str|list[str],obj:T=None,exp=expiry,redis=None,**kwargs):
 
             exp = Set_Expiry(exp)
             if obj == None:
@@ -232,13 +232,13 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],cache_key:int=R
             else:
                 temp = obj
             
-            return await redisService.store(REDIS_CACHE_KEY,key,temp,exp,nx)
+            return await redisService.store(REDIS_CACHE_KEY,key,temp,exp,nx,redis=redis)
         
         @kb
         @staticmethod
-        async def Get(key:str|list[str])->T|None:
+        async def Get(key:str|list[str],redis=None)->T|None:
             
-            obj = await redisService.retrieve(REDIS_CACHE_KEY,key)   
+            obj = await redisService.retrieve(REDIS_CACHE_KEY,key,redis=redis)   
             if obj == None:
                 print(f'Cache MISS key: {key} | prefix: {prefix}')
                 return None
@@ -250,11 +250,11 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],cache_key:int=R
         
         @kb
         @staticmethod
-        async def Invalid(key:str|list[str]):
-            return await redisService.delete(REDIS_CACHE_KEY,key)
+        async def Invalid(key:str|list[str],redis=None):
+            return await redisService.delete(REDIS_CACHE_KEY,key,redis=redis)
         
         @staticmethod
-        async def InvalidAll(mask:list[str]=None):
+        async def InvalidAll(mask:list[str]=None,redis=None):
 
             if isinstance(prefix,str):
                 p=prefix
@@ -267,16 +267,16 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],cache_key:int=R
                 
                 p=key_builder(mask)
 
-            return await redisService.delete_all(REDIS_CACHE_KEY,p,is_s_p)
+            return await redisService.delete_all(REDIS_CACHE_KEY,p,is_s_p,redis=redis)
 
         @Time
         @staticmethod
-        async def Cache(key,*args,expiry:int|None|Callable[[Any],int]=expiry,when_cond:Any=None,**kwargs)->T:
+        async def Cache(key,*args,expiry:int|None|Callable[[Any],int]=expiry,when_cond:Any=None,redis=None,**kwargs)->T:
             
             if not ORMCache.When(when_cond):
                 return await DB_Get(*args,**kwargs)
 
-            obj:T|None =  await ORMCache.Get(key)
+            obj:T|None =  await ORMCache.Get(key,redis=redis)
             if obj == None:
                 obj = await DB_Get(*args,**kwargs)
                 
@@ -289,7 +289,7 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],cache_key:int=R
                         return 
                     else:
                         expiry + randint(1,5)
-                await ORMCache.Store(key,obj,expiry)
+                await ORMCache.Store(key,obj,expiry,redis=redis)
             
             return obj
 
@@ -319,4 +319,5 @@ ClientORMCache = generate_cache_type(ClientORM,GetClient(True,True),prefix=['orm
 ContactORMCache = generate_cache_type(ContactORM,Get_Contact(True,True,),prefix='orm-contact',use_to_json=True)
 ContactSummaryORMCache = generate_cache_type(ContactSummary,contactService.read_contact,prefix='orm-contact-summary',use_to_json=False)
 
-BlacklistORMCache = generate_cache_type(bool,adminService.is_blacklisted,RedisConstant.SECURITY_DB,prefix=['orm-blacklist','client'],expiry=lambda o:o[1])
+BlacklistGroupCache = generate_cache_type(bool,lambda : True,RedisConstant.SECURITY_DB,prefix=['blacklist'],expiry=lambda o:o[1])
+BlacklistClientCache = generate_cache_type(bool,lambda:True,RedisConstant.SECURITY_DB,prefix=['blacklist','token'],expiry=lambda o:o[1])
