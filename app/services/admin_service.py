@@ -65,9 +65,11 @@ class ClientMiniService(BaseMiniService):
 
     @RunInThreadPool
     def create_auth_signature(self):
-        signature ={'signature': generateId(20)}
+        signature = generateId(20)
+        authSignature ={'signature': signature}
         path = f"{self.miniService_id}/auth-signature"
-        self.vaultService.security_engine.put('clients',signature,path)
+        self.vaultService.security_engine.put('clients',authSignature,path)
+        return signature
         
     def compare_auth_signature(self,signature:str):
         authSignature:AuthSignature = self.signature.to_plain()
@@ -79,6 +81,7 @@ class ClientMiniService(BaseMiniService):
         return
         
     def verify_client_origin(self,origin:str):
+        return
         match self.client.scope:
             case Scope.SoloDolo:
                 if origin != self.client.issued_for:
@@ -129,12 +132,13 @@ class ClientMiniService(BaseMiniService):
         await self.client.save(ctx)
         return is_revoked
 
-    async def revoke_client(self,ctx=None,authenticated:bool=False,can_login:bool=False):
-        await self.create_auth_signature()
-        self.client.authenticated = authenticated
-        if False:
+    async def revoke_itself(self,ctx=None,authenticated:bool|None=False,can_login:bool|None=False)->str:
+        if authenticated != None:
+            self.client.authenticated = authenticated
+        if can_login != None:
             self.client.can_login = can_login
         await self.client.save(ctx)
+        return await self.create_auth_signature()
 
     async def delete_itself(self,ctx=None):
         await self.client.delete(ctx)

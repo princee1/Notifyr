@@ -851,6 +851,35 @@ def UseRoles(roles: list[Role] = [], excludes: list[Role] = [], options: list[Ca
 
 ################################################################                           #########################################################
 
+
+def Headers(header:dict[str,str]|list[tuple[str,str]]):
+    if not isinstance(header,(dict,list)):
+        raise TypeError('Should be a dict or a list')
+
+    if isinstance(header,dict):
+        header = list(header.items())
+
+    def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
+        cls = common_class_decorator(func, Headers, header)
+        if cls != None:
+            return cls
+
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            if 'response' in kwargs and isinstance(kwargs['response'], Response):
+                response = kwargs['response']
+                response.raw_headers.extend(header)
+                
+            if asyncio.iscoroutinefunction(func):
+                return await func(*args, **kwargs)
+            else:
+                return func(*args, **kwargs)
+
+        return wrapper
+    
+    return decorator
+
+
 def HTTPStatusCode(code: int | str):
     """
     The `HTTPStatusCode` function is a decorator that sets the HTTP status code for a response based on

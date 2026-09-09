@@ -3,18 +3,17 @@ import time
 from typing import Annotated, Callable, get_args
 from fastapi import Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
-from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard, PolicyGuard, TortoiseHardLimitGuard
+from app.decorators.guards import AuthenticationClientGuard, BlacklistClientGuard, ClientAuthTypeGuard, PolicyGuard, TortoiseHardLimitGuard
 from app.decorators.interceptors import DataCostInterceptor
 from app.definition._cost import DataCost
-from app.definition._service import StateProtocol
+from app.definition._service import MiniStateProtocol, StateProtocol
 from app.depends.funcs_dep import fetch_group, fetch_policy, get_blacklist, get_group, get_client, get_policy
 from app.depends.orm_cache import WILDCARD, BlacklistClientCache, BlacklistGroupCache
 from app.depends.variables import SourceMode, _wrap_checker,source_mode_query
 from app.errors.depends_error import DataSourceNotSupportedError
 from app.manager.broker_manager import Broker
 from app.manager.merchant_manager import Merchant
-from app.models.orm.security_model import BlacklistModel, ClientModel, ClientORM, GroupClientORM, GroupModel, PolicyMappingORM, UpdateClientModel, raw_revoke_challenges
+from app.models.orm.security_model import BlacklistModel, ClientModel, ClientORM, GroupClientORM, GroupModel, PolicyMappingORM, UnRevokeGenerationIDModel, UpdateClientModel
 from app.services.admin_service import AdminService, AuthSignature, ClientMiniService
 from app.services.database.tortoise_service import TortoiseConnectionService,SECURITY_CREDS
 from app.services.profile_service import ProfileService
@@ -163,8 +162,9 @@ class ClientRessource(BaseHTTPRessource):
         async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
             is_revoked = await client.update_client(updateClient,group,ctx)
             await self.adminService.update_policy(updateClient.policies,mode,client,group,ctx)
-            if is_revoked: # ERROR Do i need the revoke the possibility to login again?
-                await client.revoke_client(ctx)
+            if is_revoked:
+                await client.revoke_itself(ctx,authenticated=False)
+                await BlacklistClientCache.InvalidAll([client.client_id,WILDCARD])
 
             broker.propagate(StateProtocol(service=AdminService))
             return client.client
@@ -183,8 +183,9 @@ class ClientRessource(BaseHTTPRessource):
         
         async def transaction():
             async with self.tortoiseService.transaction(SECURITY_CREDS,lock='reader') as ctx:
-                client.delete_itself(ctx)
-        
+                await client.delete_itself(ctx)
+                await BlacklistClientCache.InvalidAll([client.client_id,WILDCARD])
+
         merchant.safe_payment(
             None,
             None,
@@ -216,7 +217,6 @@ class ClientRessource(BaseHTTPRessource):
                     return client
             case _:
                 raise DataSourceNotSupportedError(source,['database','memory'])
-
 
     @PingService([VaultService])
     @UsePermission(AdminPermission)
@@ -270,12 +270,6 @@ class ClientRessource(BaseHTTPRessource):
 @LockService(TortoiseConnectionService,lockType='reader',infinite_wait=True,check_status=False)
 @HTTPRessource(ADMIN_PREFIX, routers=[ClientRessource,PolicyRessource])
 class AdminRessource(BaseHTTPRessource):
-
-    class UnRevokeGenerationIDModel(BaseModel):
-        version:int|None = None
-        destroy:bool = False
-        delete:bool = False
-        version_to_delete:list[int] = []
 
     @InjectInMethod()
     def __init__(self, configService: ConfigService, jwtAuthService: JWTAuthService, securityService: SecurityService,tortoiseService:TortoiseConnectionService,vaultService:VaultService,adminService:AdminService):
@@ -405,45 +399,43 @@ class AdminRessource(BaseHTTPRessource):
                                                                      "tokens": {"refresh_token": refresh_token, "auth_token": auth_token},})
 
     @UseLimiter(limit_value='1/day')
-    @LockService(JWTAuthService,lockType='reader')
+    @LockService(VaultService,JWTAuthService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/revoke-version/', methods=[HTTPMethod.GET],deprecated=True,mount=False)
     def check_version(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         return self.jwtAuthService.GENERATION_METADATA
 
     @UseHandler(ORMCacheHandler)
     @UseLimiter(limit_value='10/day')
-    @UseGuard(AuthenticatedClientGuard)
+    @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @PingService([VaultService,AdminService],is_manager=True)
-    @LockService(AdminService,lockType='reader',as_manager=True)
-    @LockService(VaultService,SettingService,JWTAuthService,lockType='reader')
+    @UseGuard(AuthenticationClientGuard,ClientAuthTypeGuard())
+    @UseHandler(AuthClientHandler,ORMCacheHandler,MiniServiceHandler)
+    @LockService(VaultService,SettingService,AdminService,JWTAuthService,lockType='reader',as_manager=True)
     @BaseHTTPRessource.HTTPRoute('/revoke/{client}/', methods=[HTTPMethod.DELETE])
-    async def revoke_tokens(self, request: Request, client: Annotated[ClientMiniService, Depends(get_client)], authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
-        async with self.tortoiseService.transaction(SECURITY_CREDS):    
-            await self._revoke_client(client)
-            client.can_login = False #QUESTION Can be set to True?
-            if client.can_login:
-                await self.change_authz_id(challenge)
-                
-            await client.save()
+    async def revoke_tokens(self,broker:Annotated[Broker,Depends(Broker)], request: Request, client: Annotated[ClientMiniService, Depends(get_client)], authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+        async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:    
+            await client.revoke_itself(ctx,can_login=True,authenticated=False)
+
+        broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id ))
         
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully revoked", "client": client.to_json})
 
     @UseLimiter(limit_value='4/day')
-    @UseHandler(AuthClientHandler,ORMCacheHandler)
-    @LockService(SettingService,lockType='reader')
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @PingService([VaultService,AdminService],is_manager=True)
-    @LockService(AdminService,lockType='reader',as_manager=True)
-    @UseGuard(BlacklistClientGuard, AuthenticatedClientGuard(reverse=True))
-    @BaseHTTPRessource.HTTPRoute('/issue-auth/', methods=[HTTPMethod.GET])
-    async def issue_auth_token(self, client: Annotated[ClientMiniService, Depends(get_client)], request: Request, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    @UseHandler(AuthClientHandler,ORMCacheHandler,MiniServiceHandler)
+    @LockService(VaultService,SettingService,AdminService,lockType='reader',as_manager=True)
+    @UseGuard(BlacklistClientGuard,ClientAuthTypeGuard(accept_access=False, accept_api=True), AuthenticationClientGuard(reverse=True),)
+    @BaseHTTPRessource.HTTPRoute('/issue-auth/{client}/', methods=[HTTPMethod.GET])
+    async def issue_auth_token(self,broker:Annotated[Broker,Depends(Broker)], client: Annotated[ClientMiniService, Depends(get_client)], request: Request, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         
         async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:    
-            await client.revoke_client(ctx)
-            authToken,refreshToken = self.adminService.issue_auth(client)
-
+            await client.revoke_itself(ctx)
+            await client.issue_auth()
+            
+            
         # TODO Only if the client as an auth type of API_TOKEN
-        
+        broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id ))
         return ...
         
 

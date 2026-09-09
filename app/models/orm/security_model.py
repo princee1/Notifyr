@@ -43,11 +43,10 @@ class ClientORM(models.Model):
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
 
-    authenticated = fields.BooleanField(default=False)
+    authenticated = fields.BooleanField(default=False) #NOTE Whether the client has been authenticated or not
     max_connection = fields.IntField(default=1)
     current_connection_count = fields.IntField(default=0)
-    can_login = fields.BooleanField(default=False)
-
+    can_login = fields.BooleanField(default=False) # NOTE Whether the client can login or not, this is different from authenticated, as a client can be authenticated but not allowed to login using its credentials, this is useful for clients that are only allowed to use the API but not allowed to login using the web interface.
     class Meta:
         schema = SCHEMA
         table = "client"
@@ -205,6 +204,11 @@ class BlacklistModel(BaseModel):
     time:float = Field(3600,le=36000,ge=3600)
     force:bool = Field(False)
 
+class UnRevokeGenerationIDModel(BaseModel):
+        version:int|None = None
+        destroy:bool = False
+        delete:bool = False
+        version_to_delete:list[int] = []
 
 async def raw_revoke_challenges(client:ClientORM):
     query = "SELECT security.raw_revoke_challenges($1::UUID);"

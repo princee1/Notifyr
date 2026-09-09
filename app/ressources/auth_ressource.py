@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from app.classes.auth_permission import AuthPermission, ClientTokenInfo, ClientType, FuncMetaData, MustHave, MustHaveRoleSuchAs, RefreshPermission, Role, TokensModel, parse_authPermission_enum
 from app.container import Get, InjectInMethod
-from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard
+from app.decorators.guards import AuthenticationClientGuard, BlacklistClientGuard
 from app.decorators.handlers import AsyncIOHandler, ORMCacheHandler, AuthClientHandler, ServiceAvailabilityHandler, TortoiseHandler
 from app.depends.funcs_dep import get_client_by_password
 from app.depends.security_funcs_dep import verify_admin_token
@@ -55,7 +55,7 @@ class RefreshAuthRessource(BaseHTTPRessource):
     @UseHandler(ORMCacheHandler)
     @LockService(SettingService,JWTAuthService,lockType='reader')
     @UsePermission(UserPermission,JWTRefreshTokenPermission)
-    @UseGuard(BlacklistClientGuard, AuthenticatedClientGuard,)
+    @UseGuard(BlacklistClientGuard, AuthenticationClientGuard,)
     @BaseHTTPRessource.HTTPRoute('/client/', methods=[HTTPMethod.GET, HTTPMethod.POST])
     async def refresh_auth_token(self,tokens:TokensModel, client: Annotated[ClientORM, Depends(get_client_from_request)], request: Request,client_id:str=Query(""), authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
         refreshPermission:RefreshPermission = tokens
@@ -191,7 +191,7 @@ class GenerateAuthRessource(BaseHTTPRessource):
     @UsePipe(ForceClientPipe)
     @UseHandler(AuthClientHandler,ORMCacheHandler)
     @UseRoles(roles=[Role.CLIENT]) # BUG need to revise
-    @UseGuard(BlacklistClientGuard,AuthenticatedClientGuard)
+    @UseGuard(BlacklistClientGuard,AuthenticationClientGuard)
     @LockService(SettingService,JWTAuthService,lockType='reader')
     @UsePermission(UserPermission(accept_none_auth=True))
     @BaseHTTPRessource.HTTPRoute('/client/authenticate/', methods=[HTTPMethod.POST])
@@ -217,7 +217,7 @@ class GenerateAuthRessource(BaseHTTPRessource):
     @UsePipe(ForceClientPipe)
     @UseLimiter(limit_value='1/day')
     @UseHandler(AuthClientHandler,ORMCacheHandler)
-    @UseGuard(AuthenticatedClientGuard)
+    @UseGuard(AuthenticationClientGuard)
     @UsePermission(UserPermission(accept_none_auth=True))
     @UseRoles(roles=[Role.CLIENT]) # BUG need to revise
     @BaseHTTPRessource.HTTPRoute('/client/disconnect/', methods=[HTTPMethod.DELETE])

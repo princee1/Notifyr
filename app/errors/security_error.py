@@ -42,7 +42,6 @@ class IdentityAlreadyBlacklistedError(BaseError):
 class ClientTokenHeaderNotProvidedError(BaseError):
     ...
 
-
 class AuthzSignatureMisMatchError(BaseError):
     def __init__(self, client_id:str):
         super().__init__(client_id)

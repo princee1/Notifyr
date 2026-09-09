@@ -1,5 +1,5 @@
-from typing import Any, List, Literal, Type
-from app.classes.auth_permission import AuthPermission, PolicyModel, RefreshPermission
+from typing import Any, Callable, List, Literal, Type
+from app.classes.auth_permission import AuthPermission, AuthType, PolicyModel, RefreshPermission
 from app.classes.cost_definition import CreditNotInPlanError
 from app.classes.mongo import BaseDocument
 from app.definition._error import ServerFileError
@@ -149,21 +149,56 @@ class TwilioLookUpPhoneGuard(Guard):
         return super().guard()
 
 
-class AuthenticatedClientGuard(Guard):
-    def __init__(self,reverse=False):
+class AuthenticationClientGuard(Guard):
+    def __init__(self,verify_can_login:bool=False,verify_authenticate:bool=False,reverse:bool=False):
         super().__init__()
+        self.verify_login = verify_can_login
+        self.verify_authenticate = verify_authenticate
         self.reverse = reverse
+
+        if not all([self.verify_login,self.verify_authenticate]):
+            raise ValueError('At least one of the verify_can_login or verify_authenticate must be set to True')
        
-    def guard(self,client:ClientORM):
-        if self.reverse:
-            if client.authenticated:
-                return False,'Client is authenticated'
-            return True,''
+    def guard(self,client:ClientMiniService):
+        if self.verify_authenticate:
+            if self.reverse:
+                if client.client.authenticated:
+                    return False,'Client is already authenticated'
+                return True,''
+            
+            if not client.client.authenticated:
+                return False,'Client is not authenticated'
         
-        if not client.authenticated:
-            return False,'Client is not authenticated'
+        if self.verify_login:
+            if self.reverse:
+                if client.client.can_login:
+                    return False,'Client is already allowed to login'
+                return True,''
+            
+            if not client.client.can_login:
+                return False,'Client is not allowed to login'
+        
         return True,''
 
+
+class ClientAuthTypeGuard(Guard):
+    def __init__(self,accept_access:bool=True,accept_api:bool=True,message:Callable[...,str]= lambda a: f'Auth type:{a} is not accepted'):
+        super().__init__()
+        self.accept_access = accept_access
+        self.accept_api = accept_api
+        self.message = message
+
+        if not all([self.accept_access,self.accept_api]):
+            raise ValueError('At least one of the access or api must be set to True')
+    
+    def guard(self,client:ClientMiniService):
+        if client.client.auth_type == AuthType.ACCESS_TOKEN and not self.accept_access:
+            return False,self.message(client.client.auth_type)
+        
+        if client.client.auth_type == AuthType.API_TOKEN and not self.accept_api:
+            return False,self.message(client.client.auth_type)
+        
+        return True,''
 
 class BlacklistClientGuard(Guard):
     def __init__(self):
@@ -307,7 +342,6 @@ class GlobalsTemplateGuard(Guard):
 
         return True,''
 
-
 class CeleryBrokerGuard(Guard): 
 
     _not_allowed_redis_eta = {TaskType.DATETIME,TaskType.TIMEDELTA}
@@ -334,7 +368,6 @@ class CeleryBrokerGuard(Guard):
 
         return True,''
     
-
 class UploadFilesGuard(Guard):
 
     def __init__(self, max_files: int = 5, max_files_size: int | None = None, max_size: int | None = None, allowed_extensions: List[str] | None = None):
@@ -410,7 +443,6 @@ class ArqDataTaskGuard(Guard):
         
         return True,""
         
-    
 class CreditPlanGuard(Guard):
 
     @InjectInMethod()
@@ -423,7 +455,6 @@ class CreditPlanGuard(Guard):
             raise CreditNotInPlanError(credit)
         
         return True,""
-
 
 class LLMProviderGuard(Guard):
 
@@ -460,7 +491,6 @@ class LLMProviderGuard(Guard):
 
         return True,""
             
-
 class DataIngestDatabaseGuard(Guard):
 
     def __init__(self,accept_vector:bool=True,accept_graphiti:bool = True):
@@ -477,7 +507,6 @@ class DataIngestDatabaseGuard(Guard):
 
         if not self.accept_vector and ingestTask.vector_config != None:
             raise AgenticDatabaseNotAllowedError('vector')
-
 
 class MongooseHardLimitGuard(Guard):
     
@@ -506,7 +535,6 @@ class TortoiseHardLimitGuard(Guard):
             raise TortoiseTableRowsLimitReachedError(self.limit,self.orm.meta.table)
     
         return True,''
-
 
 class ServiceStatusGuard(Guard):
     def __init__(self,services:List[Type[BaseService]]):

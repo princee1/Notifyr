@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 from app.classes.auth_permission import AuthPermission, ClientTokenInfo, ClientType, filter_asset_permission, parse_authPermission_enum
 from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE
 from app.depends.orm_cache import BlacklistClientCache, BlacklistGroupCache, ClientORMCache
+from app.errors.security_error import SecurityIdentityNotResolvedError
 from app.errors.service_error import MiniServiceDoesNotExistsError
 from app.services.admin_service import AdminService
 from app.services.database.redis_service import RedisService
@@ -68,6 +69,7 @@ class LoadBalancerMiddleWare(MiddleWare):
 
 class JWTAuthMiddleware(MiddleWare):
     priority = MiddlewarePriority.AUTH
+
     def __init__(self, app, dispatch=None) -> None:
         super().__init__(app, dispatch)
         self.jwtService:JWTAuthService = Get(JWTAuthService)
@@ -84,23 +86,25 @@ class JWTAuthMiddleware(MiddleWare):
         try:  
             token = get_bearer_token_from_request(request)
             clientInfo: ClientTokenInfo = self.jwtService.verify_client_token_permission(token)
-            client_id = clientInfo['client_id']
-            group_id = clientInfo.get('group_id',None)
+            client_id = clientInfo.get('client_id',None)
+
+            if not client_id:
+                raise SecurityIdentityNotResolvedError(None,'Cannot identify the client since the client_id is not provided')
 
             async with self.adminService.lock('reader',client_id) as clientService:
-                client = clientService.client
-                clientInfo['client_type'] = client.client_type
+                clientInfo['client_type'] = clientService.client.client_type
                 client_ip = get_client_ip(request) #TODO : check wether we must use the scope to verify the client
                 
                 clientService.verify_client_origin(client_ip)
                 clientService.compare_auth_signature(clientInfo['auth_signature'])
 
-                if not client.authenticated:
+                if not clientService.client.authenticated:
                     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Client is not authenticated")
                 
-                if client.client_type != ClientType.Admin: 
+                if clientService.client.client_type != ClientType.Admin: 
                     async with self.redisService.redis_security.pipeline() as pipe:
-                        await BlacklistGroupCache.Get([group_id],redis=pipe) # group 
+                        if clientService.group_id:
+                            await BlacklistGroupCache.Get([clientService.group_id],redis=pipe) # group 
                         await BlacklistClientCache.Get([client_id,''],redis=pipe) # client
                         await BlacklistClientCache.Get([client_id,token],redis=pipe) # token
                         flags = await pipe.execute()
@@ -115,7 +119,10 @@ class JWTAuthMiddleware(MiddleWare):
             return JSONResponse(e.detail,e.status_code,e.headers)
 
         except MiniServiceDoesNotExistsError as e:
-            return 
+            return JSONResponse(status_code= status.HTTP_401_UNAUTHORIZED)
+        
+        except SecurityIdentityNotResolvedError as e:
+            return JSONResponse({'message':e.reason},status_code= status.HTTP_401_UNAUTHORIZED)
 
         return await call_next(request)
 class CustomSlowApiMiddleware(SlowAPIMiddleware):
