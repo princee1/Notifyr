@@ -2,10 +2,10 @@ from datetime import timedelta
 from typing import TypedDict
 
 from tortoise.expressions import Q
-from app.classes.auth_permission import AuthPermission, PolicyModel, PolicyUpdateMode, Scope, filter_asset_permission, get_combined_policies, parse_authPermission_enum
+from app.classes.auth_permission import AuthPermission, AuthType, PolicyModel, PolicyUpdateMode, Scope, filter_asset_permission, get_combined_policies, parse_authPermission_enum
 from app.classes.secrets import ChaCha20SecretsWrapper
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BaseService, BuildFailureError, LinkDep, MiniService, Service, ServiceStatus
-from app.errors.security_error import CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError,IdentityAlreadyBlacklistedError
+from app.errors.security_error import CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError,IdentityAlreadyBlacklistedError, PasswordLessAuthTypeStrategyError
 from app.models.orm.security_model import ClientORM, GroupClientORM, PolicyMappingORM, UpdateClientModel
 from app.services.config_service import ConfigService
 from app.services.database.redis_service import RedisService
@@ -30,7 +30,7 @@ class ClientMiniService(BaseMiniService):
         super().__init__(None, id)
         self.vaultService = vaultService
         self.configService = configService
-        self.jwService = jwtService
+        self.jwtService = jwtService
         self.securityService = securityService
         self.client = client
         self.authPermission:AuthPermission = self.combine_policy(policies)
@@ -112,6 +112,8 @@ class ClientMiniService(BaseMiniService):
             is_revoked = True
 
         if updateClient.password:
+            if self.client.auth_type == AuthType.API_TOKEN:
+                raise PasswordLessAuthTypeStrategyError('')
             password,salt = await self.encrypt_password(updateClient.password)
             await self.store_password(password,salt)
 
@@ -132,17 +134,32 @@ class ClientMiniService(BaseMiniService):
         await self.client.save(ctx)
         return is_revoked
 
-    async def revoke_itself(self,ctx=None,authenticated:bool|None=False,can_login:bool|None=False)->str:
+    async def revoke_itself(self,ctx=None,authenticated:bool|None=False)->str:
         if authenticated != None:
             self.client.authenticated = authenticated
-        if can_login != None:
-            self.client.can_login = can_login
         await self.client.save(ctx)
         return await self.create_auth_signature()
 
     async def delete_itself(self,ctx=None):
         await self.client.delete(ctx)
         await RunInThreadPool(self.vaultService.security_engine.delete('clients',self.miniService_id))
+
+    async def generate_access(self,ctx,signature:str,refresh:bool=True):
+        refresh_token = None
+        auth_token = self.jwtService.encode_auth_token(signature)
+
+        if auth_token == None:
+            raise CouldNotCreateAuthTokenError()
+        
+        if refresh:
+            refresh_token = self.jwtService.encode_refresh_token(signature)
+            if refresh_token == None:
+                raise CouldNotCreateRefreshTokenError()
+
+        self.client.authenticated = True
+        await self.client.save(ctx)
+        
+        return auth_token,refresh_token
 
     @property
     def client_id(self):
@@ -214,18 +231,3 @@ class AdminService(BaseMiniServiceManager[ClientMiniService]):
     @RunInThreadPool
     def unrevoke_all_tokens(self,version:int|None,destroy:bool,delete:bool,version_to_delete:list[int]=[]):
         self.vaultService.generation_engine.rollback('',self.jwtAuthService.gen_id_path,version,destroy,delete,version_to_delete)
-
-    def issue_auth(self,client:ClientMiniService):
-
-
-        refresh_token = self.jwtAuthService.encode_refresh_token()
-
-        if refresh_token == None:
-            raise CouldNotCreateRefreshTokenError()
-
-        auth_token = self.jwtAuthService.encode_auth_token()
-
-        if auth_token == None:
-            raise CouldNotCreateAuthTokenError()
-        
-        return auth_token,refresh_token

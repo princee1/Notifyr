@@ -31,8 +31,8 @@ class JWTRouteHTTPPermission(Permission):
     
     def permission(self,class_name:str, func_meta:FuncMetaData, authPermission:AuthPermission,clientInfo:ClientTokenInfo):
         
-        if authPermission == None:
-            raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED,detail="Auth Permission not implemented")
+        if authPermission == None or clientInfo == None:
+            raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED,detail="Could not identify the user not implemented")
         
         if clientInfo['auth_type'] == AuthType.ACCESS_TOKEN:
 

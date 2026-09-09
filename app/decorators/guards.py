@@ -1,5 +1,5 @@
 from typing import Any, Callable, List, Literal, Type
-from app.classes.auth_permission import AuthPermission, AuthType, PolicyModel, RefreshPermission
+from app.classes.auth_permission import AuthPermission, AuthType, ClientType, PolicyModel, RefreshPermission
 from app.classes.cost_definition import CreditNotInPlanError
 from app.classes.mongo import BaseDocument
 from app.definition._error import ServerFileError
@@ -11,6 +11,7 @@ from app.depends.orm_cache import BlacklistClientCache, BlacklistGroupCache
 from app.errors.db_error import CollectionHardLimitReachedError, TortoiseTableRowsLimitReachedError
 from app.errors.ingest_error import AgenticDatabaseNotAllowedError
 from app.errors.llm_error import LLMModelMaxTokenExceededError, LLMModelNotPermittedError, LLMProviderDoesNotExistError, LLMConfigNotConfiguredError
+from app.errors.security_error import ClientDoesNotExistError
 from app.errors.service_error import MiniServiceDoesNotExistsError
 from app.manager.task_manager import TaskManager
 from app.models.odm.agents_model import AgentModel
@@ -148,7 +149,6 @@ class TwilioLookUpPhoneGuard(Guard):
     def guard(self):
         return super().guard()
 
-
 class AuthenticationClientGuard(Guard):
     def __init__(self,verify_can_login:bool=False,verify_authenticate:bool=False,reverse:bool=False):
         super().__init__()
@@ -171,15 +171,14 @@ class AuthenticationClientGuard(Guard):
         
         if self.verify_login:
             if self.reverse:
-                if client.client.can_login:
+                if client.client.auth_type == AuthType.ACCESS_TOKEN:
                     return False,'Client is already allowed to login'
                 return True,''
             
-            if not client.client.can_login:
+            if client.client.auth_type == AuthType.API_TOKEN:
                 return False,'Client is not allowed to login'
         
         return True,''
-
 
 class ClientAuthTypeGuard(Guard):
     def __init__(self,accept_access:bool=True,accept_api:bool=True,message:Callable[...,str]= lambda a: f'Auth type:{a} is not accepted'):
@@ -214,6 +213,14 @@ class BlacklistClientGuard(Guard):
             flags = await pipe.execute()
         if any(flags):
             return False,'Client is blacklisted'
+        return True,''
+
+class AdminModificationGuard(Guard):
+
+    def guard(self,client:ClientMiniService):
+        if client.client.client_type == ClientType.Admin:
+            raise ClientDoesNotExistError(client.client_id)
+
         return True,''
 
 if CAPABILITIES['twilio']:

@@ -47,7 +47,6 @@ class Scope(Enum):
     Domain = 'Domain'
     Free='Free'
 
-
 class ClientType(Enum):
     User = 'User'
     Admin = 'Admin'
@@ -55,11 +54,11 @@ class ClientType(Enum):
     App = 'App'
     Service = 'Service'
 
-
 class AuthType(Enum):
     ACCESS_TOKEN = 'ACCESS_TOKEN'
     API_TOKEN = 'API_TOKEN'
 
+API_TOKEN_CLIENT_TYPE_SET = {ClientType.Twilio,ClientType.App,ClientType.Service}
 
 class FuncMetaData(TypedDict):
     operation_id:str
@@ -74,7 +73,6 @@ class FuncMetaData(TypedDict):
     tags:list[str]
     cost_definition:SimpleTaskCostDefinition
     cost_definition_name:str
-
 
 class RoutePermission(TypedDict):
     scope: PermissionScope
@@ -100,7 +98,7 @@ class ClientTokenInfo(TypedDict):
     generation_id: str
     client_id: str
     status:PermissionStatus= 'active'
-    auth_type:AuthType
+    auth_type:AuthType # NOTE Computed value
     client_type:ClientType
     salt:str
     authz_id:str
@@ -126,6 +124,9 @@ class RefreshPermission(TypedDict): # NOTE if someone from an organization chang
     status:PermissionStatus= 'active'
     client_type:ClientTypeLiteral = 'User'
 
+class AccessModel(BaseModel):
+    auth_type:AuthType
+    access:str
 
 class RoutePermissionModel(BaseModel):
     scope:PermissionScope

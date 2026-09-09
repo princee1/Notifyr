@@ -2,7 +2,7 @@
 The `BaseResource` class initializes with a `container` attribute assigned from the `CONTAINER`
 instance imported from `container`.
 """
-from typing import Any, Callable, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, TypeVar, Type, TypedDict, get_args, overload
+from typing import Any, Callable, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, TypeVar, Type, TypedDict, Union, get_args, overload
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.datastructures import Default
@@ -851,12 +851,13 @@ def UseRoles(roles: list[Role] = [], excludes: list[Role] = [], options: list[Ca
 
 ################################################################                           #########################################################
 
+Header = Union[dict[str,str],list[tuple[str,str]]]
 
-def Headers(header:dict[str,str]|list[tuple[str,str]]):
-    if not isinstance(header,(dict,list)):
+def Headers(header:Header|Callable[...,Header]):
+    if not (is_callable:=callable(header)) or not isinstance(header,(dict,list)):
         raise TypeError('Should be a dict or a list')
 
-    if isinstance(header,dict):
+    elif isinstance(header,dict):
         header = list(header.items())
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
@@ -868,7 +869,13 @@ def Headers(header:dict[str,str]|list[tuple[str,str]]):
         async def wrapper(*args, **kwargs):
             if 'response' in kwargs and isinstance(kwargs['response'], Response):
                 response = kwargs['response']
-                response.raw_headers.extend(header)
+                if is_callable:
+                    hs = APIFilterInject(header)
+                    if isinstance(hs,dict):
+                        hs = list(hs.items())
+                    response.raw_headers.extend(hs)
+                else:
+                    response.raw_headers.extend(header)
                 
             if asyncio.iscoroutinefunction(func):
                 return await func(*args, **kwargs)

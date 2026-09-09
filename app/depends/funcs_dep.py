@@ -178,6 +178,7 @@ async def get_client_by_password(credentials: Annotated[HTTPBasicCredentials, De
         headers={"WWW-Authenticate": "Basic"},
     )
 
+    return
     if not client.can_login:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

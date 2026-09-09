@@ -1,5 +1,6 @@
 from typing import Literal
 
+from app.classes.auth_permission import AuthType, ClientType
 from app.definition._error import BaseError
 
 class ClientDoesNotExistError(BaseError):
@@ -47,12 +48,18 @@ class AuthzSignatureMisMatchError(BaseError):
         super().__init__(client_id)
         self.client_id = client_id
 
+class PasswordLessAuthTypeStrategyError(BaseError):
+    def __init__(self,client_type:ClientType,auth_type:AuthType,reason:str):
+        super().__init__()
+        self.reason = reason
+        self.client_type = client_type
+        self.auth_type = auth_type
+
 class ProvidedHashNotEquivalentError(BaseError):
     def __init__(self, source_id:str,source_mode:str):
         super().__init__(source_id)
         self.source_id = source_id
         self.source_mode = source_mode
-
 
 class IdentityBlacklistedError(BaseError):
     def __init__(self, identity:str, identity_type:str):

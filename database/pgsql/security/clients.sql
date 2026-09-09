@@ -44,16 +44,12 @@ CREATE TABLE IF NOT EXISTS Client (
     client_description TEXT DEFAULT NULL,
     client_username VARCHAR(30) UNIQUE DEFAULT 'notifyr-user-' || secure_random_string(12),
     client_scope Scope DEFAULT 'SoloDolo',
-    auth_type AuthType DEFAULT 'ACCESS_TOKEN',
     client_type ClientType DEFAULT 'User',
     group_id UUID DEFAULT NULL,
-
-    can_login BOOLEAN DEFAULT FALSE,
-    max_connection INT DEFAULT 1,
-    current_connection_count INT DEFAULT 0,
-    issued_for VARCHAR(50) UNIQUE DEFAULT secure_random_string(20),
     authenticated BOOLEAN DEFAULT FALSE,
-    
+    -- max_connection INT DEFAULT 1,
+    -- current_connection_count INT DEFAULT 0,
+    issued_for VARCHAR(50) UNIQUE DEFAULT secure_random_string(20),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (client_id),
@@ -195,39 +191,3 @@ CREATE TRIGGER guard_admin_deletion
 DELETE FROM clients.Client;
 
 DELETE FROM clients.Groupclient;
-
-INSERT INTO
-    clients.Client (
-        client_name,
-        client_type,
-        client_description,
-        client_scope,
-        authenticated,
-        can_login
-    )
-VALUES (
-        'Notifyr ADMIN',
-        'Admin',
-        'Admin client for Notifyr application',
-        'Free',
-        True,
-        True
-    );
-
-
-INSERT INTO
-    clients.Challenge (
-        client_id,
-        expired_at_auth,
-        expired_at_refresh
-    )
-VALUES (
-        (
-            SELECT client_id
-            FROM clients.Client
-            WHERE
-                client_type = 'Admin'
-        ),
-        NOW() + INTERVAL '5 minute',
-        NOW() + INTERVAL '1 hour'
-    );

@@ -25,6 +25,7 @@ from app.models.ingest_model import DataIngestModel
 from app.models.otp_model import OTPModel
 from app.models.orm.security_model import ClientORM, GroupClientORM
 from app.models.sms_model import SMSCustomSchedulerModel
+from app.services.admin_service import ClientMiniService
 from app.services.custom_service import CustomService, NoEdgesCustomSchemaError, NoEntitiesCustomSchemaError
 from app.services.worker.celery_service import CeleryService, ChannelMiniService
 from app.services.config_service import ConfigService
@@ -900,3 +901,11 @@ class FunctionInjectorPipe(Pipe):
     async def pipe(self,*args,**kwargs):
         result = await AsyncAPIFilterInject(self.callable)(*args,**kwargs)
         return {self.key:result}
+
+class AccessTokenModelPipe(Pipe):
+
+    def __init__(self):
+        super().__init__(False)
+
+    def pipe(self,result:str,client:ClientMiniService):
+        return {'access':result,'auth_type':client.client.auth_type}

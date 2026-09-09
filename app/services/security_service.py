@@ -73,23 +73,23 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         self.settingService = settingService
         self.vaultService = vaultService
 
-    def encode_auth_token(self,authz_id:str, client_id:str, group_id: str | None,auth_type:str) -> str:
+    def encode_auth_token(self,authz_id:str, client_id:str, group_id: str | None) -> str:
         try:
             salt = str(self.salt)
             created_time = time.time()
             permission = ClientTokenInfo(generation_id=self.GENERATION_ID, created_at=created_time,expired_at=created_time + self.settingService.AUTH_EXPIRATION*0.5,
-                                        salt=salt, group_id=group_id,client_id=client_id,authz_id=authz_id,auth_type=auth_type)
+                                        salt=salt, group_id=group_id,client_id=client_id,authz_id=authz_id)
             token = self._encode_token(permission)
             return token
         except Exception as e:
             print(e)
         return None
 
-    def encode_refresh_token(self,client_id:str,challenge: str, group_id:str):
+    def encode_refresh_token(self,client_id:str, group_id:str):
         try:
             salt = str(self.salt)
             created_time = time.time()
-            permission = RefreshPermission(client_id=client_id, generation_id=self.GENERATION_ID, created_at=created_time, salt=salt, challenge=challenge,
+            permission = RefreshPermission(client_id=client_id, generation_id=self.GENERATION_ID, created_at=created_time, salt=salt,
                                            expired_at=created_time + self.settingService.REFRESH_EXPIRATION*0.5,group_id=group_id)
             token = self._encode_token(permission)
             return token

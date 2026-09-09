@@ -2,7 +2,7 @@ from typing import Any, Literal, Optional, Self
 from tortoise import Tortoise, fields, models
 from tortoise.contrib.pydantic import pydantic_model_creator
 from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
-from app.classes.auth_permission import AuthType, ClientType, Scope
+from app.classes.auth_permission import API_TOKEN_CLIENT_TYPE_SET, AuthType, ClientType, Scope
 from app.utils.helper import generateId, subset_model, uuid_v1_mc
 from app.utils.validation import ipv4_subnet_validator, ipv4_validator,PasswordValidator
 from tortoise.contrib.postgres.fields import ArrayField
@@ -36,20 +36,18 @@ class ClientORM(models.Model):
     client_description = fields.TextField()
     client_scope = fields.CharEnumField(enum_type=Scope, default=Scope.SoloDolo, max_length=25)
     client_type = fields.CharEnumField(enum_type=ClientType, default=ClientType.User, max_length=25)
-
-    auth_type = fields.CharEnumField(enum_type=AuthType, default=AuthType.ACCESS_TOKEN, max_length=30)
+    authenticated = fields.BooleanField(default=False) #NOTE Whether the client has been authenticated or not
     issued_for = fields.CharField(max_length=50, null=False, unique=True)
     group = fields.ForeignKeyField("security.GroupClientORM", related_name="group", on_delete=fields.SET_NULL, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
-
-    authenticated = fields.BooleanField(default=False) #NOTE Whether the client has been authenticated or not
-    max_connection = fields.IntField(default=1)
-    current_connection_count = fields.IntField(default=0)
-    can_login = fields.BooleanField(default=False) # NOTE Whether the client can login or not, this is different from authenticated, as a client can be authenticated but not allowed to login using its credentials, this is useful for clients that are only allowed to use the API but not allowed to login using the web interface.
     class Meta:
         schema = SCHEMA
         table = "client"
+
+    @property
+    def auth_type(self):
+        return AuthType.API_TOKEN if self.client_type in API_TOKEN_CLIENT_TYPE_SET else AuthType.ACCESS_TOKEN
 
     @property
     def to_json(self):
@@ -58,11 +56,8 @@ class ClientORM(models.Model):
             "client_name": self.client_name,
             "client_username": self.client_username,
             "client_description": self.client_description,
-            "auth_type": self.auth_type.value,
             "client_scope": self.client_scope.value,
             "authenticated": self.authenticated,
-            "max_connection":self.max_connection,
-            "current_connection_count":self.current_connection_count,
             "client_type": self.client_type.value,
             "issued_for": self.issued_for,
             "group_id": str(self.group_id) if self.group else None,
@@ -95,7 +90,7 @@ class PolicyMappingORM(models.Model):
 
 client_password_validator = PasswordValidator(12,60,)
 
-ClientModelBase = pydantic_model_creator(ClientORM, name="ClientORM", exclude=('created_at', 'updated_at','client_id',"authenticated","client_scope","group","can_login","current_connection_count","client_username",))
+ClientModelBase = pydantic_model_creator(ClientORM, name="ClientORM", exclude=('created_at', 'updated_at','client_id',"authenticated","client_scope","group","client_username",))
 
 class GroupModel(BaseModel):
     group_name: str
@@ -109,12 +104,11 @@ class GroupModel(BaseModel):
         return group_name.capitalize()
 
 class ClientModel(ClientModelBase):
-    password:str
+    password:Optional[str] = None
     client_scope:Scope = Field(Scope.SoloDolo)
     group:str | None = Field(None)
     client_description:str = Field(default=None,max_length=500)
     policies:list[str] = Field(default_factory=list,max_length=30)
-    auth_type:AuthType = Field(AuthType.ACCESS_TOKEN)
     max_connection:int =  Field(gt=1,le=5)
 
     _client_id:str = PrivateAttr(default_factory=uuid_v1_mc)
@@ -137,9 +131,11 @@ class ClientModel(ClientModelBase):
     def normalize_policies(self,val):
         return list(set(val))
 
-    @field_validator('password')
-    def check_password(cls,password:str):
-        return client_password_validator(password)
+    @model_validator(mode='after')
+    def check_password(self):
+        if self.client_type in API_TOKEN_CLIENT_TYPE_SET:
+            raise ValueError(f'This client_type {self.client_type} is a passwordless type of authentication')
+        return client_password_validator(self.password)
     
     @field_validator('client_type')
     def validate_client_type(cls,clientType:AuthType):

@@ -177,6 +177,8 @@ def time_validator(time: str) -> bool:
 def PasswordValidator(min_length=8, max_length=128, require_digit=True, require_symbol=True, require_uppercase=True):
 
         def validator(password: str) -> str:
+            if not password:
+                raise ValueError(f'No password were provided')
             if len(password) < min_length or len(password) > max_length:
                 raise ValueError(f"Password must be between {min_length} and {max_length} characters long.")
             if require_digit and not any(char.isdigit() for char in password):
