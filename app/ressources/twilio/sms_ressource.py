@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Annotated
 from fastapi import Depends, Request, Response
-from app.classes.auth_permission import AuthPermission, BypassRole, ClientTokenInfo, MustHave, MustHaveWhen, Role
+from app.classes.auth_permission import AuthPermission, BypassRole, ClientAccessInfo, MustHave, MustHaveWhen, Role
 from app.classes.celery import  TaskHeaviness, s
 from app.classes.template import SMSTemplate
 from app.cost.sms_cost import SMSCost
@@ -70,7 +70,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
         @UsePermission(MCPPermission,JWTAssetObjectPermission('sms','xml',accept_none_template=True))
         @UseRoles([Role.ADMIN,Role.TWILIO],options=[BypassRole(Role.ADMIN),MustHave(Role.ASSETS),MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
         @BaseHTTPRessource.HTTPRoute('/template/{template:path}',methods=[HTTPMethod.OPTIONS],operation_id=mcp_operation_id,to_mcp_tool=True)
-        def get_template_schema(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info),template:str='',wait_timeout: int | float = Depends(wait_timeout_query)):
+        def get_template_schema(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info),template:str='',wait_timeout: int | float = Depends(wait_timeout_query)):
             assetService = Get(AssetService)
             schemas = assetService.get_schema('sms')
             if template and template in schemas:
@@ -89,7 +89,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
         @LockService(AssetService,ProfileService,TwilioService,CeleryService,as_manager=True,check_status=False,lockType='reader')
         @UsePipe(RegisterSchedulerPipe,TemplateParamsPipe('sms','xml'),ContentIndexPipe,TemplateValidationInjectionPipe('sms','data','index'),CeleryTaskPipe,ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('default'))
         @BaseHTTPRessource.HTTPRoute('/template/{profile}/{template}',methods=[HTTPMethod.POST],cost_definition=CostConstant.sms_template,operation_id=mcp_operation_id,to_mcp_tool=True)
-        async def sms_template(self,profile:str,twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],channel:Annotated[ChannelMiniService,Depends(get_profile)],template: Annotated[SMSTemplate,Depends(get_template)],scheduler: SMSTemplateSchedulerModel,cost:Annotated[SMSCost,Depends(SMSCost)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager:Annotated[TaskManager,Depends(TaskManager)],wait_timeout: int | float = Depends(wait_timeout_query),authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+        async def sms_template(self,profile:str,twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],channel:Annotated[ChannelMiniService,Depends(get_profile)],template: Annotated[SMSTemplate,Depends(get_template)],scheduler: SMSTemplateSchedulerModel,cost:Annotated[SMSCost,Depends(SMSCost)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager:Annotated[TaskManager,Depends(TaskManager)],wait_timeout: int | float = Depends(wait_timeout_query),authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
             for content in scheduler.content:
                 weight = len(content.to)
                 _,result=template.build(content.data,self.settingService.ASSET_LANG)
@@ -117,7 +117,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
         @UseRoles([Role.MFA_OTP,Role.TWILIO],options=[MustHave(Role.ASSETS),MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
         @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio'),to_otp_path,force_task_manager_attributes_pipe,TwilioPhoneNumberPipe('otp',True),TemplateParamsPipe('sms','xml'),TemplateValidationInjectionPipe('sms','','',False))
         @BaseHTTPRessource.HTTPRoute('/otp/{template:path}/',methods=[HTTPMethod.POST],cost_definition=CostConstant.sms_otp,operation_id=mcp_operation_id,to_mcp_tool=True)
-        async def sms_relay_otp(self,twilio:Annotated[TwilioAccountMiniService,Depends(profile_query)],broker:Annotated[Broker,Depends(Broker)], template:Annotated[SMSTemplate,Depends(get_template)],cost:Annotated[SimpleTaskCost,Depends(SimpleTaskCost)],otpModel:OTPModel,request:Request,response:Response,taskManager: Annotated[TaskManager, Depends(TaskManager)],profile:str=Depends(profile_query),wait_timeout: int | float = Depends(wait_timeout_query),authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+        async def sms_relay_otp(self,twilio:Annotated[TwilioAccountMiniService,Depends(profile_query)],broker:Annotated[Broker,Depends(Broker)], template:Annotated[SMSTemplate,Depends(get_template)],cost:Annotated[SimpleTaskCost,Depends(SimpleTaskCost)],otpModel:OTPModel,request:Request,response:Response,taskManager: Annotated[TaskManager, Depends(TaskManager)],profile:str=Depends(profile_query),wait_timeout: int | float = Depends(wait_timeout_query),authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
             
             _,body= template.build(otpModel.content,...,True)
             taskManager.set_algorithm('route')
@@ -135,7 +135,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     @UseGuard(CarrierTypeGuard(False,accept_unknown=True),CeleryTaskGuard(task_names=['task_send_custom_sms']),CeleryBrokerGuard)
     @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio'),MiniServiceInjectorPipe(CeleryService,'channel'), CeleryTaskPipe,ContentIndexPipe,ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('default'))
     @BaseHTTPRessource.HTTPRoute('/custom/{profile}/',methods=[HTTPMethod.POST],cost_definition=CostConstant.sms_message,operation_id=mcp_operation_id,to_mcp_tool=True)
-    async def sms_custom_message(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],scheduler: SMSCustomSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[SMSCost,Depends(SMSCost)],taskManager:Annotated[TaskManager,Depends(TaskManager)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)], authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info),):
+    async def sms_custom_message(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],scheduler: SMSCustomSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[SMSCost,Depends(SMSCost)],taskManager:Annotated[TaskManager,Depends(TaskManager)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)], authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info),):
         
         for content in scheduler.content:
             message = content.model_dump(exclude=('as_contact','index','will_track','sender_type'))
@@ -153,13 +153,13 @@ class OnGoingSMSRessource(BaseHTTPRessource):
         return taskManager.results
         
     @BaseHTTPRessource.HTTPRoute('/simple/{profile}/',methods=[HTTPMethod.POST],mount=False,operation_id=mcp_operation_id,to_mcp_tool=True)
-    async def sms_simple_message(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],scheduler: SMSCustomSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[SMSCost,Depends(SMSCost)],taskManager:Annotated[TaskManager,Depends(TaskManager)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)], authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info),):
+    async def sms_simple_message(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],scheduler: SMSCustomSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[SMSCost,Depends(SMSCost)],taskManager:Annotated[TaskManager,Depends(TaskManager)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)], authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info),):
         ...
 
     @UsePermission(ProfilePermission,AgentPermission,MCPPermission,TaskCostPermission)
     @UseRoles([Role.RELAY,Role.TWILIO],options=[MustHave(Role.AGENT),MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
     @BaseHTTPRessource.HTTPRoute('/prompt/{profile}/{agent}/',methods=[HTTPMethod.POST],operation_id=mcp_operation_id,to_mcp_tool=True)
-    async def sms_prompt_message(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],agent:Annotated[RemoteAgentMiniService,Depends(get_profile)],scheduler: SMSCustomSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[SMSCost,Depends(SMSCost)],taskManager:Annotated[TaskManager,Depends(TaskManager)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)], authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info),):
+    async def sms_prompt_message(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],agent:Annotated[RemoteAgentMiniService,Depends(get_profile)],scheduler: SMSCustomSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[SMSCost,Depends(SMSCost)],taskManager:Annotated[TaskManager,Depends(TaskManager)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)], authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info),):
         ...
 
 SMS_INCOMING_PREFIX = "incoming"
@@ -185,28 +185,28 @@ class IncomingSMSRessource(BaseHTTPRessource):
     if CAPABILITIES['chat']:
 
         @BaseHTTPRessource.HTTPRoute('/menu/',methods=[HTTPMethod.POST])
-        async def sms_menu(self,authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+        async def sms_menu(self,authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
             chatService = Get(ChatService)
             pass
         
         @UseRoles([Role.CHAT])
         @BaseHTTPRessource.HTTPRoute('/live-chat/',methods=[HTTPMethod.POST])
-        async def sms_chat(self,authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+        async def sms_chat(self,authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
             chatService = Get(ChatService)
             pass
 
         @BaseHTTPRessource.HTTPRoute('/automate-response/',methods=[HTTPMethod.POST])
-        async def sms_automated(self,authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+        async def sms_automated(self,authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
             chatService = Get(ChatService)
             pass
         
         @BaseHTTPRessource.HTTPRoute('/handler_fail/',methods=[HTTPMethod.POST])
-        async def sms_primary_handler_fail(self,authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+        async def sms_primary_handler_fail(self,authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
             chatService = Get(ChatService)
             pass
 
     @BaseHTTPRessource.HTTPRoute('/status/',methods=[HTTPMethod.POST])
-    async def sms_call_status_changes(self,status: SMSStatusModel,broker:Annotated[Broker,Depends(Broker)], authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    async def sms_call_status_changes(self,status: SMSStatusModel,broker:Annotated[Broker,Depends(Broker)], authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         print(status)
         if status.twilio_tracking_id:
             event = 'QUEUED' if status.MessageStatus == 'sent' else 'QUEUED'
@@ -221,7 +221,7 @@ class IncomingSMSRessource(BaseHTTPRessource):
             broker.stream(StreamConstant.TWILIO_EVENT_STREAM_SMS,SMSEventORM.JSON(event_id=str(uuid_v1_mc()),direction='O',**event))
 
     @BaseHTTPRessource.HTTPRoute('/error/',methods=[HTTPMethod.POST])
-    async def sms_error(self,authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    async def sms_error(self,authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         pass
 
         
@@ -235,6 +235,6 @@ class SMSRessource(BaseHTTPRessource):
     @UseLimiter(limit_value="1/hour")
     @UseRoles([Role.ADMIN])
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.HEAD])
-    def weird_head(self,request:Request,response:Response,authPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    def weird_head(self,request:Request,response:Response,authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         response.status_code = 204
         return

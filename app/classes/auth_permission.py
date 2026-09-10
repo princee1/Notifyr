@@ -91,8 +91,8 @@ class MCPPermissionDef(TypedDict):
     tags: list[str]|set[str]
     operations: list[str]|set[str]
 
-class ClientTokenInfo(TypedDict):
-    group_id:str | None = None
+class ClientAccessInfo(TypedDict):
+    generation_id: str
     created_at: float
     expired_at: float
     generation_id: str
@@ -103,6 +103,15 @@ class ClientTokenInfo(TypedDict):
     salt:str
     authz_id:str
 
+class ClientRefresh(TypedDict): # NOTE if someone from an organization change the auth permission, the refresh token will be invalid for other people in the organization
+    generation_id: str
+    authz_id:str
+    salt:str
+    client_id:str
+    created_at:float
+    expired_at:float
+    status:PermissionStatus= 'active'
+
 class AuthPermission(TypedDict):
     allowed_routes: Dict[str, RoutePermission]
     allowed_assets:List[str] | AssetsPermission
@@ -111,18 +120,6 @@ class AuthPermission(TypedDict):
     allowed_blogs: List[str] = []
     allowed_mcp: Optional[MCPPermissionDef] = None
     roles:list[str|Role]=[]
-
-class RefreshPermission(TypedDict): # NOTE if someone from an organization change the auth permission, the refresh token will be invalid for other people in the organization
-    generation_id: str
-    challenge:str
-    salt:str
-    client_id:str
-    group_id:str | None = None
-    issued_for:str
-    created_at:float
-    expired_at:float
-    status:PermissionStatus= 'active'
-    client_type:ClientTypeLiteral = 'User'
 
 class AccessModel(BaseModel):
     auth_type:AuthType

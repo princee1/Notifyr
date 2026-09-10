@@ -1,6 +1,6 @@
 from typing import Annotated
 from fastapi import Depends, Request, Response
-from app.classes.auth_permission import AuthPermission, ClientTokenInfo
+from app.classes.auth_permission import AuthPermission, ClientAccessInfo
 from app.container import InjectInMethod
 from app.cost.ingest_cost import DeleteDocumentIngestCost
 from app.decorators.handlers import AgenticHandler, ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, GraphitiHandler, GatewayHandler, RedisHandler, ServiceAvailabilityHandler
@@ -38,7 +38,7 @@ class KGraphDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @PingService([RemoteAgentService])
     @LockService(RemoteAgentService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/document/{document_id}/',methods=[HTTPMethod.GET])
-    async def get_document_graph(self,document_id:str,response:Response,request:Request,authPermission:AuthPermission = Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    async def get_document_graph(self,document_id:str,response:Response,request:Request,authPermission:AuthPermission = Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         gateway_body = await self.remoteAgentService.request('POST', AgenticConstant.K_GRAPH_ROUTER(f'/document/{document_id}/'))
         return gateway_body
 
@@ -48,7 +48,7 @@ class KGraphDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @PingService([RemoteAgentService])
     @LockService(RemoteAgentService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/domain/{domain}/',methods=[HTTPMethod.GET])
-    async def get_domain_graph(self,domain:str,response:Response,request:Request,authPermission:AuthPermission = Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    async def get_domain_graph(self,domain:str,response:Response,request:Request,authPermission:AuthPermission = Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         gateway_body = await self.remoteAgentService.request('POST', AgenticConstant.K_GRAPH_ROUTER(f'/document/{domain}/'))
         return gateway_body
 
@@ -62,7 +62,7 @@ class KGraphDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @LockService(RedisService,RemoteAgentService,ArqIngestTaskService,lockType='reader')
     @UseHandler(GraphitiHandler,AgenticHandler,CostHandler,ArqHandler,GatewayHandler,RedisHandler,DataIngestHandler)
     @BaseHTTPRessource.HTTPRoute('/document/{job_id}/',methods=[HTTPMethod.DELETE],response_model=DeleteDomainModel)
-    async def delete_document(self,job_id:str,response:Response,request:Request,cost:Annotated[DeleteDocumentIngestCost,Depends(DeleteDocumentIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],authPermission:AuthPermission = Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    async def delete_document(self,job_id:str,response:Response,request:Request,cost:Annotated[DeleteDocumentIngestCost,Depends(DeleteDocumentIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],authPermission:AuthPermission = Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         
         meta,domain = await self.delete_single_document(job_id,'graph_config','graph','domain')
         gateway_body = await self.remoteAgentService.request('DELETE', AgenticConstant.K_GRAPH_ROUTER(f'/document/{job_id}'))
@@ -85,7 +85,7 @@ class KGraphDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @LockService(RedisService,RemoteAgentService,ArqIngestTaskService,lockType='reader')
     @UseHandler(GraphitiHandler,AgenticHandler,CostHandler,ArqHandler,GatewayHandler,RedisHandler,DataIngestHandler)
     @BaseHTTPRessource.HTTPRoute('/domain/{domain}/',methods=[HTTPMethod.DELETE],response_model=DeleteDomainModel)
-    async def delete_domain(self,domain:str,response:Response,request:Request,cost:Annotated[DeleteDocumentIngestCost,Depends(DeleteDocumentIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],authPermission:AuthPermission = Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    async def delete_domain(self,domain:str,response:Response,request:Request,cost:Annotated[DeleteDocumentIngestCost,Depends(DeleteDocumentIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],authPermission:AuthPermission = Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         
         meta,jobs_done,jobs_queue,errors =  await self.delete_section('graph_config','domain',domain)
         gateway_body = await self.remoteAgentService.request('DELETE', AgenticConstant.K_GRAPH_ROUTER(f'/domain/{domain}'))
@@ -115,5 +115,5 @@ class KGraphDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @UseHandler(AgenticHandler,GraphitiHandler,GatewayHandler)
     @LockService(RemoteAgentService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/playground/',methods=[HTTPMethod.POST])
-    async def playground(self,response:Response,request:Request,search:GraphitiSearchModel,authPermission:AuthPermission= Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    async def playground(self,response:Response,request:Request,search:GraphitiSearchModel,authPermission:AuthPermission= Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         ...

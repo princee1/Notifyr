@@ -1,6 +1,6 @@
 from fastapi import Depends, Response, Request, status
 from pydantic import BaseModel
-from app.classes.auth_permission import AuthPermission, ClientTokenInfo, Role
+from app.classes.auth_permission import AuthPermission, ClientAccessInfo, Role
 from app.container import InjectInMethod
 from app.decorators.handlers import FastAPIHandler, WebSocketHandler
 from app.decorators.permissions import BalancerPermission, JWTRouteHTTPPermission
@@ -62,14 +62,14 @@ class PingPongRessource(BaseHTTPRessource):
     @UseRoles([Role.ADMIN])
     @UsePermission(JWTRouteHTTPPermission)
     @BaseHTTPRessource.Get('/')
-    def check_health(self, authPermission: AuthPermission = Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    def check_health(self, authPermission: AuthPermission = Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         ...
 
     @UseLimiter(limit_value="5/minutes")
     @UseRoles([Role.ADMIN])
     @UsePermission(JWTRouteHTTPPermission)
     @BaseHTTPRessource.Get('/report')
-    def check_report(self, request: Request, authPermission: AuthPermission = Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    def check_report(self, request: Request, authPermission: AuthPermission = Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         return {
             'instance_id':self.workerService.INSTANCE_ID,
             'parent_pid':PARENT_PID,
@@ -81,7 +81,7 @@ class PingPongRessource(BaseHTTPRessource):
     @UseRoles([Role.ADMIN])
     @UsePermission(JWTRouteHTTPPermission)
     @BaseHTTPRessource.Post('/')
-    def set_health_config(self, authPermission: AuthPermission = Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    def set_health_config(self, authPermission: AuthPermission = Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         ...
 
 

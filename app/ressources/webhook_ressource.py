@@ -1,6 +1,6 @@
 from fastapi import Depends, Response
 
-from app.classes.auth_permission import AuthPermission, ClientTokenInfo
+from app.classes.auth_permission import AuthPermission, ClientAccessInfo
 from app.container import InjectInMethod
 from app.definition._ressource import BaseHTTPRessource, HTTPRessource
 from app.depends.dependencies import get_auth_permission, get_client_info
@@ -16,7 +16,6 @@ class WebhookIncomingRessource(BaseHTTPRessource):
         self.configService = configService
         self.workflowService = workflowService
     
-
     @BaseHTTPRessource.Post('/{profile}')
-    async def process_events(self,profile:str,request:Response,response:Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    async def process_events(self,profile:str,request:Response,response:Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         ...
