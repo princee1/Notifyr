@@ -149,15 +149,15 @@ deploy-data:
 
 # 	# 1. Create Initial Secrets
 	@echo "--- 🔑 Initializing Minio Credentials..."
-	./scripts/generate-creds.sh minio
+	./scripts/utils/generate-creds.sh minio
 	@echo "--- ✅ Minio Credentials ready."
 
 	@echo "--- 🔑 Initializing API Key Credentials..."
-	./scripts/generate-creds.sh api-key
+	./scripts/utils/generate-creds.sh api-key
 	@echo "--- ✅ API Key Credentials ready."
 
 	@echo "--- 🔑 Initializing MongoDB Replicas Keyfile"
-	./scripts/generate-creds.sh mongodb
+	./scripts/utils/generate-creds.sh mongodb
 	@echo "--- ✅ MongoDB keyfile ready."
 	@sleep 3 && clear
 
@@ -256,7 +256,7 @@ refresh-apikey:
 	@echo "🔄 Refreshing API Key and Redeploying App"
 	@echo "================================================="
 	@echo "--- 🔑 Creating new API Key..."
-	./scripts/generate-creds.sh api-key --force
+	./scripts/utils/generate-creds.sh api-key --force
 	@echo "--- 🚀 Redeploying 'app' service with new build..."
 	$(call COMPOSE_RUN, App Update, up -d, app)
 	@echo "================================================="
@@ -295,7 +295,6 @@ update:
 	@echo "================================================="
 	@echo "✅ New container deployed with updated code"
 	@echo "================================================="
-
 
 # ==============================================================================
 # 5. Monitoring Targets
@@ -337,3 +336,8 @@ monitor-off:
 	@echo "================================================="
 	@echo "✅ Mode Monitor is OFF."
 	@echo "================================================="
+
+admin-init:
+
+	... | docker compose exec -T app-1 python admin_init.py
+	

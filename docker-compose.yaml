@@ -163,7 +163,6 @@ services:
       - GOOGLE_SAFE_SEARCH_API_KEY=${GOOGLE_SAFE_SEARCH_API_KEY}
       - IPINFO_API_KEY=${IPINFO_API_KEY}
 
-      - USERNAME=${USERNAME}
       - DOMAIN_NAME=${DOMAIN_NAME}
   
       - CELERY_BROKER_PROVIDER=${CELERY_BROKER_PROVIDER:-rabbitmq}
@@ -552,6 +551,9 @@ services:
     volumes:
       - neo4j_data:/data
 
+  # ==========================================
+  # MONITORING DATA LAYER
+  # ==========================================
 
   flower:
     image: notifyr:flower

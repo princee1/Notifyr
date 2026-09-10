@@ -2,7 +2,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from starlette import status
-from app.classes.auth_permission import AccessModel, AuthPermission, AuthType, ClientAccessInfo, ClientRefresh, Credentials, EncryptedRecoveryTokens, RecoveryTokenGenerator, RecoveryTokens
+from app.classes.auth_permission import AccessModel, AuthPermission, AuthType, ClientAccessInfo, ClientRefresh, ClientType, Credentials, EncryptedRecoveryTokens, RecoveryTokenGenerator, RecoveryTokens
 from app.container import InjectInMethod
 from app.decorators.guards import AuthenticationClientGuard, BlacklistClientGuard, ClientAuthTypeGuard
 from app.decorators.handlers import AuthClientHandler, MiniServiceHandler, ORMCacheHandler, RedisHandler, SecurityHandler, VaultHandler
@@ -200,10 +200,12 @@ class AuthRessource(BaseHTTPRessource):
     @UseGuard(ClientAuthTypeGuard(accept_access=True, accept_api=False), AuthenticationClientGuard(True),BlacklistClientGuard)
     @BaseHTTPRessource.HTTPRoute('/me/',methods=[HTTPMethod.PUT])
     async def update_myself(self,request:Request,response:Response,updateClient:UpdateClientModel,broker:Annotated[Broker,Depends(Broker)],client:Annotated[ClientMiniService,Depends(get_client_from_info)],profile:str=Depends(get_client_from_info),authPermission:AuthPermission=Depends(get_auth_permission),clientInfo:ClientAccessInfo=Depends(get_client_info)):
-        updateClient.issued_for = None
-        updateClient.client_scope = None
-        updateClient.policies = []
-        updateClient.client_description = None
+        if clientInfo['client_type'] != ClientType.Admin:
+            updateClient.issued_for = None
+            updateClient.client_scope = None
+            updateClient.client_description = None
+
+        updateClient.policies = None
         return await ClientRessource.update_client(request,response,updateClient,broker,client,None)
     
     def verify_client(self, username:str, clientORM:ClientORM,authenticated_flag:bool):

@@ -144,10 +144,8 @@ class ConfigService(_service.BaseService):
         
         # NAMING CONFIG #
         self.DOMAIN_NAME =  self.getenv('DOMAIN_NAME','notifyr')
-        self.USERNAME:str = self.getenv('USERNAME','notifyr')
 
         # DIRECTORY CONFIG #
-
         self.BASE_DIR:str = self.getenv("BASE_DIR", './')
         self.ASSETS_DIR:str = self.getenv("ASSETS_DIR", f'assets{DIRECTORY_SEPARATOR}')
         self.OBJECTS_DIR:str = self.getenv('OBJECTS_DIR',f'objects{DIRECTORY_SEPARATOR}')

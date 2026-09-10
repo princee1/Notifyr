@@ -15,7 +15,6 @@ from app.services.vault_service import VaultService
 from app.utils.helper import generateId
 from app.utils.toolbox import RunInThreadPool
 
-
 class AuthSignature(TypedDict):
     signature:str
 

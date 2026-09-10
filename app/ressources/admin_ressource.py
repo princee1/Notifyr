@@ -137,7 +137,7 @@ class ClientRessource(BaseHTTPRessource):
                 mapping = [PolicyMappingORM(policy_id=policy_id,client=client,group=None) for policy_id in clientModel.policies]
                 clientORM = await ClientORM.create(ctx,**client_data)
                 await PolicyMappingORM.bulk_create(mapping,using_db=ctx)
-                client = ClientMiniService(self.vaultService,self.configService,self.jwtAuthService,self.securityService,clientORM,[],id=...)
+                client = ClientMiniService(self.vaultService,self.configService,self.jwtAuthService,self.securityService,clientORM,[],id=clientModel._client_id)
                 await client.store_password(clientModel.password)
                 await client.create_auth_signature()
 
@@ -150,6 +150,7 @@ class ClientRessource(BaseHTTPRessource):
 
     @PingService([VaultService])
     @UsePermission(AdminPermission)
+    @UseGuard(AdminModificationGuard)
     @UseInterceptor(InvalidBlacklistTokenInterceptor)
     @UsePipe(ObjectRelationalFriendlyPipe,before=False)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
@@ -161,7 +162,7 @@ class ClientRessource(BaseHTTPRessource):
         group = await fetch_group(updateClient.group) if updateClient.group  else None
         async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
             is_revoked = await client.update_client(updateClient,group,ctx)
-            if updateClient.policies:
+            if updateClient.policies != None:
                 await self.adminService.update_policy(updateClient.policies,mode,client,group,ctx)
             if is_revoked:
                 await client.revoke_itself(ctx,authenticated=False)

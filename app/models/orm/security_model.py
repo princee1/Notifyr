@@ -92,6 +92,20 @@ client_password_validator = PasswordValidator(12,60,)
 
 ClientModelBase = pydantic_model_creator(ClientORM, name="ClientORM", exclude=('created_at', 'updated_at','client_id',"authenticated","client_scope","group","client_username",))
 
+
+def validate_ip(issued_for:str,scope:Scope):
+    if scope == Scope.Organization:
+        if not ipv4_subnet_validator(issued_for):
+            raise ValueError('Invalid ipv4 subnet')
+        return
+    elif scope == Scope.SoloDolo:
+        if not ipv4_validator(issued_for):
+            raise ValueError('Invalid ipv4 address')
+    else:
+        if issued_for !=None:
+            raise ValueError('Issued For must be Null')
+    return
+
 class GroupModel(BaseModel):
     group_name: str
     policies: list[str] = []
@@ -103,28 +117,35 @@ class GroupModel(BaseModel):
         group_name=group_name.lower()
         return group_name.capitalize()
 
+class AdminClientModel(BaseModel):
+    client_username:str = Field(min_length=12,max_length=30)
+    issued_for:Optional[str] = Field(None,min_length=15,max_length=15)
+    client_name:str = Field(min_length=10,max_length=70)
+    client_scope:Scope = Field(Scope.Free)
+    password:str
+
+    @field_validator('password')
+    def check_password(cls,p):
+        return client_password_validator(p)
+
+    @model_validator(mode="after")
+    def validate_ip_issuance(self)->Self:
+        validate_ip(self.issued_for,self.client_scope)
+        return self
+
+        
 class ClientModel(ClientModelBase):
     password:Optional[str] = None
     client_scope:Scope = Field(Scope.SoloDolo)
     group:str | None = Field(None)
     client_description:str = Field(default=None,max_length=500)
     policies:list[str] = Field(default_factory=list,max_length=30)
-    max_connection:int =  Field(gt=1,le=5)
 
     _client_id:str = PrivateAttr(default_factory=uuid_v1_mc)
 
     @model_validator(mode="after")
     def validate_ip_issuance(self)->Self:
-        if self.client_scope == Scope.Organization:
-            if not ipv4_subnet_validator(self.issued_for):
-                raise ValueError('Invalid ipv4 subnet')
-            return self
-        elif self.client_scope == Scope.SoloDolo:
-            if not ipv4_validator(self.issued_for):
-                raise ValueError('Invalid ipv4 address')
-        else:
-            if self.issued_for !=None:
-                raise ValueError('Issued For must be Null')
+        validate_ip(self.issued_for,self.client_scope)
         return self
 
     @field_validator('policies')
