@@ -15,7 +15,7 @@ from app.services.cost_service import CostService
 from app.services.database.redis_service import RedisService
 from app.services.vault_service import VaultService
 from app.services.security_service import SecurityService,JWTAuthService
-from app.classes.auth_permission import AuthPermission, AuthType, ClientTokenInfo, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission,FuncMetaData, TokensModel, filter_asset_permission
+from app.classes.auth_permission import AuthPermission, AuthType, ClientAccessInfo, ClientType, ContactPermission, ContactPermissionScope, ClientRefresh, Role, RoutePermission,FuncMetaData, TokensModel, filter_asset_permission
 from app.utils.constant import HTTPHeaderConstant
 from app.utils.globals import CAPABILITIES
 from app.utils.helper import SliceMode, flatten_dict
@@ -29,7 +29,7 @@ class JWTRouteHTTPPermission(Permission):
         self.accept_inactive = accept_inactive
         self.accept_expired = accept_expired
     
-    def permission(self,class_name:str, func_meta:FuncMetaData, authPermission:AuthPermission,clientInfo:ClientTokenInfo):
+    def permission(self,class_name:str, func_meta:FuncMetaData, authPermission:AuthPermission,clientInfo:ClientAccessInfo):
         
         if authPermission == None or clientInfo == None:
             raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED,detail="Could not identify the user not implemented")
@@ -98,7 +98,7 @@ if CAPABILITIES['object']:
             self.extension = extension
             self.accept_none= accept_none_template
 
-        def permission(self,authPermission:AuthPermission,clientInfo:ClientTokenInfo,template:str,scheduler:SchedulerModel=None,template_type:RouteAssetType=None):
+        def permission(self,authPermission:AuthPermission,clientInfo:ClientAccessInfo,template:str,scheduler:SchedulerModel=None,template_type:RouteAssetType=None):
             if clientInfo['client_type'] == ClientType.Admin:
                 return True
             
@@ -131,7 +131,7 @@ if CAPABILITIES['object']:
 
     class JWTStaticObjectPermission(Permission):
             
-        def permission(self,authPermission:AuthPermission,clientInfo:ClientTokenInfo,blog:str):
+        def permission(self,authPermission:AuthPermission,clientInfo:ClientAccessInfo,blog:str):
             if clientInfo['client_type'] == ClientType.Admin:
                 return True
             
@@ -145,7 +145,7 @@ if CAPABILITIES['object']:
         def __init__(self):
             super().__init__('email')
         
-        def permission(self, authPermission:AuthPermission, clientInfo:ClientTokenInfo, scheduler:BaseEmailSchedulerModel):
+        def permission(self, authPermission:AuthPermission, clientInfo:ClientAccessInfo, scheduler:BaseEmailSchedulerModel):
             if  scheduler.signature == None:
                 return True
             if scheduler.signature.template == "":
@@ -179,50 +179,24 @@ class JWTContactPermission(Permission):
             raise HTTPException(status=403,detail="")
         
         return True
-    
-class JWTRefreshTokenPermission(Permission):
-
-    def __init__(self,accept_inactive=False):
-        super().__init__()
-        self.accept_inactive = accept_inactive
-        self.jwtAuthService:JWTAuthService = Get(JWTAuthService)
-    
-    async def permission(self,tokens:TokensModel,authPermission:AuthPermission,clientInfo:ClientTokenInfo):
-        permission:RefreshPermission = self.jwtAuthService.verify_refresh_permission(tokens.tokens)
-
-        client_id = permission['client_id']
-
-        if permission['status'] != 'active' and not self.accept_inactive:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission not active")
-
-        if client_id != authPermission['client_id']:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client Error")
-
-        if permission['generation_id'] != authPermission['generation_id']:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Generation ID mismatch")
-
-        if permission['group_id'] != authPermission['group_id']:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Group ID mismatch")
-        
-        return True
 
 class AbstractClientTypePermission(Permission):
 
-    def __init__(self,client_type:ClientType,ensure=False):
+    def __init__(self,client_types:set[ClientType],ensure=False):
         super().__init__()
         self.ensure =ensure
-        self.client_type = client_type
+        self.client_types = client_types
 
-    async def permission(self,authPermission:AuthPermission,clientInfo:ClientTokenInfo):
+    async def permission(self,clientInfo:ClientAccessInfo):
 
         client_id = clientInfo['client_id']
         if self.ensure:
             client = await ClientORM.get(client=client_id)
-            if client.client_type != self.client_type:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Client is not an {self.client_type.value}")
+            if client.client_type in self.client_types:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Client is not authorized")
 
-        if not clientInfo['client_type'] == self.client_type.value:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Client type is not {self.client_type.value}")
+        if not clientInfo['client_type'] in self.client_types:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Client type is not authorized")
 
         return True
    
@@ -230,45 +204,39 @@ class AdminPermission(AbstractClientTypePermission):
     # only because theres 3 type of client otherwise there would be only the ClientTypePermission class
 
      def __init__(self, ensure=False):
-        super().__init__(ClientType.Admin, ensure)
+        super().__init__({ClientType.Admin,}, ensure)
 
 class TwilioPermission(AbstractClientTypePermission):
 
     def __init__(self,ensure=False):
-        super().__init__(ClientType.Twilio, ensure)
+        super().__init__({ClientType.Twilio,}, ensure)
 
 class UserPermission(AbstractClientTypePermission):
 
     def __init__(self,ensure=False,accept_none_auth=False):
-        super().__init__(ClientType.User, ensure)
+        super().__init__({ClientType.User,ClientType.Admin},ensure)
         self.accept_none_auth = accept_none_auth
     
-    async def permission(self, authPermission:None=None):
-        if authPermission == None:
+    async def permission(self, clientInfo:ClientAccessInfo):
+        if ClientAccessInfo == None:
             return self.accept_none_auth
-        return await super().permission(authPermission)
+        return await super().permission(clientInfo)
 
 class ClientTypesPermission(Permission):
 
     def __init__(self,client_types:list[ClientType],slice:SliceMode='include'):
         super().__init__()
-        self.client_types=set([ c.value for c in set(client_types)])
+        self.client_types=set(client_types)
         self.slice = slice
 
-    async def permission(self,authPermission:AuthPermission,clientInfo:ClientTokenInfo):
+    async def permission(self,authPermission:AuthPermission,clientInfo:ClientAccessInfo):
         if self.slice == 'include' and clientInfo['client_type'] not in self.client_types:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Client is not in those client_types {self.client_types}")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Client is not authorized")
 
         if self.slice == 'exclude' and clientInfo['client_type'] in self.client_types:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Client is in those forbidden client_types {self.client_types}")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Client is not authorized")
         
         return True
-
-async def same_client_authPermission(authPermission:AuthPermission, client:ClientORM):
-    if not authPermission['client_id'] == str(client.client_id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client ID mismatch")
-    
-    return True
 
 class BalancerPermission(Permission):
     

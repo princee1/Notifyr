@@ -66,3 +66,11 @@ class IdentityBlacklistedError(BaseError):
         super().__init__(identity)
         self.identity = identity
         self.identity_type = identity_type
+
+class ClientAuthenticationFlagError(BaseError):
+
+    def __init__(self, client_id:str,auth_flag_found:bool):
+        super().__init__(client_id,auth_flag_found)
+        self.client_id = client_id
+        self.auth_flag_found = auth_flag_found
+        self.flag_auth_expected = not auth_flag_found

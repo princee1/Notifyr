@@ -1,6 +1,6 @@
 from uuid import uuid4
 from fastapi.responses import JSONResponse
-from app.classes.auth_permission import AuthPermission, ClientTokenInfo, ClientType, filter_asset_permission, parse_authPermission_enum
+from app.classes.auth_permission import AuthPermission, ClientAccessInfo, ClientType, filter_asset_permission, parse_authPermission_enum
 from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE
 from app.depends.orm_cache import BlacklistClientCache, BlacklistGroupCache, ClientORMCache
 from app.errors.security_error import SecurityIdentityNotResolvedError
@@ -78,14 +78,16 @@ class JWTAuthMiddleware(MiddleWare):
         self.redisService: RedisService = Get(RedisService)
 
     @BypassOn(not configService.SECURITY_FLAG)
-    @ExcludeOn(['/auth/generate/*','/contacts/manage/*'])
-    @ExcludeOn(['/link/visits/*','/link/email-track/*'])
+    @ExcludeOn(['/','/contacts/manage/*'])
     @ExcludeOn(['/docs/*','/openapi.json'])
-    @ExcludeOn(['/'])
+    @ExcludeOn(['/link/visits/*','/link/email-track/*'])
+    @ExcludeOn(['/auth/login/','/auth/revoke/','/auth/refresh/'])
     async def dispatch(self,  request: Request, call_next: Callable[..., Response]):
         try:  
             token = get_bearer_token_from_request(request)
-            clientInfo: ClientTokenInfo = self.jwtService.verify_client_token_permission(token)
+            async with self.jwtService.lock('reader'):
+                clientInfo: ClientAccessInfo = self.jwtService.verify_client_token_permission(token)
+
             client_id = clientInfo.get('client_id',None)
 
             if not client_id:
@@ -94,6 +96,7 @@ class JWTAuthMiddleware(MiddleWare):
             async with self.adminService.lock('reader',client_id) as clientService:
                 clientInfo['client_type'] = clientService.client.client_type
                 clientInfo['auth_type'] = clientService.client.auth_type
+                
                 client_ip = get_client_ip(request) #TODO : check wether we must use the scope to verify the client
                 
                 clientService.verify_client_origin(client_ip)

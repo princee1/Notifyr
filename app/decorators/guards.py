@@ -1,5 +1,5 @@
 from typing import Any, Callable, List, Literal, Type
-from app.classes.auth_permission import AuthPermission, AuthType, ClientType, PolicyModel, RefreshPermission
+from app.classes.auth_permission import AuthPermission, AuthType, ClientType, PolicyModel, ClientRefresh
 from app.classes.cost_definition import CreditNotInPlanError
 from app.classes.mongo import BaseDocument
 from app.definition._error import ServerFileError
@@ -11,7 +11,7 @@ from app.depends.orm_cache import BlacklistClientCache, BlacklistGroupCache
 from app.errors.db_error import CollectionHardLimitReachedError, TortoiseTableRowsLimitReachedError
 from app.errors.ingest_error import AgenticDatabaseNotAllowedError
 from app.errors.llm_error import LLMModelMaxTokenExceededError, LLMModelNotPermittedError, LLMProviderDoesNotExistError, LLMConfigNotConfiguredError
-from app.errors.security_error import ClientDoesNotExistError
+from app.errors.security_error import ClientDoesNotExistError, IdentityBlacklistedError
 from app.errors.service_error import MiniServiceDoesNotExistsError
 from app.manager.task_manager import TaskManager
 from app.models.odm.agents_model import AgentModel
@@ -150,15 +150,11 @@ class TwilioLookUpPhoneGuard(Guard):
         return super().guard()
 
 class AuthenticationClientGuard(Guard):
-    def __init__(self,verify_can_login:bool=False,verify_authenticate:bool=False,reverse:bool=False):
+    def __init__(self,verify_authenticate:bool=False,reverse:bool=False):
         super().__init__()
-        self.verify_login = verify_can_login
         self.verify_authenticate = verify_authenticate
         self.reverse = reverse
 
-        if not all([self.verify_login,self.verify_authenticate]):
-            raise ValueError('At least one of the verify_can_login or verify_authenticate must be set to True')
-       
     def guard(self,client:ClientMiniService):
         if self.verify_authenticate:
             if self.reverse:
@@ -168,16 +164,7 @@ class AuthenticationClientGuard(Guard):
             
             if not client.client.authenticated:
                 return False,'Client is not authenticated'
-        
-        if self.verify_login:
-            if self.reverse:
-                if client.client.auth_type == AuthType.ACCESS_TOKEN:
-                    return False,'Client is already allowed to login'
-                return True,''
-            
-            if client.client.auth_type == AuthType.API_TOKEN:
-                return False,'Client is not allowed to login'
-        
+                
         return True,''
 
 class ClientAuthTypeGuard(Guard):
@@ -211,8 +198,9 @@ class BlacklistClientGuard(Guard):
                 await BlacklistGroupCache.Get([client.group_id],pipe)
             await BlacklistClientCache.Get([client.client_id,''],pipe)
             flags = await pipe.execute()
+        
         if any(flags):
-            return False,'Client is blacklisted'
+            raise IdentityBlacklistedError()
         return True,''
 
 class AdminModificationGuard(Guard):

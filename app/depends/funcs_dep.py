@@ -2,7 +2,7 @@ import functools
 from typing import Annotated, Callable
 from fastapi import Depends, HTTPException, Header, Query, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, PolicyModel, Role, filter_asset_permission
+from app.classes.auth_permission import AuthPermission, ClientAccessInfo, ClientType, ContactPermission, PolicyModel, Role, filter_asset_permission
 from app.container import Get
 from app.definition._error import ServerFileError
 from app.models.orm.contacts_model import ContactORM, ContentSubscriptionORM
@@ -10,7 +10,7 @@ from app.models.orm.link_model import LinkORM
 from app.models.orm.security_model import BlacklistModel, ClientORM, GroupClientORM, PolicyMappingORM
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService, SecurityService
-from app.depends.dependencies import get_auth_permission, get_query_params, get_request_id, wrapper_auth_permission
+from app.depends.dependencies import get_auth_permission, get_client_info, get_query_params, get_request_id, wrapper_auth_permission
 
 from app.services.vault_service import VaultService
 from app.utils.toolbox import RunInThreadPool
@@ -168,28 +168,6 @@ async def get_subs_content(content_id: str, content_idtype: str = Query('id'), a
             404, {"message": "Subscription Content does not exists with those information"})
 
 
-async def get_client_by_password(credentials: Annotated[HTTPBasicCredentials, Depends(HTTPBasic())], cid: str = Depends(get_query_params('cid', 'id'))):
-    security: SecurityService = Get(SecurityService)
-    configService: ConfigService = Get(ConfigService)
-    key = configService.getenv('CLIENT_PASSWORD_HASH_KEY', 'test')
-    error = HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail="Invalid username or password",
-        headers={"WWW-Authenticate": "Basic"},
-    )
-
-    return
-    if not client.can_login:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail='Cant authenticate right now... get your token from the admin!'
-        )
-
-    await client.save()
-
-    return client
-
-
 def GetLink(raise_file_error:bool,raise_err:bool=True):
 
     async def get_link(link_id:str,lid:str = Depends(get_query_params('lid','sid',raise_except=True,checker=lambda v: v in ['id','name','sid',]))):
@@ -245,6 +223,9 @@ def get_group(group:str):
 
 def get_client(client:str):
     return client
+
+def get_client_from_info(clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    return clientInfo.get('client_id',None)
 
 def get_blacklist(blacklist:BlacklistModel):
     return blacklist

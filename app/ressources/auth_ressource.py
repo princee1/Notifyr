@@ -1,5 +1,5 @@
 from typing import Annotated
-from fastapi import Depends, Request, Response
+from fastapi import Depends, HTTPException, Request, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from starlette import status
 from app.classes.auth_permission import AccessModel, AuthPermission, AuthType, ClientAccessInfo, ClientRefresh
@@ -8,7 +8,7 @@ from app.decorators.guards import AuthenticationClientGuard, BlacklistClientGuar
 from app.decorators.handlers import AuthClientHandler, MiniServiceHandler, ORMCacheHandler, RedisHandler, SecurityHandler, VaultHandler
 from app.decorators.permissions import JWTRouteHTTPPermission, UserPermission
 from app.decorators.pipes import AccessTokenModelPipe, MiniServiceInjectorPipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, LockService, PingService, Throttle, UseGuard, UseHandler, UsePermission, UsePipe
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, LockService, PingService, Throttle, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe
 from app.definition._service import MiniStateProtocol
 from app.depends.dependencies import get_auth_permission, get_client_info, get_client_ip
 from app.depends.funcs_dep import get_client_from_info
@@ -36,18 +36,30 @@ class AuthRessource(BaseHTTPRessource):
         self.adminService = adminService
         self.blacklist_guard = BlacklistClientGuard()
 
-    
+    async def refresh_logout_handler(func,*args,**kwargs):
+        try:
+            return await func(*args,**kwargs)
+        except HTTPException as e:
+            session:AuthSessionManager = kwargs.get('session',None)
+            if session:
+                session.logout()
+            raise e
+
     @Throttle(uniform=(100,250))
-    @BaseHTTPRessource.HTTPRoute('/recover/',methods=[HTTPMethod.POST])
+    @BaseHTTPRessource.HTTPRoute('/recover/',methods=[HTTPMethod.POST],response_class = AccessModel)
     async def recover(self,broker:Annotated[Broker,Depends(Broker)],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)]):
         ...
 
+    @UseLimiter('5/day')
+    @Throttle(uniform=(100,250))
+    @UseHandler(refresh_logout_handler)
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @LockService(VaultService,SettingService,JWTAuthService,lockType='reader')
     @UseHandler(ORMCacheHandler,MiniServiceHandler,SecurityHandler,RedisHandler)
-    @BaseHTTPRessource.HTTPRoute('/refresh/',methods=[HTTPMethod.PUT])
+    @BaseHTTPRessource.HTTPRoute('/refresh/',methods=[HTTPMethod.PUT],response_class=AccessModel)
     async def refresh(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)]):
         refreshPermission:ClientRefresh =  session.verify_refresh_token()
+        session.logout()
 
         clientORM = await ClientORM.filter(client_id=refreshPermission['client_id']).first()
         if clientORM == None:
@@ -65,14 +77,16 @@ class AuthRessource(BaseHTTPRessource):
             async with self.tortoiseService.transaction() as ctx:
                 self.blacklist_guard.guard(client)
                 client.verify_client_origin(origin)
+                client.compare_auth_signature(refreshPermission['authz_id'])
 
-                signature = client.compare_auth_signature(refreshPermission['authz_id'])
-                auth_token,refresh_token = await client.generate_access(signature,ctx=ctx)
+                new_signature = await client.revoke_itself(ctx=ctx,authenticated=True)
+                auth_token,refresh_token = await client.generate_access(new_signature,ctx=ctx)
                 session.login(refresh_token)
 
         broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))
         return {'access':auth_token,'auth_type':AuthType.ACCESS_TOKEN}
 
+    @UseLimiter('5/day')
     @Throttle(normal=(300,30))
     @UseHandler(ORMCacheHandler,MiniServiceHandler,SecurityHandler,RedisHandler)
     @LockService(VaultService,SettingService,JWTAuthService,RedisService,lockType='reader')
@@ -107,6 +121,7 @@ class AuthRessource(BaseHTTPRessource):
 
     @Throttle(uniform=(200,400))
     @UseHandler(MiniServiceHandler)
+    @UseLimiter('20/day',key_func='client')
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @LockService(VaultService,AdminService,as_manager=True)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
@@ -122,6 +137,7 @@ class AuthRessource(BaseHTTPRessource):
 
     @Throttle(normal=(300,30))
     @UseHandler(MiniServiceHandler)
+    @UseLimiter('20/day',key_func='client')
     @UsePermission(JWTRouteHTTPPermission,UserPermission)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @LockService(AdminService,as_manager=True,lockType='reader',miniLockType='reader')

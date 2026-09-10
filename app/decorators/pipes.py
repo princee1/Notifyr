@@ -3,7 +3,7 @@ import json
 from typing import Any, Callable, Coroutine, Iterable, Literal, Optional, Type, TypedDict, get_args
 from beanie import Document
 from fastapi import HTTPException, Request, Response,status
-from app.classes.auth_permission import AuthPermission, TokensModel
+from app.classes.auth_permission import AuthPermission, ClientAccessInfo, TokensModel
 from app.classes.broker import exception_to_json
 from app.classes.celery import AlgorithmType, SchedulerModel,TaskType
 from app.classes.email import EmailInvalidFormatError
@@ -904,8 +904,10 @@ class FunctionInjectorPipe(Pipe):
 
 class AccessTokenModelPipe(Pipe):
 
-    def __init__(self):
+    def __init__(self,mode:Literal['service','info']='service'):
         super().__init__(False)
+        self.mode = mode
 
-    def pipe(self,result:str,client:ClientMiniService):
-        return {'access':result,'auth_type':client.client.auth_type}
+    def pipe(self,result:str,client:ClientMiniService=None,clientInfo:ClientAccessInfo=None):
+        auth_type = client.client.auth_type if self.mode == 'service' else clientInfo['auth_type']
+        return {'access':result,'auth_type':auth_type}

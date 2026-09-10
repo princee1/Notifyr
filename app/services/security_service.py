@@ -16,7 +16,7 @@ import jwt
 import base64
 from fastapi import HTTPException, Request, status
 import time
-from app.classes.auth_permission import AuthPermission, ClientTokenInfo, ClientType, ContactPermission, ContactPermissionScope, RefreshPermission, Role, RoutePermission, Scope, WSPermission
+from app.classes.auth_permission import AuthPermission, AuthType, ClientAccessInfo, ClientType, ContactPermission, ContactPermissionScope, ClientRefresh, Role, RoutePermission, Scope, WSPermission
 from random import randint, random
 from app.utils.helper import generateId, b64_encode, b64_decode
 import os
@@ -73,31 +73,32 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         self.settingService = settingService
         self.vaultService = vaultService
 
-    def encode_auth_token(self,authz_id:str, client_id:str, group_id: str | None) -> str:
+    def encode_auth_token(self,authz_id:str, client_id:str,auth_type:AuthType)->str:
         try:
             salt = str(self.salt)
+            exp = self.settingService.API_EXPIRATION if auth_type == AuthType.API_TOKEN else self.settingService.AUTH_EXPIRATION
             created_time = time.time()
-            permission = ClientTokenInfo(generation_id=self.GENERATION_ID, created_at=created_time,expired_at=created_time + self.settingService.AUTH_EXPIRATION*0.5,
-                                        salt=salt, group_id=group_id,client_id=client_id,authz_id=authz_id)
+            permission = ClientAccessInfo(generation_id=self.GENERATION_ID, created_at=created_time,expired_at=created_time + exp,
+                                        salt=salt,client_id=client_id,authz_id=authz_id)
             token = self._encode_token(permission)
             return token
         except Exception as e:
             print(e)
         return None
 
-    def encode_refresh_token(self,client_id:str, group_id:str):
+    def encode_refresh_token(self,authz_id:str,client_id:str):
         try:
             salt = str(self.salt)
             created_time = time.time()
-            permission = RefreshPermission(client_id=client_id, generation_id=self.GENERATION_ID, created_at=created_time, salt=salt,
-                                           expired_at=created_time + self.settingService.REFRESH_EXPIRATION*0.5,group_id=group_id)
+            permission = ClientRefresh(client_id=client_id,authz_id=authz_id, generation_id=self.GENERATION_ID, created_at=created_time, salt=salt,
+                                           expired_at=created_time + self.settingService.REFRESH_EXPIRATION)
             token = self._encode_token(permission)
             return token
         except Exception as e:
             print(e)
         return None
 
-    def set_status(self, permission: AuthPermission | RefreshPermission, ptype: Literal['auth', 'refresh']):
+    def set_status(self, permission: AuthPermission | ClientRefresh, ptype: Literal['auth', 'refresh']):
         now = time.time()
         expired_at = permission['expired_at']
         created_at = permission['created_at']
@@ -178,10 +179,10 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Invalid token")
                 
-    def verify_client_token_permission(self, token: str,raise_on_expired=False) -> ClientTokenInfo:
+    def verify_client_token_permission(self, token: str,raise_on_expired=False) -> ClientAccessInfo:
 
         token = self._decode_token(token)
-        clientInfo: ClientTokenInfo = ClientTokenInfo(**token)
+        clientInfo: ClientAccessInfo = ClientAccessInfo(**token)
         try:
             self.set_status(clientInfo,'auth')
             if clientInfo['status'] == 'expired' and raise_on_expired:
@@ -194,14 +195,18 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         except KeyError as e:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Data missing')
 
-    def verify_refresh_permission(self,tokens:str):
+    def verify_refresh_permission(self,tokens:str,raise_on_expired:bool=False):
         token =self._decode_token(tokens)
-        permission = RefreshPermission(**token)
+        permission = ClientRefresh(**token)
         self.set_status(permission,'refresh')
 
-        if permission['status'] == 'expired':
+        if permission['status'] == 'expired' and raise_on_expired:
             raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,  detail="Token expired")
+
+        if permission["generation_id"] != self.GENERATION_ID:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Old Token not valid anymore")
+
         
         return permission
 

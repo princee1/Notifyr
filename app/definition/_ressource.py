@@ -23,7 +23,7 @@ import functools
 from app.interface.events import EventInterface
 from enum import Enum
 from ._utils_decorator import *
-from app.classes.auth_permission import AuthPermission, ClientTokenInfo, ClientTypeLiteral, FuncMetaData, Role, WSPathNotFoundError
+from app.classes.auth_permission import AuthPermission, ClientAccessInfo, ClientTypeLiteral, FuncMetaData, Role, WSPathNotFoundError
 import asyncio
 from asgiref.sync import sync_to_async
 import warnings
@@ -997,7 +997,7 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
                 raise ValueError('To add cost based on the client type we must have the client_id as key. HINT: use key_func="private"')
             def cost_func(request:Request):
                 authPermission:AuthPermission =  get_auth_permission(request)
-                clientInfo:ClientTokenInfo = get_client_info(request)
+                clientInfo:ClientAccessInfo = get_client_info(request)
                 clientType = clientInfo['client_type']
                 unit_cost = cost.get(clientType,1)
                 unit_cost = max(1,unit_cost)
@@ -1012,14 +1012,14 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
         if not configService.SECURITY_FLAG:
             return workerService.INSTANCE_ID
         authPermission:AuthPermission =  get_auth_permission(request)
-        clientInfo:ClientTokenInfo = get_client_info(request)
+        clientInfo:ClientAccessInfo = get_client_info(request)
         return clientInfo['client_id']
 
     def group_private_key_func(request:Request):
         if not configService.SECURITY_FLAG:
             return workerService.HOSTNAME
         authPermission:AuthPermission = get_auth_permission(request)
-        clientInfo:ClientTokenInfo = get_client_info(request)
+        clientInfo:ClientAccessInfo = get_client_info(request)
         if not (group_id:=clientInfo.get('group_id',None)):
             return client_private_key_func(request)
         return group_id

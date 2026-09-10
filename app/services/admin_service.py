@@ -5,7 +5,7 @@ from tortoise.expressions import Q
 from app.classes.auth_permission import AuthPermission, AuthType, PolicyModel, PolicyUpdateMode, Scope, filter_asset_permission, get_combined_policies, parse_authPermission_enum
 from app.classes.secrets import ChaCha20SecretsWrapper
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BaseService, BuildFailureError, LinkDep, MiniService, Service, ServiceStatus
-from app.errors.security_error import CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError,IdentityAlreadyBlacklistedError, PasswordLessAuthTypeStrategyError
+from app.errors.security_error import AuthzSignatureMisMatchError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError,IdentityAlreadyBlacklistedError, PasswordLessAuthTypeStrategyError
 from app.models.orm.security_model import ClientORM, GroupClientORM, PolicyMappingORM, UpdateClientModel
 from app.services.config_service import ConfigService
 from app.services.database.redis_service import RedisService
@@ -74,9 +74,10 @@ class ClientMiniService(BaseMiniService):
     def compare_auth_signature(self,signature:str):
         authSignature:AuthSignature = self.signature.to_plain()
         if 'signature' not in authSignature:
-            raise ...
+            raise AuthzSignatureMisMatchError(self.client_id)
+        
         if signature != authSignature['signature']:
-            raise ...
+            raise AuthzSignatureMisMatchError(self.client_id)
 
         return
         
@@ -113,7 +114,7 @@ class ClientMiniService(BaseMiniService):
 
         if updateClient.password:
             if self.client.auth_type == AuthType.API_TOKEN:
-                raise PasswordLessAuthTypeStrategyError('')
+                raise PasswordLessAuthTypeStrategyError(self.client.client_type,self.client.auth_type,"No password needed for 'API_TOKEN' authorization type")
             password,salt = await self.encrypt_password(updateClient.password)
             await self.store_password(password,salt)
 
@@ -144,9 +145,9 @@ class ClientMiniService(BaseMiniService):
         await self.client.delete(ctx)
         await RunInThreadPool(self.vaultService.security_engine.delete('clients',self.miniService_id))
 
-    async def generate_access(self,ctx,signature:str,refresh:bool=True):
+    async def generate_access(self,signature:str,refresh:bool=True,ctx=None,):
         refresh_token = None
-        auth_token = self.jwtService.encode_auth_token(signature)
+        auth_token = self.jwtService.encode_auth_token(signature,self.client_id,self.client.auth_type)
 
         if auth_token == None:
             raise CouldNotCreateAuthTokenError()
@@ -217,9 +218,6 @@ class AdminService(BaseMiniServiceManager[ClientMiniService]):
         
         if self.redisService.service_status != ServiceStatus.AVAILABLE:
             raise BuildFailureError("Could not synchronize secruity updates")
-    
-    async def is_blacklisted(self, client: ClientORM,token:str=True) -> tuple[bool, float | None]:
-        ...
     
     @RunInThreadPool
     def revoke_all_tokens(self) -> None:

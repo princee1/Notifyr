@@ -26,7 +26,7 @@ from app.depends.dependencies import get_auth_permission, get_client_info, get_q
 from app.container import InjectInMethod, Get
 from app.definition._ressource import PingService, UseInterceptor, LockService, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter,HTTPStatusCode
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
-from app.classes.auth_permission import AccessModel, AuthPermission, AuthType, ClientTokenInfo, ClientType, PoliciesNotMatchingError, PolicyModel, PolicyUpdateMode, Role, Scope
+from app.classes.auth_permission import AccessModel, AuthPermission, AuthType, ClientAccessInfo, ClientType, PoliciesNotMatchingError, PolicyModel, PolicyUpdateMode, Role, Scope
 from app.decorators.handlers import AsyncIOHandler, CostHandler, DataSourceHandler, MiniServiceHandler, ORMCacheHandler, PydanticHandler, RedisHandler, AuthClientHandler, SecurityHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler, VaultHandler
 from app.decorators.pipes import  AccessTokenModelPipe, ForceClientPipe, ForceGroupPipe, FunctionInjectorPipe, MiniServiceInjectorPipe, ObjectRelationalFriendlyPipe
 from app.utils.helper import  generateId
@@ -56,7 +56,7 @@ class PolicyRessource(BaseHTTPRessource):
     @PingService([VaultService,ProfileService])
     @LockService(VaultService,ProfileService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
-    async def create_policy(self,request:Request,response:Response, policyModel:PolicyModel, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    async def create_policy(self,request:Request,response:Response, policyModel:PolicyModel, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         policy_id = generateId(12)
         policy_model = policyModel.model_dump(mode='python')
         self.vaultService.security_engine.put('policies',policy_model,path=policy_id)
@@ -66,7 +66,7 @@ class PolicyRessource(BaseHTTPRessource):
     @PingService([VaultService,TortoiseConnectionService])
     @LockService(VaultService,TortoiseConnectionService,AdminService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/{policy}/',methods=[HTTPMethod.DELETE])
-    async def delete_policy(self,broker:Annotated[Broker,Depends(Broker)],request:Request,policy:Annotated[PolicyModel,Depends(get_policy)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    async def delete_policy(self,broker:Annotated[Broker,Depends(Broker)],request:Request,policy:Annotated[PolicyModel,Depends(get_policy)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
 
         async with self.tortoiseService.transaction(SECURITY_CREDS,1,lock='none') as ctx:
             await PolicyMappingORM.filter(policy_id=policy).using_db(ctx).delete()
@@ -81,7 +81,7 @@ class PolicyRessource(BaseHTTPRessource):
     @UsePipe(FunctionInjectorPipe(fetch_policy,'policy'))
     @LockService(ProfileService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/{policy}/',methods=[HTTPMethod.PUT])
-    async def update_policy(self,broker:Annotated[Broker,Depends(Broker)],request:Request,policyModel:PolicyModel,policy:Annotated[PolicyModel,Depends(get_policy)],mode:PolicyUpdateMode =Depends(policy_update_mode_query), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    async def update_policy(self,broker:Annotated[Broker,Depends(Broker)],request:Request,policyModel:PolicyModel,policy:Annotated[PolicyModel,Depends(get_policy)],mode:PolicyUpdateMode =Depends(policy_update_mode_query), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
 
         policy.update(policyModel,mode)
         data = policy.model_dump()
@@ -91,7 +91,7 @@ class PolicyRessource(BaseHTTPRessource):
         
     @UsePipe(FunctionInjectorPipe(fetch_policy,'policy'))
     @BaseHTTPRessource.HTTPRoute('/{policy}/',methods=[HTTPMethod.GET])
-    async def read_policy(self,request:Request,policy:Annotated[PolicyModel,Depends(get_policy)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    async def read_policy(self,request:Request,policy:Annotated[PolicyModel,Depends(get_policy)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         return {**policy.model_dump(), **{'policy_id':policy._policy_id}}
 
 
@@ -123,7 +123,7 @@ class ClientRessource(BaseHTTPRessource):
     @LockService(SettingService,VaultService,AdminService,lockType='reader')
     @UseHandler(CostHandler,RedisHandler,VaultHandler,AuthClientHandler,SecurityHandler)
     @BaseHTTPRessource.Post('/')
-    async def create_client(self,broker:Annotated[Broker,Depends(Broker)], merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[DataCost,Depends(DataCost)],request:Request,response:Response, clientModel: ClientModel, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    async def create_client(self,broker:Annotated[Broker,Depends(Broker)], merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[DataCost,Depends(DataCost)],request:Request,response:Response, clientModel: ClientModel, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
 
         valid_policies = await RunInThreadPool(self.vaultService.security_engine.list)('policies')
         if len((policies_error:=set(clientModel).difference(valid_policies)))>0:
@@ -156,7 +156,7 @@ class ClientRessource(BaseHTTPRessource):
     @LockService(AdminService,as_manager=True,miniLockType='reader')
     @UseHandler(ValueErrorHandler,ORMCacheHandler,VaultHandler,SecurityHandler,MiniServiceHandler)
     @BaseHTTPRessource.HTTPRoute('/{client}/', methods=[HTTPMethod.PUT])
-    async def update_client(self, updateClient:UpdateClientModel,broker:Annotated[Broker,Depends(Broker)],client: Annotated[ClientMiniService, Depends(get_client)],mode:PolicyUpdateMode = Depends(policy_update_mode_query),profile:str=Depends(get_client), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info) ):
+    async def update_client(self, updateClient:UpdateClientModel,broker:Annotated[Broker,Depends(Broker)],client: Annotated[ClientMiniService, Depends(get_client)],mode:PolicyUpdateMode = Depends(policy_update_mode_query),profile:str=Depends(get_client), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info) ):
 
         group = await fetch_group(updateClient.group) if updateClient.group  else None
         async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
@@ -179,7 +179,7 @@ class ClientRessource(BaseHTTPRessource):
     @UseInterceptor(DataCostInterceptor(CostConstant.CLIENT_CREDIT,'refund'))
     @UseHandler(ORMCacheHandler,CostHandler,RedisHandler,VaultHandler,SecurityHandler,MiniServiceHandler)
     @BaseHTTPRessource.Delete('/{client}/')
-    async def delete_client(self,broker:Annotated[Broker,Depends(Broker)], merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[DataCost,Depends(DataCost)],request:Request,response:Response, client: Annotated[ClientMiniService, Depends(get_client)],profile:str=Depends(get_client), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    async def delete_client(self,broker:Annotated[Broker,Depends(Broker)], merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[DataCost,Depends(DataCost)],request:Request,response:Response, client: Annotated[ClientMiniService, Depends(get_client)],profile:str=Depends(get_client), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         
         async def transaction():
             async with self.tortoiseService.transaction(SECURITY_CREDS,lock='reader') as ctx:
@@ -199,7 +199,7 @@ class ClientRessource(BaseHTTPRessource):
     @UseHandler(MiniServiceHandler,DataSourceHandler)
     @UsePipe(ObjectRelationalFriendlyPipe,before=False)
     @BaseHTTPRessource.Get('/{client:path}')
-    async def read_client(self,request:Request,response:Response,client:str='',source:SourceMode=Depends(source_mode_query),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    async def read_client(self,request:Request,response:Response,client:str='',source:SourceMode=Depends(source_mode_query),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         match source:
             case 'database':
                 if client == '':
@@ -226,7 +226,7 @@ class ClientRessource(BaseHTTPRessource):
     @UsePipe(ObjectRelationalFriendlyPipe,before=False)
     @UseGuard(TortoiseHardLimitGuard(10,GroupClientORM))
     @BaseHTTPRessource.Post('/group/')
-    async def create_group(self, groupModel: GroupModel,request:Request,response:Response, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    async def create_group(self, groupModel: GroupModel,request:Request,response:Response, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
 
         valid_policies = await RunInThreadPool(self.vaultService.security_engine.list)('policies')
         if len((policies_error:=set(groupModel.policies).difference(valid_policies)))>0:
@@ -244,7 +244,7 @@ class ClientRessource(BaseHTTPRessource):
     @UsePipe(FunctionInjectorPipe(fetch_group,'group'))
     @UsePipe(ObjectRelationalFriendlyPipe,before=False)
     @BaseHTTPRessource.Delete('/group/{group}/')
-    async def delete_group(self,broker:Annotated[Broker,Depends(Broker)],request:Request,response:Response, group: Annotated[GroupClientORM, Depends(get_group)], authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    async def delete_group(self,broker:Annotated[Broker,Depends(Broker)],request:Request,response:Response, group: Annotated[GroupClientORM, Depends(get_group)], authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
 
         async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
             await group.delete(ctx)
@@ -257,7 +257,7 @@ class ClientRessource(BaseHTTPRessource):
     @UsePermission(AdminPermission)
     @UsePipe(ObjectRelationalFriendlyPipe,before=False)
     @BaseHTTPRessource.Get('/group/{group:path}')
-    async def read_group(self,request:Request,response:Response,group:str='',authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    async def read_group(self,request:Request,response:Response,group:str='',authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         if group == '':
             return await GroupClientORM.all()
         else:
@@ -271,11 +271,13 @@ class ClientRessource(BaseHTTPRessource):
 @HTTPRessource(ADMIN_PREFIX, routers=[ClientRessource,PolicyRessource])
 class AdminRessource(BaseHTTPRessource):
 
+    clear_cache_query = get_query_params('clear','false',parse=True,raise_except=True)
+
     @InjectInMethod()
     def __init__(self, configService: ConfigService, jwtAuthService: JWTAuthService, securityService: SecurityService,tortoiseService:TortoiseConnectionService,vaultService:VaultService,adminService:AdminService):
         BaseHTTPRessource.__init__(self)
         self.configService = configService
-        self.jwtAuthService = jwtAuthService
+        self.jwtService = jwtAuthService
         self.securityService = securityService
         self.tortoiseService = tortoiseService
         self.vaultService = vaultService
@@ -287,12 +289,12 @@ class AdminRessource(BaseHTTPRessource):
     @LockService(VaultService,JWTAuthService,lockType='reader')
     @UseHandler(AuthClientHandler,ORMCacheHandler,RedisHandler,SecurityHandler)
     @BaseHTTPRessource.HTTPRoute('/blacklist/', methods=[HTTPMethod.POST])
-    async def blacklist_tokens(self,blacklist:BlacklistModel, response:Response, request: Request,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    async def blacklist_tokens(self,blacklist:BlacklistModel, response:Response, request: Request,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         
         match blacklist.mode:
             case 'token':
                 try:
-                    clientInfo =  self.jwtAuthService.verify_client_token_permission(blacklist.identity,True)
+                    clientInfo =  self.jwtService.verify_client_token_permission(blacklist.identity,True)
                 except HTTPException as e:
                     raise e
                 except:
@@ -334,7 +336,7 @@ class AdminRessource(BaseHTTPRessource):
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @UseHandler(AuthClientHandler,ORMCacheHandler,SecurityHandler,RedisHandler)
     @BaseHTTPRessource.HTTPRoute('/blacklist/', methods=[HTTPMethod.DELETE])
-    async def un_blacklist_tokens(self, blacklist:BlacklistModel,response:Response, request: Request, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    async def un_blacklist_tokens(self, blacklist:BlacklistModel,response:Response, request: Request, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
 
         match blacklist.mode:
             case 'token':
@@ -353,52 +355,6 @@ class AdminRessource(BaseHTTPRessource):
 
                 await BlacklistGroupCache.Invalid(blacklist.identity)
 
-    @PingService([VaultService])
-    @UseLimiter(limit_value='1/day')
-    @UseHandler(AuthClientHandler,ORMCacheHandler,VaultHandler,SecurityHandler)
-    @LockService(VaultService,SettingService,JWTAuthService,lockType='reader',check_status=False)
-    @BaseHTTPRessource.HTTPRoute('/revoke-all/', methods=[HTTPMethod.DELETE],deprecated=True,mount=False)
-    async def revoke_all_tokens(self, request: Request, broker:Annotated[Broker,Depends(Broker)], authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
-        await self.adminService.revoke_all_tokens()
-
-        broker.propagate(StateProtocol(
-            service=self.jwtAuthService.name,
-            to_build=True,
-            bypass_async_verify=True,
-            force_sync_verify=True
-        ))
-
-        client = await ClientORM.filter(client_id=clientInfo['client_id']).first()
-        auth_token, refresh_token = self.issue_auth(client)
-        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully invalidated",
-                                                                     "details": "Even if you're the admin old token wont be valid anymore",
-                                                                     "tokens": {"refresh_token": refresh_token, "auth_token": auth_token},
-                                                                     })
-    
-    @PingService([VaultService])
-    @UseLimiter(limit_value='1/day')
-    @UseHandler(AuthClientHandler,ORMCacheHandler,VaultHandler,SecurityHandler)
-    @LockService(VaultService,SettingService,JWTAuthService,lockType='reader',check_status=False)
-    @BaseHTTPRessource.HTTPRoute('/unrevoke-all/', methods=[HTTPMethod.POST],deprecated=True,mount=False)
-    async def un_revoke_all_tokens(self, request: Request, unRevokeModel:UnRevokeGenerationIDModel, broker:Annotated[Broker,Depends(Broker)], authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):   
-        unRevokeModel = unRevokeModel.model_dump()
-        await self.adminService.unrevoke_all_tokens(**unRevokeModel)
-        
-        broker.propagate(StateProtocol(service=self.jwtAuthService.name,to_build=True,bypass_async_verify=True,force_sync_verify=True))
-
-        client = await ClientORM.filter(client_id=clientInfo['client_id']).first()
-        auth_token, refresh_token = await self.issue_auth(client)
-
-        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Tokens successfully invalidated",
-                                                                     "details": "Even if you're the admin old token wont be valid anymore",
-                                                                     "tokens": {"refresh_token": refresh_token, "auth_token": auth_token},})
-
-    @UseLimiter(limit_value='1/day')
-    @LockService(VaultService,JWTAuthService,lockType='reader')
-    @BaseHTTPRessource.HTTPRoute('/revoke-version/', methods=[HTTPMethod.GET],deprecated=True,mount=False)
-    def check_version(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
-        return self.jwtAuthService.GENERATION_METADATA
-
     @UseHandler(ORMCacheHandler)
     @UseLimiter(limit_value='10/day')
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
@@ -408,7 +364,7 @@ class AdminRessource(BaseHTTPRessource):
     @UseGuard(AdminModificationGuard,AuthenticationClientGuard,ClientAuthTypeGuard())
     @LockService(VaultService,SettingService,AdminService,JWTAuthService,lockType='reader',as_manager=True)
     @BaseHTTPRessource.HTTPRoute('/revoke/{client}/', methods=[HTTPMethod.DELETE])
-    async def revoke_tokens(self,broker:Annotated[Broker,Depends(Broker)], request: Request, client: Annotated[ClientMiniService, Depends(get_client)], authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    async def revoke_tokens(self,broker:Annotated[Broker,Depends(Broker)], request: Request, client: Annotated[ClientMiniService, Depends(get_client)], authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
 
         async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:    
             await client.revoke_itself(ctx,authenticated=False)
@@ -425,13 +381,66 @@ class AdminRessource(BaseHTTPRessource):
     @LockService(VaultService,SettingService,AdminService,lockType='reader',as_manager=True)
     @UseGuard(AdminModificationGuard,BlacklistClientGuard,ClientAuthTypeGuard(accept_access=False, accept_api=True), AuthenticationClientGuard(reverse=True),)
     @BaseHTTPRessource.HTTPRoute('/issue-auth/{client}/', methods=[HTTPMethod.GET],response_model=AccessModel)
-    async def issue_auth_token(self,broker:Annotated[Broker,Depends(Broker)], client: Annotated[ClientMiniService, Depends(get_client)], request: Request, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientTokenInfo = Depends(get_client_info)):
+    async def issue_auth_token(self,broker:Annotated[Broker,Depends(Broker)], client: Annotated[ClientMiniService, Depends(get_client)], request: Request, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         
         async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:    
-            signature = await client.revoke_itself(ctx)
+            signature = await client.revoke_itself(ctx,authenticated=True)
             api_token,_ = await client.generate_access(signature)
             
-        broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id ))
+        broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))
         return api_token
         
+    #######################################################################################################################################
+    ###############                                                                                                     ###################
+    ###############                                                                                                     ###################
+    ###################################                                                  ##################################################
+    ###############                                                                                                     ###################
+    ###############                                                                                                     ###################
+    #######################################################################################################################################
+
+    @PingService([VaultService])
+    @UseLimiter(limit_value='1/day')
+    @UsePipe(AccessTokenModelPipe,before=False)
+    @UseHandler(AuthClientHandler,ORMCacheHandler,VaultHandler,SecurityHandler)
+    @LockService(VaultService,SettingService,JWTAuthService,lockType='reader',check_status=False)
+    @BaseHTTPRessource.HTTPRoute('/revoke-all/', methods=[HTTPMethod.DELETE],deprecated=True,mount=False,response_class=AccessModel)
+    async def revoke_all_tokens(self, request: Request, broker:Annotated[Broker,Depends(Broker)],clear:bool=Depends(clear_cache_query), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+        await self.adminService.revoke_all_tokens()
+
+        async with self.adminService.lock('reader',clientInfo['client_id']) as client:
+            authSignature:AuthSignature = client.signature.to_plain()
+            access_token,refresh_token = client.generate_access(authSignature['signature'])
+
+            if clear:
+                await BlacklistGroupCache.InvalidAll([WILDCARD])
+
+        broker.propagate(StateProtocol(service=self.jwtService.name,to_build=True,bypass_async_verify=True,force_sync_verify=True))
+        return access_token
+    
+    @PingService([VaultService])
+    @UseLimiter(limit_value='1/day')
+    @UseHandler(AuthClientHandler,ORMCacheHandler,VaultHandler,SecurityHandler)
+    @LockService(VaultService,SettingService,JWTAuthService,lockType='reader',check_status=False)
+    @BaseHTTPRessource.HTTPRoute('/unrevoke-all/', methods=[HTTPMethod.POST],deprecated=True,mount=False,response_class=AccessModel)
+    async def un_revoke_all_tokens(self, request: Request, unRevokeModel:UnRevokeGenerationIDModel, broker:Annotated[Broker,Depends(Broker)],clear:bool=Depends(clear_cache_query), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):   
+        unRevokeModel = unRevokeModel.model_dump()
+        await self.adminService.unrevoke_all_tokens(**unRevokeModel)
+        
+        async with self.adminService.lock('reader',clientInfo['client_id']) as client:
+            authSignature:AuthSignature = client.signature.to_plain()
+            access_token,refresh_token = client.generate_access(authSignature['signature'])
+
+            if clear:
+                await BlacklistGroupCache.InvalidAll([WILDCARD])
+
+        broker.propagate(StateProtocol(service=self.jwtService.name,to_build=True,bypass_async_verify=True,force_sync_verify=True))
+        return access_token
+    
+    @UseLimiter(limit_value='1/day')
+    @PingService([VaultService])
+    @LockService(VaultService,JWTAuthService,lockType='reader')
+    @BaseHTTPRessource.HTTPRoute('/revoke-version/', methods=[HTTPMethod.GET],deprecated=True,mount=False)
+    def check_version(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+        return self.jwtService.GENERATION_METADATA
+
 
