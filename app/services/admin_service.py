@@ -2,10 +2,10 @@ from datetime import timedelta
 from typing import TypedDict
 
 from tortoise.expressions import Q
-from app.classes.auth_permission import AuthPermission, AuthType, PolicyModel, PolicyUpdateMode, Scope, filter_asset_permission, get_combined_policies, parse_authPermission_enum
+from app.classes.auth_permission import AuthPermission, AuthType, Credentials, EncryptedRecoveryTokens, PolicyModel, PolicyUpdateMode, RecoveryTokens, Scope, filter_asset_permission, get_combined_policies, parse_authPermission_enum
 from app.classes.secrets import ChaCha20SecretsWrapper
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BaseService, BuildFailureError, LinkDep, MiniService, Service, ServiceStatus
-from app.errors.security_error import AuthzSignatureMisMatchError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError,IdentityAlreadyBlacklistedError, PasswordLessAuthTypeStrategyError
+from app.errors.security_error import AuthzSignatureMisMatchError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError,IdentityAlreadyBlacklistedError, PasswordLessAuthTypeStrategyError, ProvidedHashNotEquivalentError
 from app.models.orm.security_model import ClientORM, GroupClientORM, PolicyMappingORM, UpdateClientModel
 from app.services.config_service import ConfigService
 from app.services.database.redis_service import RedisService
@@ -15,10 +15,6 @@ from app.services.vault_service import VaultService
 from app.utils.helper import generateId
 from app.utils.toolbox import RunInThreadPool
 
-
-class Credentials(TypedDict):
-    password:str
-    salt:str
 
 class AuthSignature(TypedDict):
     signature:str
@@ -54,10 +50,14 @@ class ClientMiniService(BaseMiniService):
         path = f"{self.miniService_id}/credentials/"
         self.vaultService.security_engine.put('clients',credentials,path)
 
-    @RunInThreadPool  
-    def compare_password(self,provided_password:str):
+    @RunInThreadPool
+    def fetch_password(self,):
         path = f"{self.miniService_id}/credentials/"
         credentials:Credentials=self.vaultService.security_engine.read('clients',path)
+        return credentials
+
+    @RunInThreadPool  
+    def compare_password(self,provided_password:str,credentials:Credentials):
         salt:str = self.vaultService.transit_engine.decrypt(credentials['salt'],'security-key')
         password:str = self.vaultService.transit_engine.decrypt(credentials['password'],'security-key')
         self.securityService.compare_hash(password,provided_password,self.vaultService.CLIENT_PASSWORD_HASH_KEY,salt)
@@ -70,7 +70,29 @@ class ClientMiniService(BaseMiniService):
         path = f"{self.miniService_id}/auth-signature"
         self.vaultService.security_engine.put('clients',authSignature,path)
         return signature
+
+    @RunInThreadPool
+    def create_recovery_code(self,recovery:EncryptedRecoveryTokens):
+        path = f'{self.client_id}/recovery'
+        self.vaultService.security_engine.put('clients',recovery,path)
+
+    async def verify_recovery_code(self,code:str):
+        path = f'{self.client_id}/recovery'
+        recovery:EncryptedRecoveryTokens=self.vaultService.security_engine.read('clients',path)
+        tokens = recovery.get('tokens',[])
+
+        if not tokens:
+            raise ProvidedHashNotEquivalentError(code,'Recovery Code Setup')
+
+        for token in tokens:
+            try:
+                await self.compare_password(code,token)
+                return True
+            except:
+                continue
         
+        raise ProvidedHashNotEquivalentError(code,'Recovery Code')
+
     def compare_auth_signature(self,signature:str):
         authSignature:AuthSignature = self.signature.to_plain()
         if 'signature' not in authSignature:

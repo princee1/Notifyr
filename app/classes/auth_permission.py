@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any, Callable, List, Literal,Dict,NotRequired, Optional, Self
 from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
 from typing_extensions import TypedDict
@@ -137,6 +138,38 @@ class RoutePermissionModel(BaseModel):
             if not self.custom_routes:
                 raise ValueError('Custom Routes must have at least one routes')
         return self
+
+class Credentials(TypedDict):
+    password:str
+    salt:str
+
+class EncryptedRecoveryTokens(TypedDict):
+    tokens:List[Credentials]
+    recovery_id:str
+
+class RecoveryTokens(TypedDict):
+    tokens:List[str]
+    recovery_id:str
+
+class RecoveryTokenGenerator:
+
+    def __init__(self,count:int = 3,part:int=4,sep:str='-',wait:float=0.150):
+        self.part = part
+        self.count = count
+        self.wait = wait
+        self.sep = sep
+        self.tokens = []
+        self.id = generateId(12)
+
+    async def generate(self,token_count=6):
+        for _ in range(token_count):
+            t = self.sep.join([generateId(self.count) for p in range(self.part)])
+            yield t
+            self.tokens.append(t)
+            asyncio.sleep(self.wait)
+
+    def export(self):
+        return RecoveryTokens(tokens=self.tokens,)
 
 class MCPPermissionModel(BaseModel):
     tags:List[str] = Field(default_factory=list, description="List of tags that the user is allowed to access",max_length=20)

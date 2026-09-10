@@ -148,7 +148,7 @@ class ClientModel(ClientModelBase):
         return description.strip()
 
 
-UpdateClientModelBase = subset_model(ClientModel,'UpdateClientModelBase',include={'client_name','issued_for','client_email','client_description','client_scope','client_scope','password','policies'})
+UpdateClientModelBase = subset_model(ClientModel,'UpdateClientModelBase',include={'client_name','issued_for','client_email','client_description','client_scope','password','policies'})
 class UpdateClientModel(UpdateClientModelBase):
 
     remove_group:bool = Field(default=False)
@@ -205,13 +205,3 @@ class UnRevokeGenerationIDModel(BaseModel):
         destroy:bool = False
         delete:bool = False
         version_to_delete:list[int] = []
-
-async def raw_revoke_challenges(client:ClientORM):
-    query = "SELECT security.raw_revoke_challenges($1::UUID);"
-    tortoise_client = Tortoise.get_connection('default')
-    return await tortoise_client.execute_query(query, [client.client_id])
-
-async def raw_revoke_auth_token(client:ClientORM):
-    query = "SELECT security.raw_revoke_auth_token($1::UUID);"
-    tortoise_client = Tortoise.get_connection('default')
-    return await tortoise_client.execute_query(query, [client.client_id])

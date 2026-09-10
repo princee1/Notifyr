@@ -6,10 +6,12 @@ from app.classes.cost_definition import CostLessThanZeroError, CostMoreThanZeroE
 from app.container import Get, InjectInMethod
 from app.definition._cost import Cost, DataCost, SimpleTaskCost,Bill
 from app.definition._utils_decorator import Interceptor, InterceptorDefaultException
+from app.depends.orm_cache import WILDCARD, BlacklistClientCache
 from app.depends.res_cache import ResponseCacheInterface
 from app.manager.broker_manager import Broker
 from app.manager.keep_alive_manager import KeepAliveManager
 from app.manager.task_manager import TaskManager
+from app.services.admin_service import ClientMiniService
 from app.services.cost_service import CostService
 from app.services.database.memcached_service import MemCachedService
 
@@ -181,3 +183,21 @@ class DataCostInterceptor(Interceptor):
                 await self.costService.refund_credits(self.credit,bill)
 
         Cost.inject_cost_info(response,bill,self.credit)
+
+class InvalidBlacklistTokenInterceptor(Interceptor):
+
+    @InjectInMethod()
+    def __init__(self,redisService:RedisService):
+        super().__init__(False, True)
+        self.redisService = redisService
+
+    async def intercept_after(self, result,request:Request,client:ClientMiniService):
+        if not getattr(request.state,'clear',False):
+            return
+        client_blacklisted = await BlacklistClientCache.Get([client.client_id,''])
+
+        await BlacklistClientCache.InvalidAll([client.client_id,WILDCARD])
+        if client_blacklisted:
+            BlacklistClientCache.Store([client.client_id,''],True,)
+
+        return

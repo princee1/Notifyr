@@ -4,7 +4,7 @@ from typing import Annotated, Callable, get_args
 from fastapi import Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
 from app.decorators.guards import AdminModificationGuard, AuthenticationClientGuard, BlacklistClientGuard, ClientAuthTypeGuard, PolicyGuard, TortoiseHardLimitGuard
-from app.decorators.interceptors import DataCostInterceptor
+from app.decorators.interceptors import DataCostInterceptor, InvalidBlacklistTokenInterceptor
 from app.definition._cost import DataCost
 from app.definition._service import MiniStateProtocol, StateProtocol
 from app.depends.funcs_dep import fetch_group, fetch_policy, get_blacklist, get_group, get_client, get_policy
@@ -150,21 +150,22 @@ class ClientRessource(BaseHTTPRessource):
 
     @PingService([VaultService])
     @UsePermission(AdminPermission)
+    @UseInterceptor(InvalidBlacklistTokenInterceptor)
     @UsePipe(ObjectRelationalFriendlyPipe,before=False)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
-    @LockService(SettingService,VaultService,lockType='reader')
-    @LockService(AdminService,as_manager=True,miniLockType='reader')
     @UseHandler(ValueErrorHandler,ORMCacheHandler,VaultHandler,SecurityHandler,MiniServiceHandler)
+    @LockService(VaultService,SettingService,AdminService,as_manager=True,lockType='reader',miniLockType='reader')
     @BaseHTTPRessource.HTTPRoute('/{client}/', methods=[HTTPMethod.PUT])
-    async def update_client(self, updateClient:UpdateClientModel,broker:Annotated[Broker,Depends(Broker)],client: Annotated[ClientMiniService, Depends(get_client)],mode:PolicyUpdateMode = Depends(policy_update_mode_query),profile:str=Depends(get_client), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info) ):
+    async def update_client(self,request:Request,response:Response, updateClient:UpdateClientModel,broker:Annotated[Broker,Depends(Broker)],client: Annotated[ClientMiniService, Depends(get_client)],mode:PolicyUpdateMode = Depends(policy_update_mode_query),profile:str=Depends(get_client), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info) ):
 
         group = await fetch_group(updateClient.group) if updateClient.group  else None
         async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
             is_revoked = await client.update_client(updateClient,group,ctx)
-            await self.adminService.update_policy(updateClient.policies,mode,client,group,ctx)
+            if updateClient.policies:
+                await self.adminService.update_policy(updateClient.policies,mode,client,group,ctx)
             if is_revoked:
                 await client.revoke_itself(ctx,authenticated=False)
-                await BlacklistClientCache.InvalidAll([client.client_id,WILDCARD])
+                request.state.clear = True
 
             broker.propagate(StateProtocol(service=AdminService))
             return client.client
