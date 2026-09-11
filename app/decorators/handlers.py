@@ -703,6 +703,10 @@ class VaultHandler(Handler):
     async def handle(self, function, *args, **kwargs):
         try:
             return await function(*args,**kwargs)
+
+        except hvac.exceptions.InvalidPath:
+            raise HTTPException(status_code=500)
+        
         except hvac.exceptions.InvalidRequest as e:
             raise HTTPException(500,)
 

@@ -6,7 +6,7 @@ from app.classes.auth_permission import API_TOKEN_CLIENT_TYPE_SET, AuthType, Cli
 from app.utils.helper import subset_model, uuid_v1_mc
 from app.utils.validation import ipv4_subnet_validator, ipv4_validator,PasswordValidator
 
-SCHEMA = 'security'
+SCHEMA = 'clients'
 
 class GroupClientORM(models.Model):
     group_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
@@ -37,7 +37,7 @@ class ClientORM(models.Model):
     client_type = fields.CharEnumField(enum_type=ClientType, default=ClientType.User, max_length=25)
     authenticated = fields.BooleanField(default=False) #NOTE Whether the client has been authenticated or not
     issued_for = fields.CharField(max_length=50, null=False, unique=True)
-    group = fields.ForeignKeyField("security.GroupClientORM", related_name="group", on_delete=fields.SET_NULL, null=True)
+    group = fields.ForeignKeyField(f"{SCHEMA}.GroupClientORM", related_name="group", on_delete=fields.SET_NULL, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
     class Meta:
@@ -67,8 +67,8 @@ class ClientORM(models.Model):
 class PolicyMappingORM(models.Model):
     mapping_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     policy_id = fields.CharField(max_length=30, unique=True, null=False)
-    client = fields.ForeignKeyField("security.ClientORM", related_name="policy_mappings", on_delete=fields.CASCADE, null=True)
-    group = fields.ForeignKeyField("security.GroupClientORM", related_name="policy_mappings", on_delete=fields.CASCADE, null=True)
+    client = fields.ForeignKeyField(f"{SCHEMA}.ClientORM", related_name="policy_mappings", on_delete=fields.CASCADE, null=True)
+    group = fields.ForeignKeyField(f"{SCHEMA}.GroupClientORM", related_name="policy_mappings", on_delete=fields.CASCADE, null=True)
 
     class Meta:
         schema = SCHEMA
@@ -87,9 +87,9 @@ class PolicyMappingORM(models.Model):
             'group_id':str(self.group_id) if self.group else None,
         }
 
-client_password_validator = PasswordValidator(12,60,)
+client_password_validator = PasswordValidator(10,60,)
 
-ClientModelBase = pydantic_model_creator(ClientORM, name="ClientORM", exclude=('created_at', 'updated_at','client_id',"authenticated","client_scope","group","client_username",))
+ClientModelBase = pydantic_model_creator(ClientORM, name="ClientORM", exclude=('created_at', 'updated_at','client_id',"authenticated","client_scope","group",))
 
 
 def validate_ip(issued_for:str,scope:Scope):
@@ -124,19 +124,18 @@ class AdminClientModel(BaseModel):
     password:Secret[str]
 
     @field_validator('password')
-    def check_password(cls,p):
-        return client_password_validator(p)
+    def check_password(cls,p:Secret):
+        return Secret(client_password_validator(p.get_secret_value()))
 
     @model_validator(mode="after")
     def validate_ip_issuance(self)->Self:
         validate_ip(self.issued_for,self.client_scope)
         return self
 
-    @field_validator('username')
+    @field_validator('client_username')
     def validate_username(cls,usr):
         if ' 'in usr:
             raise ValueError('The username cannot contain space')
-
         return usr
      
 class ClientModel(ClientModelBase):
@@ -154,7 +153,7 @@ class ClientModel(ClientModelBase):
         return self
 
     @field_validator('policies')
-    def normalize_policies(self,val):
+    def normalize_policies(cls,val):
         return list(set(val))
 
     @model_validator(mode='after')
@@ -173,7 +172,7 @@ class ClientModel(ClientModelBase):
     def validate_description(cls,description:str)->str:
         return description.strip()
 
-    @field_validator('username')
+    @field_validator('client_username')
     def validate_username(cls,usr):
         if ' 'in usr:
             raise ValueError('The username cannot contain space')
@@ -212,11 +211,7 @@ class UpdateClientModel(UpdateClientModelBase):
             return super().validate_description(description)
         return description
 
-    @field_validator('client_type')
-    def validate_client_type(cls,x:Any):
-        return x
-
-    @model_validator('policies')
+    @field_validator('policies')
     def normalize_policies(cls,val):
         if val!=None:
             return super().normalize_policies(val)

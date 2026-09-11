@@ -1,3 +1,5 @@
+import hvac
+
 from app.definition._error import BaseError
 from app.utils.constant import VaultConstant
 from app.utils.helper import b64_decode, b64_encode
@@ -93,14 +95,18 @@ class KV1VaultEngine(VaultEngine):
                 )    
         return delete_response
 
-    def list(self,sub_mount:str)->list[str]:
-        list_response = self.client.secrets.kv.v1.list_secrets(
-            path=VaultConstant.KV_ENGINE_BASE_PATH(sub_mount),
-            mount_point=self.mount_point
-        )
-        return list_response['data'].get('keys',[])
-    
-
+    def list(self,sub_mount:str,known:bool=True)->list[str]:
+        try:
+            list_response = self.client.secrets.kv.v1.list_secrets(
+                path=VaultConstant.KV_ENGINE_BASE_PATH(sub_mount),
+                mount_point=self.mount_point
+            )
+            return list_response['data'].get('keys',[])
+        except hvac.exceptions.InvalidPath as e:
+            if known:
+                return []
+            raise e
+        
 class KV2VaultEngine(VaultEngine):
 
     def read(self, sub_mount: VaultConstant.NotifyrSecretType, path: str = '', version: int = None):

@@ -87,7 +87,7 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
     def sync_find(self,model:Model,projection:list[str]=None,mode:Literal['json','orm']='json',listing:Literal['list','generator']='generator'):
         proj = projection or []
         columns = list(set(proj))
-        query = sql.SQL("""SELECT {columns}FROM {schema}.{table}""").format(columns=sql.SQL(", ").join(sql.Identifier(column) for column in columns),
+        query = sql.SQL("""SELECT {columns} FROM {schema}.{table}""").format(columns=sql.SQL(", ").join(sql.Identifier(column) for column in columns),
                 schema=sql.Identifier(model.Meta.schema),
                 table=sql.Identifier(model.Meta.table),)
         with self.conn_ctx() as cur:

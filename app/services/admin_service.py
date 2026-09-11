@@ -213,8 +213,8 @@ class AdminService(BaseMiniServiceManager[ClientMiniService]):
         for p in policies_keys:
             policies[p] = self.vaultService.security_engine.read('policies',p)
 
-        for mapping in self.tortoiseConnService.vaultService(PolicyMappingORM):
-            ...
+        for mapping in self.tortoiseConnService.sync_find(PolicyMappingORM):
+            print(mapping)
 
         for client in self.tortoiseConnService.sync_find(ClientORM):
             print(client)

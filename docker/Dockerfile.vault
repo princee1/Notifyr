@@ -181,6 +181,18 @@ path "notifyr-secrets/settings" {
   capabilities = ["create", "update", "read", "delete"]
 }
 
+path "notifyr-security/policies/" {
+  capabilities = ["list"]
+}
+
+path "notifyr-security/policies/*" {
+  capabilities = ["create", "update", "read", "delete"]
+}
+
+path "notifyr-security/clients/*" {
+  capabilities = ["create", "update", "read", "delete"]
+}
+
 # ---- GENERATION ID ENGINE ---- 
 
 path "notifyr-generation/data/generation-id" {

@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 import app.models.orm.security_model as security
 from app.utils.constant import RedisConstant
+from app.utils.prettyprint import PrettyPrinter_
 from app.utils.toolbox import RunAsync
 
 parser = argparse.ArgumentParser(description="Read and validate JSON from a file or stdin.")
@@ -28,7 +29,7 @@ except PermissionError:
 except json.JSONDecodeError as e:
     parser.error(f"Invalid JSON")
 except ValidationError as e:
-    parser.error(f'Validation Error {e}')
+    parser.error(f'Validation Error {e.errors(include_input=False,include_url=False)}')
 
 from app.services import VaultService
 from app.services import JWTAuthService
@@ -43,6 +44,7 @@ from app.services.admin_service import ClientMiniService
 from app.services.database.tortoise_service import SECURITY_CREDS
 
 from app.container import build_container, Get
+PrettyPrinter_.message(f'Building container for the admin creation')
 build_container()
 
 ADMIN_INIT_KEY='admin-init'
@@ -65,7 +67,7 @@ async def main():
     clientORM = security.ClientORM(client_type=ClientType.Admin,client_description='Admin Account',**admin_info)
 
     client = ClientMiniService(vaultService,configService,jwtService,securityService,id=clientORM.client_id) 
-    encrypted_password,salt =await client.encrypt_password(admin.password)
+    encrypted_password,salt =await client.encrypt_password(admin.password.get_secret_value())
 
     async with tortoiseService.transaction(SECURITY_CREDS) as ctx:
         await clientORM.save(ctx)
