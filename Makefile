@@ -17,6 +17,9 @@ DOCKER_COMPOSE_MONITOR = $(DOCKER) compose -f 'monitor.docker-compose.yaml'
 DEPLOY_CONFIG   = ./.notifyr/deploy.json
 SECRETS_DIR     = ./.secrets
 
+#Admin Creds
+ADMIN_CREDS_DIR = ./.admin/creds.json
+
 # Other Services
 ngrok_url = https://elegant-gazelle-leading.ngrok-free.app
 
@@ -193,7 +196,7 @@ deploy-data:
 
 
 # Main deployment target
-deploy: deploy-data deploy-agentic deploy-server
+deploy: deploy-data admin-init deploy-agentic deploy-server
 	@sleep 10 && clear
 	@echo "\n================================================="
 	@echo "🟢 FULL DEPLOYMENT COMPLETE (Data & Server) 🟢"
@@ -211,6 +214,21 @@ agentic: deploy-data deploy-agentic
 	$(DOCKER_COMPOSE_BASE) down ncs
 	@echo "\n================================================="
 	@echo "🟢 AGENTIC DEPLOYMENT COMPLETE 🟢"
+	@echo "================================================="
+
+.PHONY: admin-init
+admin-init:
+	@echo "================================================="
+	@echo "💾 Setting up Notifyr Admin"
+	@echo "================================================="
+
+	@trap 'rm -rf ./.admin/ ' EXIT INT TERM; \
+	./scripts/utils/generate-admin.sh $(ADMIN_CREDS_DIR) && \
+	docker compose run --rm -T admin-init python /usr/src/admin_init.py < $(ADMIN_CREDS_DIR)
+
+	docker compose rm admin-init || /dev/null
+	@echo "================================================="
+	@echo "✅ Admin User Created"
 	@echo "================================================="
 
 
@@ -336,8 +354,3 @@ monitor-off:
 	@echo "================================================="
 	@echo "✅ Mode Monitor is OFF."
 	@echo "================================================="
-
-admin-init:
-
-	... | docker compose exec -T app-1 python admin_init.py
-	

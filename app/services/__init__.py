@@ -4,11 +4,11 @@ from app.services.config_service import ConfigService,WorkerService
 from app.services.logger_service import LoggerService
 
 
-if APP_MODE in {ApplicationMode.beat, ApplicationMode.server ,ApplicationMode.worker,ApplicationMode.init}:
+if APP_MODE in {ApplicationMode.beat, ApplicationMode.server ,ApplicationMode.worker,ApplicationMode.admin}:
     from app.services.vault_service import VaultService
     from app.services.database.redis_service import RedisService
 
-if APP_MODE == ApplicationMode.init:
+if APP_MODE == ApplicationMode.admin:
     from app.services.database.tortoise_service import TortoiseConnectionService
     from app.services.admin_service import AdminService
     from app.services.security_service import JWTAuthService

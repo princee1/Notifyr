@@ -3,7 +3,9 @@ import json
 import sys
 import asyncio
 
-from app.models.orm.security_model import ClientORM,AdminClientModel
+from pydantic import ValidationError
+
+import app.models.orm.security_model as security
 from app.utils.constant import RedisConstant
 from app.utils.toolbox import RunAsync
 
@@ -18,13 +20,15 @@ try:
             data = json.load(f)
     else:
         data = json.load(sys.stdin)
-    admin = AdminClientModel(**data)
+    admin = security.AdminClientModel(**data)
 except FileNotFoundError:
     parser.error(f"File not found: {args.file}")
 except PermissionError:
     parser.error(f"Permission denied: {args.file}")
 except json.JSONDecodeError as e:
     parser.error(f"Invalid JSON")
+except ValidationError as e:
+    parser.error(f'Validation Error {e}')
 
 from app.services import VaultService
 from app.services import JWTAuthService
@@ -58,7 +62,7 @@ async def main():
     await tortoiseService.init_connection()
 
     admin_info = admin.model_dump(mode='python',exclude={'password',})
-    clientORM = ClientORM(client_type=ClientType.Admin,client_description='Admin Account',**admin_info)
+    clientORM = security.ClientORM(client_type=ClientType.Admin,client_description='Admin Account',**admin_info)
 
     client = ClientMiniService(vaultService,configService,jwtService,securityService,id=clientORM.client_id) 
     encrypted_password,salt =await client.encrypt_password(admin.password)

@@ -184,3 +184,4 @@ TODO
 .secrets/
 .certificates/
 .help/
+.admin/

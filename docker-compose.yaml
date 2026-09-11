@@ -306,6 +306,23 @@ services:
       - data_net
       - vault_net
 
+  admin-init:
+    image: notifyr/fastapi:community
+    container_name: admin-init
+    command: ["tail", "-f" ,"/dev/null"]
+    volumes:
+      - ./scripts/admin_init.py:/usr/src/admin_init.py
+    environment:
+      - REDIS_HOST=${REDIS_HOST-redis}
+      - POSTGRES_HOST=${POSTGRES_HOST-postgres}
+      - MODE=${MODE:-prod}
+    secrets:
+      - source: deploy
+        target: /run/secrets/deploy.json
+    networks:
+      - data_net
+      - vault_net 
+
   # ==========================================
   # SECURITY LAYER
   # ==========================================

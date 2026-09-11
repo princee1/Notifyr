@@ -1,11 +1,10 @@
 from typing import Any, Literal, Optional, Self
-from tortoise import Tortoise, fields, models
+from tortoise import fields, models
 from tortoise.contrib.pydantic import pydantic_model_creator
-from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
+from pydantic import BaseModel, Field, PrivateAttr, Secret, field_validator, model_validator
 from app.classes.auth_permission import API_TOKEN_CLIENT_TYPE_SET, AuthType, ClientType, Scope
-from app.utils.helper import generateId, subset_model, uuid_v1_mc
+from app.utils.helper import subset_model, uuid_v1_mc
 from app.utils.validation import ipv4_subnet_validator, ipv4_validator,PasswordValidator
-from tortoise.contrib.postgres.fields import ArrayField
 
 SCHEMA = 'security'
 
@@ -122,7 +121,7 @@ class AdminClientModel(BaseModel):
     issued_for:Optional[str] = Field(None,min_length=15,max_length=15)
     client_name:str = Field(min_length=10,max_length=70)
     client_scope:Scope = Field(Scope.Free)
-    password:str
+    password:Secret[str]
 
     @field_validator('password')
     def check_password(cls,p):
@@ -133,7 +132,13 @@ class AdminClientModel(BaseModel):
         validate_ip(self.issued_for,self.client_scope)
         return self
 
-        
+    @field_validator('username')
+    def validate_username(cls,usr):
+        if ' 'in usr:
+            raise ValueError('The username cannot contain space')
+
+        return usr
+     
 class ClientModel(ClientModelBase):
     password:Optional[str] = None
     client_scope:Scope = Field(Scope.SoloDolo)
@@ -168,8 +173,16 @@ class ClientModel(ClientModelBase):
     def validate_description(cls,description:str)->str:
         return description.strip()
 
+    @field_validator('username')
+    def validate_username(cls,usr):
+        if ' 'in usr:
+            raise ValueError('The username cannot contain space')
+
+        return usr
+
 
 UpdateClientModelBase = subset_model(ClientModel,'UpdateClientModelBase',include={'client_name','issued_for','client_email','client_description','client_scope','password','policies'})
+
 class UpdateClientModel(UpdateClientModelBase):
 
     remove_group:bool = Field(default=False)
