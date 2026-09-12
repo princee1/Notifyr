@@ -225,8 +225,7 @@ admin-init:
 	@trap 'rm -rf ./.admin/ ' EXIT INT TERM; \
 	./scripts/utils/generate-admin.sh $(ADMIN_CREDS_DIR) && \
 	docker compose run --rm -T admin-init python /usr/src/admin_init.py < $(ADMIN_CREDS_DIR)
-
-	docker compose rm admin-init || /dev/null
+	
 	@echo "================================================="
 	@echo "✅ Admin User Created"
 	@echo "================================================="

@@ -37,7 +37,7 @@ class ClientORM(models.Model):
     client_type = fields.CharEnumField(enum_type=ClientType, default=ClientType.User, max_length=25)
     authenticated = fields.BooleanField(default=False) #NOTE Whether the client has been authenticated or not
     issued_for = fields.CharField(max_length=50, null=False, unique=True)
-    group = fields.ForeignKeyField(f"{SCHEMA}.GroupClientORM", related_name="group", on_delete=fields.SET_NULL, null=True)
+    group = fields.ForeignKeyField(f"security.GroupClientORM", related_name="group", on_delete=fields.SET_NULL, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
     class Meta:
@@ -67,8 +67,8 @@ class ClientORM(models.Model):
 class PolicyMappingORM(models.Model):
     mapping_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     policy_id = fields.CharField(max_length=30, unique=True, null=False)
-    client = fields.ForeignKeyField(f"{SCHEMA}.ClientORM", related_name="policy_mappings", on_delete=fields.CASCADE, null=True)
-    group = fields.ForeignKeyField(f"{SCHEMA}.GroupClientORM", related_name="policy_mappings", on_delete=fields.CASCADE, null=True)
+    client = fields.ForeignKeyField(f"security.ClientORM", related_name="policy_mappings", on_delete=fields.CASCADE, null=True)
+    group = fields.ForeignKeyField(f"security.GroupClientORM", related_name="policy_mappings", on_delete=fields.CASCADE, null=True)
 
     class Meta:
         schema = SCHEMA

@@ -43,7 +43,7 @@ from app.classes.auth_permission import ClientType
 from app.services.admin_service import ClientMiniService
 from app.services.database.tortoise_service import SECURITY_CREDS
 
-from app.container import build_container, Get
+from app.container import build_container, Get, BuildMiniService
 PrettyPrinter_.message(f'Building container for the admin creation')
 build_container()
 
@@ -51,14 +51,12 @@ ADMIN_INIT_KEY='admin-init'
 
 async def main():
     vaultService:VaultService = Get(VaultService)
-    jwtService:JWTAuthService = Get(JWTAuthService)
-    configService:ConfigService = Get(ConfigService)
-    securityService:SecurityService = Get(SecurityService)
     redisService:RedisService = Get(RedisService)
     tortoiseService:TortoiseConnectionService = Get(TortoiseConnectionService)
 
-    setup=await redisService.retrieve(RedisConstant.CONFIG_DB,ADMIN_INIT_KEY)
+    setup = await redisService.retrieve(RedisConstant.CONFIG_DB,ADMIN_INIT_KEY)
     if bool(setup):
+        await redisService.close_connections()
         return 
 
     await tortoiseService.init_connection()
@@ -66,7 +64,7 @@ async def main():
     admin_info = admin.model_dump(mode='python',exclude={'password',})
     clientORM = security.ClientORM(client_type=ClientType.Admin,client_description='Admin Account',**admin_info)
 
-    client = ClientMiniService(vaultService,configService,jwtService,securityService,id=clientORM.client_id) 
+    client = BuildMiniService(ClientMiniService,client=clientORM) 
     encrypted_password,salt =await client.encrypt_password(admin.password.get_secret_value())
 
     async with tortoiseService.transaction(SECURITY_CREDS) as ctx:
@@ -76,10 +74,13 @@ async def main():
 
     await redisService.store(RedisConstant.CONFIG_DB,ADMIN_INIT_KEY,True)
 
+    await redisService.close_connections()
+    await tortoiseService.close_connections()
+
     await RunAsync(redisService.revoke_lease)()
     await RunAsync(tortoiseService.revoke_lease)()
     await RunAsync(vaultService.revoke_auth_token)()
-    
+
     return
 
 if __name__ == '__name__':

@@ -1,7 +1,8 @@
 import asyncio
 from contextlib import asynccontextmanager, contextmanager
-from typing import Literal
+from typing import Literal, Type, TypeVar
 import psycopg2
+from psycopg2.extras import RealDictCursor
 from psycopg2 import sql
 from tortoise import Tortoise
 from tortoise.models import Model
@@ -22,6 +23,9 @@ from pydantic import BaseModel
 SECURITY_CREDS='security'
 
 CREDENTIALS_SET:set[CredentialName] = {'default',SECURITY_CREDS}
+
+R = TypeVar('R',bound=Model)
+
 
 @Service(links=[LinkDep(VaultService,to_build=True,to_destroy=True)])
 class TortoiseConnectionService(TempCredentialsDatabaseService):
@@ -84,22 +88,34 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
             },
         }
 
-    def sync_find(self,model:Model,projection:list[str]=None,mode:Literal['json','orm']='json',listing:Literal['list','generator']='generator'):
+    def sync_find(self,model:Type[R],projection:list[str]=None,mode:Literal['json','orm']='json',listing:Literal['list','generator','dict']='generator',key=None):
         proj = projection or []
+        if mode=='orm' and projection:
+            raise ValueError('Cannot build an ORM from a partial json mapping')
+
+        if listing =='dict' and not key:
+            raise ValueError('Key should be specified if the listing is a dict')
+            
         columns = list(set(proj))
         query = sql.SQL("""SELECT {columns} FROM {schema}.{table}""").format(columns=sql.SQL(", ").join(sql.Identifier(column) for column in columns),
                 schema=sql.Identifier(model.Meta.schema),
                 table=sql.Identifier(model.Meta.table),)
         with self.conn_ctx() as cur:
             cur.execute(query)
-            response = []
+            response = {} if listing == 'dict' else []
             for obj in cur.fetchall():
-                if listing == 'generator':
-                    yield obj
-                else:
-                    response.append(obj)
+                k = None if key == None else obj[key]
+                if mode=='orm':
+                    obj = model(**obj)
+                match listing:
+                    case 'generator':
+                        yield obj
+                    case 'list':
+                        response.append(obj)
+                    case 'dict':
+                        response[k] = obj
             
-            if listing == 'list':
+            if listing != 'generator':
                 return response
 
     def init_sync_connection(self):
@@ -127,7 +143,7 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
     @contextmanager
     def conn_ctx(self):
         with self.sync_conn:
-            with self.sync_conn.cursor() as cur:
+            with self.sync_conn.cursor(cursor_factory=RealDictCursor) as cur:
                 yield cur
 
     async def _creds_rotator(self):

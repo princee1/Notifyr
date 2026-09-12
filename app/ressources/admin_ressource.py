@@ -137,7 +137,7 @@ class ClientRessource(BaseHTTPRessource):
                 mapping = [PolicyMappingORM(policy_id=policy_id,client=client,group=None) for policy_id in clientModel.policies]
                 clientORM = await ClientORM.create(ctx,**client_data)
                 await PolicyMappingORM.bulk_create(mapping,using_db=ctx)
-                client = ClientMiniService(self.vaultService,self.configService,self.jwtAuthService,self.securityService,clientORM,[],id=clientModel._client_id)
+                client = ClientMiniService(self.vaultService,self.configService,self.jwtAuthService,self.securityService,clientORM,[])
                 await client.store_password(clientModel.password)
                 await client.create_auth_signature()
 

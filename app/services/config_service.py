@@ -152,7 +152,7 @@ class ConfigService(_service.BaseService):
         self.DATA_INGESTION_DIR:str = self.getenv('DATA_INGESTION_DIR', '/data-ingestion/' if self.MODE != MODE.DEV_MODE else './data-ingestion/')
 
         # GRAPHITI CONFIG #
-        self.GRAPHITI_MAX_COROUTINES = ConfigService.parseToInt(self.getenv('GRAPHITI_MAX_COROUTINES'))
+        self.GRAPHITI_MAX_COROUTINES:int = ConfigService.parseToInt(self.getenv('GRAPHITI_MAX_COROUTINES'))
 
         # SECURITY CONFIG #
         self.SECURITY_FLAG: bool = ConfigService.parseToBool(self.getenv('SECURITY_FLAG'), False)
@@ -248,11 +248,11 @@ class ConfigService(_service.BaseService):
         if self.JOBSTORE_DB not in ['redis','mongodb']:
             raise BuildFailureError(f'JOBSTORE_DB env var should be redis or mongodb not {self.JOBSTORE_DB}')
 
-        if not self.SECURITY_FLAG:
-            raise BuildWarningError(f"SECURITY_FLAG {self.SECURITY_FLAG} is set to False, this is not recommended for production environments")
-
         if self.CELERY_BROKER_PROVIDER not in ['redis','rabbitmq']:
             raise BuildWarningError()
+
+        if not self.SECURITY_FLAG:
+            raise BuildWarningError(f"SECURITY_FLAG {self.SECURITY_FLAG} is set to False, this is not recommended for production environments")
 
     def __getitem__(self, key):
         try:

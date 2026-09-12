@@ -21,13 +21,13 @@ class AuthSignature(TypedDict):
 @MiniService()
 class ClientMiniService(BaseMiniService):
 
-    def __init__(self,vaultService:VaultService,configService:ConfigService,jwtService:JWTAuthService,securityService:SecurityService,client:ClientORM, policies:list[PolicyModel]=[],id=...):
-        super().__init__(None, id)
+    def __init__(self,vaultService:VaultService,configService:ConfigService,jwtService:JWTAuthService,securityService:SecurityService,client:ClientORM, policies:list[PolicyModel]=[]):
+        self.client = client
+        super().__init__(None, self.client.client_id)
         self.vaultService = vaultService
         self.configService = configService
         self.jwtService = jwtService
         self.securityService = securityService
-        self.client = client
         self.authPermission:AuthPermission = self.combine_policy(policies)
 
     def build(self, build_state = DEFAULT_BUILD_STATE):
@@ -197,27 +197,37 @@ class ClientMiniService(BaseMiniService):
          ])
 class AdminService(BaseMiniServiceManager[ClientMiniService]):
 
-    def __init__(self,configService:ConfigService,jwtAuthService:JWTAuthService,tortoiseConnService:TortoiseConnectionService,vaultService:VaultService,redisService:RedisService):
+    def __init__(self,configService:ConfigService,jwtAuthService:JWTAuthService,tortoiseConnService:TortoiseConnectionService,vaultService:VaultService,redisService:RedisService,securityService:SecurityService):
         super().__init__()
         self.configService = configService
         self.jwtAuthService = jwtAuthService
         self.tortoiseConnService = tortoiseConnService
         self.vaultService = vaultService
         self.redisService = redisService
+        self.securityService = securityService
 
     def build(self,build_state=DEFAULT_BUILD_STATE):
-        policies = {}
-        mapping = {}
-        policies_keys=self.vaultService.security_engine.list('policies')
+        policies = {} 
+        mappings = self.tortoiseConnService.sync_find(PolicyMappingORM,listing='list')
+        for pk in self.vaultService.security_engine.list('policies'):
+            p = self.vaultService.security_engine.read('policies',pk)
+            policies[pk] = PolicyModel(**p)
         
-        for p in policies_keys:
-            policies[p] = self.vaultService.security_engine.read('policies',p)
+        self.MiniServiceStore.clear()
 
-        for mapping in self.tortoiseConnService.sync_find(PolicyMappingORM):
-            print(mapping)
-
-        for client in self.tortoiseConnService.sync_find(ClientORM):
-            print(client)
+        for client in self.tortoiseConnService.sync_find(ClientORM,mode='orm'):
+            policy = []
+            for pmap in mappings:
+                if client.client_id == pmap.get('client_id',None) or client.client_id == pmap.get('group_id',None):
+                    policy.append(policies[pmap['policy_id']])
+            
+            service = ClientMiniService(self.vaultService,
+                                        self.configService,
+                                        self.jwtAuthService,
+                                        self.securityService,
+                                        client,policy)
+            service._builder(BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
+            self.MiniServiceStore.add(p)
 
     async def update_policy(self, policy_ids: list[str], mode: PolicyUpdateMode, client:ClientMiniService  = None, group: GroupClientORM = None,ctx=None):
         # Get all current policy mappings for this client/group

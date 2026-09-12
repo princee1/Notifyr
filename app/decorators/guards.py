@@ -18,14 +18,11 @@ from app.models.odm.agents_model import AgentModel
 from app.models.orm.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, ContentSubscriptionORM, SubscriptionContactStatusORM
 from app.models.ingest_model import DataIngestModel, WebCrawlingDataIngestModel
 from app.models.orm.link_model import LinkORM
-from app.models.odm.llm_model import LLMProfileModel
 from app.models.otp_model import OTPModel
-from app.models.orm.security_model import ClientORM
 from app.services.admin_service import AdminService, ClientMiniService
 from app.services.agent.remote_agent_service import RemoteAgentService
 from app.services.cost_service import CostService
 from app.services.database.mongoose_service import MongooseService
-from app.services.database.object_service import ObjectS3Service
 from app.services.database.redis_service import RedisService
 from app.services.file.file_service import FileService
 from app.services.profile_service import ProfileService
@@ -49,6 +46,9 @@ from app.utils.globals import CAPABILITIES
 from app.services.agent.llm_service import LLMService
 
 from tortoise import models
+
+if CAPABILITIES['object']:
+    from app.services.database.object_service import ObjectS3Service
 
 class CeleryTaskGuard(Guard):
     def __init__(self,task_names:list[str],task_types:list[TaskType]=[]):
@@ -174,7 +174,7 @@ class ClientAuthTypeGuard(Guard):
         self.accept_api = accept_api
         self.message = message
 
-        if not all([self.accept_access,self.accept_api]):
+        if not any([self.accept_access,self.accept_api]):
             raise ValueError('At least one of the access or api must be set to True')
     
     def guard(self,client:ClientMiniService):
@@ -308,13 +308,15 @@ class TrackGuard(Guard):
 class PolicyGuard(Guard):
 
     @InjectInMethod()
-    def __init__(self,profileService:ProfileService,objectService:ObjectS3Service,remoteAgentService:RemoteAgentService):
+    def __init__(self,profileService:ProfileService,remoteAgentService:RemoteAgentService):
         super().__init__()
         self.profileService = profileService
-        self.objectService = objectService
         self.remoteAgentService = remoteAgentService
     
     def guard(self,policyModel:PolicyModel):
+        if CAPABILITIES['object']:
+            objectService = Get(ObjectS3Service)
+
         profiles_set=set(policyModel.allowed_profiles).difference(self.profileService.MiniServiceStore.ids)
         if len(profiles_set) >= 1:
             return False,f'Those profiles does not exists at the moment: {profiles_set}'
