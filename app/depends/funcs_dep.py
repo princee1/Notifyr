@@ -66,38 +66,6 @@ async def fetch_group(group:str) -> GroupClientORM:
 
     return group
 
-
-def GetClient(bypass: bool = False, accept_admin: bool = False, skip: bool = False, raise_: bool = True):
-    @ByPassAdminRole(bypass, skip=skip)
-    @AcceptNone(key='client_id')
-    async def _get_client(client_id: str | None = None, cid: str = None, authPermission: AuthPermission = None) -> ClientORM:
-        if cid == 'id':
-            client = await ClientORM.filter(client_id=client_id).first()
-        elif cid == 'name':
-            client = await ClientORM.filter(client_name=client_id).first()
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid CID type")
-
-        if client is None:
-            if raise_:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND, detail="Client does not exist")
-            else:
-                return None
-
-        if client.client_type == 'Admin' and not accept_admin:
-            if raise_:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND, detail="Client does not exist")
-            else:
-                return None
-
-        return client
-
-    return _get_client
-
-
 def Get_Contact(skip_permission:bool,raise_file:bool):
 
     async def get_contacts(contact_id: str, idtype: str = Query("id"), authPermission: AuthPermission = Depends(wrapper_auth_permission)) -> ContactORM:

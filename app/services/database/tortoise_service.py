@@ -5,9 +5,10 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from psycopg2 import sql
 from tortoise import Tortoise
+from tortoise.context import TortoiseContext
 from tortoise.models import Model
 from app.definition._service import DEFAULT_BUILD_STATE, LinkDep, Service, ServiceLockType
-from app.errors.db_error import TortoiseTransactionFailureError, VaultCredentialNameDoesNotExistError
+from app.errors.db_error import TortoiseContextNotSetupError, TortoiseTransactionFailureError, VaultCredentialNameDoesNotExistError
 from app.errors.service_error import BuildFailureError
 from app.services.config_service import ConfigService
 from app.services.database.base_db_service import CredentialName, TempCredentialsDatabaseService
@@ -32,6 +33,7 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
 
     def __init__(self, configService: ConfigService,vaultService:VaultService,fileService:FileService):
         super().__init__(configService,fileService,vaultService,VaultTTLSyncConstant.POSTGRES_AUTH_TTL)
+        self._context:TortoiseContext = None
 
     def build(self,build_state=-1):
         try:
@@ -81,7 +83,7 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
                     ],
                     "default_connection": "default",
                 },
-                SECURITY_CREDS: {
+                PostgresConstant.SECURITY_APP: {
                     "models": ["app.models.orm.security_model"],
                     "default_connection": SECURITY_CREDS,
                 },
@@ -134,8 +136,8 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
         if close:
             await self.close_connections()
         config = self.build_configuration()
-        await Tortoise.init(config)
-
+        self._context = await Tortoise.init(config=config)
+       
     async def close_connections(self):
         await Tortoise.close_connections()
         await RunInThreadPool(self.close_sync_connection)()  
@@ -153,7 +155,7 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
         await RunInThreadPool(self.init_sync_connection)()
     
     @asynccontextmanager
-    async def transaction(self,name:CredentialName,retries=1,timeout=5,wait=1,lock:ServiceLockType='none'):
+    async def transaction(self,name:CredentialName='default',retries=1,timeout=5,wait=1,lock:ServiceLockType='none'):
         if name not in CREDENTIALS_SET:
             raise VaultCredentialNameDoesNotExistError(name)
         async with self.lock(lock):
@@ -169,4 +171,9 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
                         asyncio.sleep(wait)
                     continue
             
-
+    @asynccontextmanager
+    async def context(self,credentials:CredentialName='default'):
+        if self._context == None:
+            raise TortoiseContextNotSetupError()
+        
+        yield  self._context.db(connection_name=credentials)

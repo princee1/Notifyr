@@ -32,12 +32,8 @@ except ValidationError as e:
     parser.error(f'Validation Error {e.errors(include_input=False,include_url=False)}')
 
 from app.services import VaultService
-from app.services import JWTAuthService
 from app.services import TortoiseConnectionService
-from app.services import ConfigService
-from app.services import SecurityService
 from app.services import RedisService
-from app.services import LoggerService
 
 from app.classes.auth_permission import ClientType
 from app.services.admin_service import ClientMiniService
@@ -57,6 +53,7 @@ async def main():
     setup = await redisService.retrieve(RedisConstant.CONFIG_DB,ADMIN_INIT_KEY)
     if bool(setup):
         await redisService.close_connections()
+        print('alloap')
         return 
 
     await tortoiseService.init_connection()

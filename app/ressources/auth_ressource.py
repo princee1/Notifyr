@@ -21,7 +21,7 @@ from app.models.orm.security_model import ClientORM, UpdateClientModel
 from app.ressources.admin_ressource import ClientRessource
 from app.services.admin_service import AdminService, AuthSignature, ClientMiniService
 from app.services.database.redis_service import RedisService
-from app.services.database.tortoise_service import TortoiseConnectionService
+from app.services.database.tortoise_service import SECURITY_CREDS, TortoiseConnectionService
 from app.services.security_service import JWTAuthService
 from app.services.setting_service import SettingService
 from app.services.vault_service import VaultService
@@ -136,11 +136,12 @@ class AuthRessource(BaseHTTPRessource):
     async def login(self,broker:Annotated[Broker,Depends(Broker)],request:Request,response:Response, credentials: Annotated[HTTPBasicCredentials, Depends(HTTPBasic())],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)]):
         
         clientORM = await ClientORM.filter(Q(client_username=credentials.username) | Q(client_email=credentials.username)).first()
+
         self.verify_client(credentials.username, clientORM,True)
         origin = get_client_ip(request)
             
         async with self.adminService.lock('reader',clientORM.client_id) as client:
-            async with self.tortoiseService.transaction() as ctx:
+            async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
 
                 self.blacklist_guard.guard(client)
                 client.verify_client_origin(origin)

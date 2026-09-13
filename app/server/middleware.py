@@ -2,7 +2,7 @@ from uuid import uuid4
 from fastapi.responses import JSONResponse
 from app.classes.auth_permission import AuthPermission, ClientAccessInfo, ClientType, filter_asset_permission, parse_authPermission_enum
 from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE
-from app.depends.orm_cache import BlacklistClientCache, BlacklistGroupCache, ClientORMCache
+from app.depends.orm_cache import BlacklistClientCache, BlacklistGroupCache
 from app.errors.security_error import SecurityIdentityNotResolvedError
 from app.errors.service_error import MiniServiceDoesNotExistsError
 from app.services.admin_service import AdminService
@@ -16,7 +16,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from typing import Callable
 import time
 from app.utils.constant import HTTPHeaderConstant, MonitorConstant
-from app.depends.dependencies import get_auth_permission, get_client_from_request, get_client_ip,get_bearer_token_from_request, get_response_id
+from app.depends.dependencies import get_client_ip,get_bearer_token_from_request
     
 configService = Get(ConfigService)
 

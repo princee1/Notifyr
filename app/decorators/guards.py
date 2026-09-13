@@ -529,7 +529,7 @@ class TortoiseHardLimitGuard(Guard):
     async def guard(self):
         count = len(await self.orm.all())
         if count >=self.limit:
-            raise TortoiseTableRowsLimitReachedError(self.limit,self.orm.meta.table)
+            raise TortoiseTableRowsLimitReachedError(self.limit,self.orm.meta.table,'')
     
         return True,''
 

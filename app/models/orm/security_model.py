@@ -3,10 +3,12 @@ from tortoise import fields, models
 from tortoise.contrib.pydantic import pydantic_model_creator
 from pydantic import BaseModel, Field, PrivateAttr, Secret, field_validator, model_validator
 from app.classes.auth_permission import API_TOKEN_CLIENT_TYPE_SET, AuthType, ClientType, Scope
+from app.utils.constant import PostgresConstant
 from app.utils.helper import subset_model, uuid_v1_mc
 from app.utils.validation import ipv4_subnet_validator, ipv4_validator,PasswordValidator
 
 SCHEMA = 'clients'
+
 
 class GroupClientORM(models.Model):
     group_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
@@ -17,6 +19,7 @@ class GroupClientORM(models.Model):
     class Meta:
         schema = SCHEMA
         table = "groupclient"
+        app = PostgresConstant.SECURITY_APP
 
     @property
     def to_json(self):
@@ -43,6 +46,8 @@ class ClientORM(models.Model):
     class Meta:
         schema = SCHEMA
         table = "client"
+        app = PostgresConstant.SECURITY_APP
+
 
     @property
     def auth_type(self):
@@ -71,6 +76,7 @@ class PolicyMappingORM(models.Model):
     group = fields.ForeignKeyField(f"security.GroupClientORM", related_name="policy_mappings", on_delete=fields.CASCADE, null=True)
 
     class Meta:
+        app = PostgresConstant.SECURITY_APP
         schema = SCHEMA
         table = "policymapping"
         unique_together = [

@@ -143,6 +143,12 @@ class TortoiseTransactionFailureError(BaseError):
         self.error = error
 
 class TortoiseTableRowsLimitReachedError(BaseError):
-    def __init__(self,limit:str,table:str):
+    def __init__(self,limit:str,table:str,db:str):
         self.limit = limit
         self.table = table
+        self.db = db
+
+
+class TortoiseContextNotSetupError(BaseError):
+    def __init__(self,):
+        super().__init__()

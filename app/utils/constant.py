@@ -201,6 +201,8 @@ class MongooseDBConstant:
 class PostgresConstant:
     DEFAULT_DATABASE_NAME = 'notifyr'
     SECURITY_DATABASE_NAME = 'security'
+    SECURITY_APP = 'security'
+    NOTIFYR_APP = 'notifyr'
             
 ########################                     ########################################
 

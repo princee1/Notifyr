@@ -6,7 +6,7 @@ from uuid import UUID
 
 from aiohttp_retry import List
 from app.classes.auth_permission import AuthPermission
-from app.depends.funcs_dep import GetClient, GetLink,Get_Contact
+from app.depends.funcs_dep import GetLink,Get_Contact
 from app.models.orm.contacts_model import ContactORM, ContactSummary, ContentSubscriptionORM
 from app.models.orm.link_model import LinkORM
 from app.services.admin_service import AdminService
@@ -315,7 +315,6 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],cache_key:int=R
     return ORMCache
 
 LinkORMCache = generate_cache_type(LinkORM,GetLink(True,False),prefix='orm-link')
-ClientORMCache = generate_cache_type(ClientORM,GetClient(True,True),prefix=['orm-group','client'])
 ContactORMCache = generate_cache_type(ContactORM,Get_Contact(True,True,),prefix='orm-contact',use_to_json=True)
 ContactSummaryORMCache = generate_cache_type(ContactSummary,contactService.read_contact,prefix='orm-contact-summary',use_to_json=False)
 
