@@ -52,6 +52,7 @@ class AuthRessource(BaseHTTPRessource):
     @Throttle(normal=(300,30))
     @UseHandler(MiniServiceHandler)
     @UseLimiter('2/day',key_func='client')
+    @HTTPStatusCode(status.HTTP_201_CREATED)
     @UsePermission(JWTRouteHTTPPermission,UserPermission)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @LockService(VaultService,AdminService,as_manager=True,lockType='reader',miniLockType='reader')
@@ -73,6 +74,8 @@ class AuthRessource(BaseHTTPRessource):
     @UseLimiter('5/day')
     @Throttle(normal=(300,30))
     @UseLimiter('5/day',key_func='ip')
+    @PingService([TortoiseConnectionService])
+    @LockService(TortoiseConnectionService,lockType='reader')
     @UseHandler(ORMCacheHandler,MiniServiceHandler,SecurityHandler,RedisHandler)
     @LockService(VaultService,SettingService,JWTAuthService,RedisService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/recover/',methods=[HTTPMethod.POST],response_class = AccessModel)
@@ -102,7 +105,9 @@ class AuthRessource(BaseHTTPRessource):
     @Throttle(uniform=(100,250))
     @UseLimiter('5/day',key_func='ip')
     @UseHandler(refresh_logout_handler)
+    @PingService([TortoiseConnectionService])
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
+    @LockService(TortoiseConnectionService,lockType='reader')
     @LockService(VaultService,SettingService,JWTAuthService,lockType='reader')
     @UseHandler(ORMCacheHandler,MiniServiceHandler,SecurityHandler,RedisHandler)
     @BaseHTTPRessource.HTTPRoute('/refresh/',methods=[HTTPMethod.PUT],response_class=AccessModel)
@@ -130,12 +135,15 @@ class AuthRessource(BaseHTTPRessource):
 
     @UseLimiter('5/day')
     @Throttle(normal=(300,30))
+    @PingService([TortoiseConnectionService])
+    @LockService(TortoiseConnectionService,lockType='reader')
     @UseHandler(ORMCacheHandler,MiniServiceHandler,SecurityHandler,RedisHandler)
     @LockService(VaultService,SettingService,JWTAuthService,RedisService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/login/',methods=[HTTPMethod.POST],response_class=AccessModel)
     async def login(self,broker:Annotated[Broker,Depends(Broker)],request:Request,response:Response, credentials: Annotated[HTTPBasicCredentials, Depends(HTTPBasic())],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)]):
-        
-        clientORM = await ClientORM.filter(Q(client_username=credentials.username) | Q(client_email=credentials.username)).first()
+
+        async with self.tortoiseService.connection(SECURITY_CREDS) as (conn,ctx):
+            clientORM = await ClientORM.filter(Q(client_username=credentials.username) | Q(client_email=credentials.username)).using_db(conn).first()
 
         self.verify_client(credentials.username, clientORM,True)
         origin = get_client_ip(request)
@@ -158,12 +166,13 @@ class AuthRessource(BaseHTTPRessource):
 
     @Throttle(uniform=(200,400))
     @UseLimiter('10/day',key_func='client')
+    @PingService([TortoiseConnectionService])
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @UseInterceptor(InvalidBlacklistTokenInterceptor)
-    @LockService(VaultService,AdminService,as_manager=True)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @UsePermission(JWTRouteHTTPPermission(True),UserPermission)
     @UseHandler(ORMCacheHandler,MiniServiceHandler,SecurityHandler,RedisHandler)
+    @LockService(VaultService,TortoiseConnectionService,AdminService,as_manager=True)
     @UseGuard(ClientAuthTypeGuard(accept_access=True, accept_api=False), AuthenticationClientGuard(True))
     @BaseHTTPRessource.HTTPRoute('/logout/',methods=[HTTPMethod.POST])
     async def logout(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],client:Annotated[ClientMiniService,Depends(get_client_from_info)],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)],profile:str=Depends(get_client_from_info),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):

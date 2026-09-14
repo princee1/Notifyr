@@ -148,7 +148,14 @@ class TortoiseTableRowsLimitReachedError(BaseError):
         self.table = table
         self.db = db
 
-
 class TortoiseContextNotSetupError(BaseError):
     def __init__(self,):
         super().__init__()
+
+class TortoiseContextAlreadyExistError(BaseError):
+    def __init__(self,credentials:str):
+        self.credentials = credentials
+
+class TortoiseContextDoesNotExistError(BaseError):
+    def __init__(self,credentials:str):
+        self.credentials = credentials

@@ -5,6 +5,7 @@ from tortoise import fields
 from tortoise.models import Model
 from pydantic import BaseModel, field_validator,model_validator
 from typing_extensions import Literal, Self
+from app.utils.constant import PostgresConstant
 from app.utils.helper import phone_parser
 from app.utils.validation import email_validator, phone_number_validator
 from app.definition._error import BaseError
@@ -97,10 +98,11 @@ class ContactORM(Model):
     class Meta:
         schema = CONTACTS_SCHEMA
         table = "contact"
+        app = PostgresConstant.NOTIFYR_APP
 
 class SecurityContactORM(Model):
     security_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    contact = fields.ForeignKeyField('default.ContactORM', related_name='security_contacts', on_delete=fields.CASCADE, on_update=fields.CASCADE)
+    contact = fields.ForeignKeyField(ContactORM, related_name='security_contacts', on_delete=fields.CASCADE, on_update=fields.CASCADE)
     security_code = fields.TextField(null=True)
     security_code_salt = fields.CharField(64,null=True)
     security_phrase = fields.TextField(null=True)
@@ -115,11 +117,12 @@ class SecurityContactORM(Model):
 
     class Meta:
         schema = CONTACTS_SCHEMA
+        app = PostgresConstant.NOTIFYR_APP
         table = "securitycontact"
 
 class SubscriptionContactStatusORM(Model):
     subscription_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    contact = fields.ForeignKeyField('default.ContactORM', related_name='subscriptions_status', unique=True,on_delete=fields.CASCADE, on_update=fields.CASCADE)
+    contact = fields.ForeignKeyField(ContactORM, related_name='subscriptions_status', unique=True,on_delete=fields.CASCADE, on_update=fields.CASCADE)
     email_status = fields.CharEnumField(enum_type=SubscriptionStatus,max_length=20)
     sms_status = fields.CharEnumField(enum_type=SubscriptionStatus,max_length=20)
     created_at = fields.DatetimeField(auto_now_add=True,use_tz=True)
@@ -130,6 +133,7 @@ class SubscriptionContactStatusORM(Model):
 
     class Meta:
         table = "subscriptioncontact"
+        app = PostgresConstant.NOTIFYR_APP
         schema = CONTACTS_SCHEMA
 
 class ReasonORM(Model):
@@ -140,6 +144,7 @@ class ReasonORM(Model):
 
     class Meta:
         table = "reason"
+        app = PostgresConstant.NOTIFYR_APP
         schema = CONTACTS_SCHEMA
 
 class ContentSubscriptionORM(Model):
@@ -153,25 +158,27 @@ class ContentSubscriptionORM(Model):
     
 
     class Meta:
+        app = PostgresConstant.NOTIFYR_APP
         table = "subscontent"
         schema = CONTACTS_SCHEMA
 
 class SubscriptionORM(Model):
     subs_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    contact = fields.ForeignKeyField('default.ContactORM', related_name='subscription', on_delete=fields.CASCADE, on_update=fields.CASCADE)
-    content = fields.ForeignKeyField('default.ContentSubscriptionORM', related_name='content', on_delete=fields.CASCADE, on_update=fields.CASCADE)
+    contact = fields.ForeignKeyField(ContactORM, related_name='subscription', on_delete=fields.CASCADE, on_update=fields.CASCADE)
+    content = fields.ForeignKeyField(ContentSubscriptionORM, related_name='content', on_delete=fields.CASCADE, on_update=fields.CASCADE)
     subs_status = fields.CharEnumField(max_length=20, enum_type=SubscriptionStatus, default=SubscriptionStatus.Active)
     created_at = fields.DatetimeField(auto_now_add=True, use_tz=True)
     updated_at = fields.DatetimeField(auto_now=True, use_tz=True)
     preferred_method = fields.CharEnumField(enum_type=Relay,max_length=20)
 
     class Meta:
+        app = PostgresConstant.NOTIFYR_APP
         table = "subscription"
         schema = CONTACTS_SCHEMA
         unique_together = (("contact", "content"),)
 
 class ContentTypeSubscriptionORM(Model):
-    contact = fields.ForeignKeyField('default.ContactORM', related_name='content_type_subs', on_delete=fields.CASCADE, on_update=fields.CASCADE)
+    contact = fields.ForeignKeyField(ContactORM, related_name='content_type_subs', on_delete=fields.CASCADE, on_update=fields.CASCADE)
     event = fields.BooleanField(default=False)
     newsletter = fields.BooleanField(default=False)
     promotion= fields.BooleanField(default=False)
@@ -182,11 +189,12 @@ class ContentTypeSubscriptionORM(Model):
 
     class Meta:
         table = "contenttypesubscription"
+        app = PostgresConstant.NOTIFYR_APP
         schema = CONTACTS_SCHEMA
 
 class ContactAnalyticsORM(Model):
     analytics_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    content = fields.ForeignKeyField('default.ContentSubscriptionORM','analytics',null=True,on_delete=fields.NO_ACTION,)
+    content = fields.ForeignKeyField(ContentSubscriptionORM,'analytics',null=True,on_delete=fields.NO_ACTION,)
     week_start_date = fields.DateField(default=datetime.utcnow().date)
     country = fields.CharField(max_length=5, null=True)
     region = fields.CharField(max_length=60, null=True)
@@ -195,6 +203,7 @@ class ContactAnalyticsORM(Model):
     unsubscriptions_count = fields.IntField(default=0)
 
     class Meta:
+        app = PostgresConstant.NOTIFYR_APP
         schema = CONTACTS_SCHEMA
         table = "contactanalytics"
         unique_together = ("week_start_date", "country", "region", "city")
@@ -221,6 +230,7 @@ class ContactCreationAnalyticsORM(Model):
     contacts_created_count = fields.IntField(default=0)
 
     class Meta:
+        app = PostgresConstant.NOTIFYR_APP
         schema = CONTACTS_SCHEMA
         table = "contactcreationanalytics"
         unique_together = ("week_start_date", "country", "region", "city")
@@ -329,7 +339,6 @@ class UpdateContactModel(ContactModel):
         
 class AppRegisteredContactModel(BaseModel):
     app_registered:bool
-
     
 class SecurityModel(BaseModel):
     security_code:int

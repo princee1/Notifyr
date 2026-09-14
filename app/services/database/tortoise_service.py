@@ -8,7 +8,7 @@ from tortoise import Tortoise
 from tortoise.context import TortoiseContext
 from tortoise.models import Model
 from app.definition._service import DEFAULT_BUILD_STATE, LinkDep, Service, ServiceLockType
-from app.errors.db_error import TortoiseContextNotSetupError, TortoiseTransactionFailureError, VaultCredentialNameDoesNotExistError
+from app.errors.db_error import TortoiseContextAlreadyExistError, TortoiseContextDoesNotExistError, TortoiseContextNotSetupError, TortoiseTransactionFailureError, VaultCredentialNameDoesNotExistError
 from app.errors.service_error import BuildFailureError
 from app.services.config_service import ConfigService
 from app.services.database.base_db_service import CredentialName, TempCredentialsDatabaseService
@@ -25,15 +25,60 @@ SECURITY_CREDS='security'
 
 CREDENTIALS_SET:set[CredentialName] = {'default',SECURITY_CREDS}
 
+
+
+NOTIFYR_MODELS = [
+                    "app.models.orm.contacts_model",
+                    "app.models.orm.email_model",
+                    "app.models.orm.link_model",
+                    "app.models.orm.twilio_model",
+                ]
+
+SECURITY_MODELS = ['app.models.orm.security_model']
 R = TypeVar('R',bound=Model)
 
+
+class TortoiseContextStore:
+    
+    def __init__(self):
+        self.store:dict[CredentialName,TortoiseContext] = {}
+
+    async def add_client(self,credential:CredentialName,context:TortoiseContext):
+        if credential in self.store:
+            raise TortoiseContextAlreadyExistError(credential)
+
+        self.store[credential] = context
+
+        print(self.store[credential].apps.apps)
+        print(self.store[credential].connections._get_storage())
+        #await self.get_connection('default').create_connection(True)
+
+    
+    def clear(self):
+        self.store.clear()
+
+    def get_context(self,credential:CredentialName):
+        if credential not in self.store:
+            raise TortoiseContextDoesNotExistError(credential)
+
+        return self.store[credential]
+
+    def get_connection(self,credential:CredentialName):
+        if credential not in self.store:
+            raise TortoiseContextDoesNotExistError(credential)
+
+        return self.store[credential].connections.get('default')
+
+    def iter(self):
+        for _,context in self.store.items():
+            yield context
 
 @Service(links=[LinkDep(VaultService,to_build=True,to_destroy=True)])
 class TortoiseConnectionService(TempCredentialsDatabaseService):
 
     def __init__(self, configService: ConfigService,vaultService:VaultService,fileService:FileService):
         super().__init__(configService,fileService,vaultService,VaultTTLSyncConstant.POSTGRES_AUTH_TTL)
-        self._context:TortoiseContext = None
+        self.contextStore = TortoiseContextStore()
 
     def build(self,build_state=-1):
         try:
@@ -63,33 +108,6 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
     def compute_url(self,host:str,port:int=5432,creds:CredentialName='default',database=PostgresConstant.DEFAULT_DATABASE_NAME):
         return f'postgres://{self.db_user(creds)}:{self.db_password(creds)}@{host}:{port}/{database}'
 
-    def build_configuration(self):
-        return {
-            "connections": {
-                "default": self.compute_url(self.configService.POSTGRES_HOST),
-                SECURITY_CREDS: self.compute_url(
-                    HostConstant.POSTGRES_HOST,
-                    creds=SECURITY_CREDS,
-                    database=PostgresConstant.SECURITY_DATABASE_NAME,
-                ),
-            },
-            "apps": {
-                "default": {
-                    "models": [
-                        "app.models.orm.contacts_model",
-                        "app.models.orm.email_model",
-                        "app.models.orm.link_model",
-                        "app.models.orm.twilio_model",
-                    ],
-                    "default_connection": "default",
-                },
-                PostgresConstant.SECURITY_APP: {
-                    "models": ["app.models.orm.security_model"],
-                    "default_connection": SECURITY_CREDS,
-                },
-            },
-        }
-
     def sync_find(self,model:Type[R],projection:list[str]=None,mode:Literal['json','orm']='json',listing:Literal['list','generator','dict']='generator',key=None):
         proj = projection or []
         if mode=='orm' and projection:
@@ -102,7 +120,7 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
         query = sql.SQL("""SELECT {columns} FROM {schema}.{table}""").format(columns=sql.SQL(", ").join(sql.Identifier(column) for column in columns),
                 schema=sql.Identifier(model.Meta.schema),
                 table=sql.Identifier(model.Meta.table),)
-        with self.conn_ctx() as cur:
+        with self.sync_context() as cur:
             cur.execute(query)
             response = {} if listing == 'dict' else []
             for obj in cur.fetchall():
@@ -133,17 +151,30 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
         self.sync_conn.close()
 
     async def init_connection(self, close=False):
+
         if close:
             await self.close_connections()
-        config = self.build_configuration()
-        self._context = await Tortoise.init(config=config)
-       
+
+        async with TortoiseContext() as securityContext:
+            url = self.compute_url(HostConstant.POSTGRES_HOST,creds=SECURITY_CREDS,database=PostgresConstant.SECURITY_DATABASE_NAME)
+            config = {'connections':{'default':url},'apps':{PostgresConstant.SECURITY_APP:{'models':SECURITY_MODELS,'default_connection':'default'}}}
+            await securityContext.init(config = config)
+            await self.contextStore.add_client(SECURITY_CREDS,securityContext)
+
+        async with TortoiseContext() as notifyrContext:
+            url = self.compute_url(self.configService.POSTGRES_HOST)
+            config = {'connections':{'default':url},'apps':{PostgresConstant.NOTIFYR_APP:{'models':NOTIFYR_MODELS,'default_connection':'default'}}}
+            await notifyrContext.init(config=config)
+            await self.contextStore.add_client('default',notifyrContext)
+
     async def close_connections(self):
-        await Tortoise.close_connections()
+        for context in self.contextStore.iter():
+            await context.close_connections()
         await RunInThreadPool(self.close_sync_connection)()  
+        self.contextStore.clear()
 
     @contextmanager
-    def conn_ctx(self):
+    def sync_context(self):
         with self.sync_conn:
             with self.sync_conn.cursor(cursor_factory=RealDictCursor) as cur:
                 yield cur
@@ -161,7 +192,7 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
         async with self.lock(lock):
             for attempts in range(retries):
                 try:
-                    async with in_transaction(connection_name=name) as ctx:
+                    async with self.contextStore.get_connection(name)._in_transaction() as ctx:
                         yield ctx
                     break
                 except (OperationalError,IntegrityError) as e:
@@ -172,8 +203,9 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
                     continue
             
     @asynccontextmanager
-    async def context(self,credentials:CredentialName='default'):
-        if self._context == None:
-            raise TortoiseContextNotSetupError()
-        
-        yield  self._context.db(connection_name=credentials)
+    async def connection(self,credentials:CredentialName='default',lock:ServiceLockType='none'):
+        async with self.lock(lock):
+            async with self.contextStore.get_context(credentials) as ctx:
+                conn = self.contextStore.get_connection(credentials) 
+                yield conn,ctx
+            
