@@ -3,6 +3,7 @@ import time
 from typing import Annotated, Callable, get_args
 from fastapi import Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
+from tortoise.expressions import Q
 from app.decorators.guards import AdminModificationGuard, AuthenticationClientGuard, BlacklistClientGuard, ClientAuthTypeGuard, PolicyGuard, TortoiseHardLimitGuard
 from app.decorators.interceptors import DataCostInterceptor, InvalidBlacklistTokenInterceptor
 from app.definition._cost import DataCost
@@ -31,7 +32,7 @@ from app.decorators.handlers import AsyncIOHandler, CostHandler, DataSourceHandl
 from app.decorators.pipes import  AccessTokenModelPipe, ForceClientPipe, ForceGroupPipe, FunctionInjectorPipe, MiniServiceInjectorPipe, ObjectRelationalFriendlyPipe
 from app.utils.helper import  generateId
 from app.utils.toolbox import RunInThreadPool
-from app.errors.security_error import IdentityAlreadyBlacklistedError, AuthzSignatureMisMatchError, ClientDoesNotExistError, GroupIdNotMatchError, SecurityIdentityNotResolvedError
+from app.errors.security_error import ClientAlreadyExistError, IdentityAlreadyBlacklistedError, AuthzSignatureMisMatchError, ClientDoesNotExistError, GroupIdNotMatchError, SecurityIdentityNotResolvedError
 
 ADMIN_PREFIX = 'admin'
 CLIENT_PREFIX = 'client'
@@ -125,6 +126,10 @@ class ClientRessource(BaseHTTPRessource):
     @BaseHTTPRessource.Post('/')
     async def create_client(self,broker:Annotated[Broker,Depends(Broker)], merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[DataCost,Depends(DataCost)],request:Request,response:Response, clientModel: ClientModel, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
 
+        clientORM = await ClientORM.filter(Q(client_username=clientModel.client_username) | Q(client_email=clientModel.client_email)).first()
+        if clientORM != None:
+            raise ClientAlreadyExistError 
+        
         valid_policies = await RunInThreadPool(self.vaultService.security_engine.list)('policies')
         if len((policies_error:=set(clientModel).difference(valid_policies)))>0:
             raise PoliciesNotMatchingError(policies_error)
@@ -154,10 +159,14 @@ class ClientRessource(BaseHTTPRessource):
     @UseInterceptor(InvalidBlacklistTokenInterceptor)
     @UsePipe(ObjectRelationalFriendlyPipe,before=False)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
-    @UseHandler(ValueErrorHandler,ORMCacheHandler,VaultHandler,SecurityHandler,MiniServiceHandler)
+    @UseHandler(ValueErrorHandler,ORMCacheHandler,VaultHandler,AuthClientHandler,SecurityHandler,MiniServiceHandler)
     @LockService(VaultService,SettingService,AdminService,as_manager=True,lockType='reader',miniLockType='reader')
     @BaseHTTPRessource.HTTPRoute('/{client}/', methods=[HTTPMethod.PUT])
     async def update_client(self,request:Request,response:Response, updateClient:UpdateClientModel,broker:Annotated[Broker,Depends(Broker)],client: Annotated[ClientMiniService, Depends(get_client)],mode:PolicyUpdateMode = Depends(policy_update_mode_query),profile:str=Depends(get_client), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info) ):
+
+        clientORM = await ClientORM.filter(Q(client_username=updateClient.client_username) | Q(client_email=updateClient.client_email)).first()
+        if clientORM != None:
+            raise ClientAlreadyExistError 
 
         group = await fetch_group(updateClient.group) if updateClient.group  else None
         async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:

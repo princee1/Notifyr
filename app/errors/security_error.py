@@ -7,6 +7,10 @@ class ClientDoesNotExistError(BaseError):
     def __init__(self,client_id:str):
         self.client_id = client_id
 
+class ClientAlreadyExistError(BaseError):
+    def __init__(self):
+        ...
+
 class GroupDoesNotExistError(BaseError):
     def __init__(self, group_id:str):
         super().__init__(group_id)
