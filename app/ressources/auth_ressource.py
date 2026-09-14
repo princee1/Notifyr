@@ -76,8 +76,8 @@ class AuthRessource(BaseHTTPRessource):
     @UseLimiter('5/day',key_func='ip')
     @PingService([TortoiseConnectionService])
     @LockService(TortoiseConnectionService,lockType='reader')
-    @UseHandler(ORMCacheHandler,MiniServiceHandler,SecurityHandler,RedisHandler)
     @LockService(VaultService,SettingService,JWTAuthService,RedisService,lockType='reader')
+    @UseHandler(ORMCacheHandler,MiniServiceHandler,SecurityHandler,RedisHandler,AuthClientHandler)
     @BaseHTTPRessource.HTTPRoute('/recover/',methods=[HTTPMethod.POST],response_class = AccessModel)
     async def recover(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)], credentials: Annotated[HTTPBasicCredentials, Depends(HTTPBasic())],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)]):
         session.logout()
@@ -89,7 +89,7 @@ class AuthRessource(BaseHTTPRessource):
         async with self.adminService.lock('reader',clientORM.client_id) as client:
             async with self.tortoiseService.transaction() as ctx:
 
-                self.blacklist_guard.guard(client)
+                await self.blacklist_guard.guard(client)
                 client.verify_client_origin(origin)
 
                 await client.verify_recovery_code(credentials.password)
@@ -107,9 +107,8 @@ class AuthRessource(BaseHTTPRessource):
     @UseHandler(refresh_logout_handler)
     @PingService([TortoiseConnectionService])
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
-    @LockService(TortoiseConnectionService,lockType='reader')
-    @LockService(VaultService,SettingService,JWTAuthService,lockType='reader')
-    @UseHandler(ORMCacheHandler,MiniServiceHandler,SecurityHandler,RedisHandler)
+    @UseHandler(ORMCacheHandler,MiniServiceHandler,SecurityHandler,RedisHandler,AuthClientHandler)
+    @LockService(VaultService,SettingService,JWTAuthService,TortoiseConnectionService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/refresh/',methods=[HTTPMethod.PUT],response_class=AccessModel)
     async def refresh(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)]):
         refreshPermission:ClientRefresh =  session.verify_refresh_token()
@@ -122,7 +121,7 @@ class AuthRessource(BaseHTTPRessource):
         async with self.adminService.lock('reader',clientORM.client_id) as client:
             async with self.tortoiseService.transaction() as ctx:
 
-                self.blacklist_guard.guard(client)
+                await self.blacklist_guard.guard(client)
                 client.verify_client_origin(origin)
                 client.compare_auth_signature(refreshPermission['authz_id'])
 
@@ -134,11 +133,11 @@ class AuthRessource(BaseHTTPRessource):
         return {'access':auth_token,'auth_type':AuthType.ACCESS_TOKEN}
 
     @UseLimiter('5/day')
-    @Throttle(normal=(300,30))
+    @Throttle(normal=(200,30))
     @PingService([TortoiseConnectionService])
     @LockService(TortoiseConnectionService,lockType='reader')
-    @UseHandler(ORMCacheHandler,MiniServiceHandler,SecurityHandler,RedisHandler)
     @LockService(VaultService,SettingService,JWTAuthService,RedisService,lockType='reader')
+    @UseHandler(ORMCacheHandler,MiniServiceHandler,SecurityHandler,RedisHandler,AuthClientHandler)
     @BaseHTTPRessource.HTTPRoute('/login/',methods=[HTTPMethod.POST],response_class=AccessModel)
     async def login(self,broker:Annotated[Broker,Depends(Broker)],request:Request,response:Response, credentials: Annotated[HTTPBasicCredentials, Depends(HTTPBasic())],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)]):
 
@@ -151,7 +150,7 @@ class AuthRessource(BaseHTTPRessource):
         async with self.adminService.lock('reader',clientORM.client_id) as client:
             async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
 
-                self.blacklist_guard.guard(client)
+                await self.blacklist_guard.guard(client)
                 client.verify_client_origin(origin)
 
                 encryptedPassword = await client.fetch_password()
@@ -164,7 +163,7 @@ class AuthRessource(BaseHTTPRessource):
         broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))
         return {'access':auth_token,'auth_type':AuthType.ACCESS_TOKEN}
 
-    @Throttle(uniform=(200,400))
+    @Throttle(uniform=(150,200))
     @UseLimiter('10/day',key_func='client')
     @PingService([TortoiseConnectionService])
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
@@ -183,7 +182,7 @@ class AuthRessource(BaseHTTPRessource):
 
         return
 
-    @Throttle(normal=(300,30))
+    @Throttle(normal=(250,50))
     @UseHandler(MiniServiceHandler)
     @UseLimiter('20/day',key_func='client')
     @UsePermission(JWTRouteHTTPPermission,UserPermission)
