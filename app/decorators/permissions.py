@@ -259,8 +259,11 @@ class ProfilePermission(Permission):
         super().__init__()
         self.allow_empty = allow_empty
 
-    async def permission(self,authPermission:AuthPermission,profile:str):
+    async def permission(self,authPermission:AuthPermission,clientInfo:ClientAccessInfo,profile:str):
         if profile == '' and self.allow_empty:
+            return True
+
+        if clientInfo['client_type'] == ClientType.Admin:
             return True
 
         if not self.predicate(profile,authPermission):
@@ -280,8 +283,11 @@ class AgentPermission(Permission):
         super().__init__()
         self.allow_empty = allow_empty
 
-    async def permission(self,authPermission:AuthPermission,agent:str):
+    async def permission(self,authPermission:AuthPermission,clientInfo:ClientAccessInfo,agent:str):
         if agent == '' and self.allow_empty:
+            return True
+
+        if clientInfo['client_type'] == ClientType.Admin:
             return True
         
         if not self.predicate(agent,authPermission):
@@ -343,7 +349,8 @@ class MCPPermission(Permission):
         self.configService = configService
         super().__init__()
 
-    def permission(self,func_meta:FuncMetaData,authPermission:AuthPermission,request:Request):
+    def permission(self,func_meta:FuncMetaData,authPermission:AuthPermission,clientInfo:ClientAccessInfo,request:Request):
+
         if not self.configService.MCP_ENABLED:
             return True
 
@@ -355,6 +362,9 @@ class MCPPermission(Permission):
     
         if not (operation_id:=func_meta.get('operation_id',None)):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail='Function is not available as a tool')
+
+        if clientInfo['client_type'] == ClientType.Admin:
+            return True
 
         if operation_id in set(authPermission.get('allowed_mcp',{}).get('operations',[])):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail='MCP is not allowed for this user')

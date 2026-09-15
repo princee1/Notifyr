@@ -5,7 +5,7 @@ from starlette import status
 from app.classes.auth_permission import AccessModel, AuthPermission, AuthType, ClientAccessInfo, ClientRefresh, ClientType, Credentials, EncryptedRecoveryTokens, RecoveryTokenGenerator, RecoveryTokens
 from app.container import InjectInMethod
 from app.decorators.guards import AuthenticationClientGuard, BlacklistClientGuard, ClientAuthTypeGuard
-from app.decorators.handlers import AuthClientHandler, MiniServiceHandler, ORMCacheHandler, RedisHandler, SecurityHandler, VaultHandler
+from app.decorators.handlers import ClientHandler, MiniServiceHandler, ORMCacheHandler, RedisHandler, ClientSecurityHandler, VaultHandler
 from app.decorators.interceptors import InvalidBlacklistTokenInterceptor
 from app.decorators.permissions import JWTRouteHTTPPermission, UserPermission
 from app.decorators.pipes import AccessTokenModelPipe, MiniServiceInjectorPipe, ObjectRelationalFriendlyPipe
@@ -38,7 +38,7 @@ async def refresh_logout_handler(func,*args,**kwargs):
         raise e
 
 @PingService([VaultService])
-@UseHandler(VaultHandler,AuthClientHandler)
+@UseHandler(VaultHandler,ClientHandler)
 @HTTPRessource('auth')
 class AuthRessource(BaseHTTPRessource):
 
@@ -77,7 +77,7 @@ class AuthRessource(BaseHTTPRessource):
     @PingService([TortoiseConnectionService])
     @LockService(TortoiseConnectionService,lockType='reader')
     @LockService(VaultService,SettingService,JWTAuthService,RedisService,lockType='reader')
-    @UseHandler(ORMCacheHandler,MiniServiceHandler,SecurityHandler,RedisHandler,AuthClientHandler)
+    @UseHandler(ORMCacheHandler,MiniServiceHandler,ClientSecurityHandler,RedisHandler,ClientHandler)
     @BaseHTTPRessource.HTTPRoute('/recover/',methods=[HTTPMethod.POST],response_class = AccessModel)
     async def recover(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)], credentials: Annotated[HTTPBasicCredentials, Depends(HTTPBasic())],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)]):
         session.logout()
@@ -107,7 +107,7 @@ class AuthRessource(BaseHTTPRessource):
     @UseHandler(refresh_logout_handler)
     @PingService([TortoiseConnectionService])
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
-    @UseHandler(ORMCacheHandler,MiniServiceHandler,SecurityHandler,RedisHandler,AuthClientHandler)
+    @UseHandler(ORMCacheHandler,MiniServiceHandler,ClientSecurityHandler,RedisHandler,ClientHandler)
     @LockService(VaultService,SettingService,JWTAuthService,TortoiseConnectionService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/refresh/',methods=[HTTPMethod.PUT],response_class=AccessModel)
     async def refresh(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)]):
@@ -137,12 +137,11 @@ class AuthRessource(BaseHTTPRessource):
     @PingService([TortoiseConnectionService])
     @LockService(TortoiseConnectionService,lockType='reader')
     @LockService(VaultService,SettingService,JWTAuthService,RedisService,lockType='reader')
-    @UseHandler(ORMCacheHandler,MiniServiceHandler,SecurityHandler,RedisHandler,AuthClientHandler)
+    @UseHandler(ORMCacheHandler,MiniServiceHandler,ClientSecurityHandler,RedisHandler,ClientHandler)
     @BaseHTTPRessource.HTTPRoute('/login/',methods=[HTTPMethod.POST],response_class=AccessModel)
     async def login(self,broker:Annotated[Broker,Depends(Broker)],request:Request,response:Response, credentials: Annotated[HTTPBasicCredentials, Depends(HTTPBasic())],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)]):
 
-        async with self.tortoiseService.connection(SECURITY_CREDS) as (conn,ctx):
-            clientORM = await ClientORM.filter(Q(client_username=credentials.username) | Q(client_email=credentials.username)).using_db(conn).first()
+        clientORM = await ClientORM.filter(Q(client_username=credentials.username) | Q(client_email=credentials.username)).first()
 
         self.verify_client(credentials.username, clientORM,True)
         origin = get_client_ip(request)
@@ -170,7 +169,7 @@ class AuthRessource(BaseHTTPRessource):
     @UseInterceptor(InvalidBlacklistTokenInterceptor)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @UsePermission(JWTRouteHTTPPermission(True),UserPermission)
-    @UseHandler(ORMCacheHandler,MiniServiceHandler,SecurityHandler,RedisHandler)
+    @UseHandler(ORMCacheHandler,MiniServiceHandler,ClientSecurityHandler,RedisHandler)
     @LockService(VaultService,TortoiseConnectionService,AdminService,as_manager=True)
     @UseGuard(ClientAuthTypeGuard(accept_access=True, accept_api=False), AuthenticationClientGuard(True))
     @BaseHTTPRessource.HTTPRoute('/logout/',methods=[HTTPMethod.POST])
@@ -219,7 +218,7 @@ class AuthRessource(BaseHTTPRessource):
     
     def verify_client(self, username:str, clientORM:ClientORM,authenticated_flag:bool):
         if clientORM == None:
-            raise ClientDoesNotExistError(username)
+            raise ClientDoesNotExistError(username,True)
         
         if clientORM.auth_type != AuthType.ACCESS_TOKEN:
             raise ClientDoesNotExistError(username)

@@ -394,24 +394,48 @@ class TortoiseHandler(Handler):
             mess = str(mess)
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
                                 'message': 'ORM error', 'detail': mess, })
+        
 
-class AuthClientHandler(Handler):
+class ClientSecurityHandler(Handler):
 
     async def handle(self, function, *args, **kwargs):
         try:
-            return await function(*args, **kwargs)
+            return await super().handle(function, *args, **kwargs)
+        except ProvidedHashNotEquivalentError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={'message': 'Provided value does not match the expected hash'}
+            )
 
         except CouldNotCreateRefreshTokenError as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
                 'message': 'Could not create refresh token'
             })
 
-        except ClientAlreadyExistError as e:
-            ...
-
         except CouldNotCreateAuthTokenError as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
                 'message': 'Could not create auth token'
+            })
+
+        except ClientTokenHeaderNotProvidedError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
+                'message': 'Client token header not provided',
+            })
+
+        except AuthzSignatureMisMatchError as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={
+                'message': 'Authorization Signature mismatch',
+            })
+
+class ClientHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+
+        except ClientAlreadyExistError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={
+                'message':'Client already exist with those identifiant'
             })
 
         except SecurityIdentityNotResolvedError as e:
@@ -427,6 +451,10 @@ class AuthClientHandler(Handler):
             })
 
         except ClientDoesNotExistError as e:
+            if e.from_auth:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail={
+                    'message':'No client match those credentials'                })
+            
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={
                 'message': 'Client does not exist'
             })
@@ -434,16 +462,6 @@ class AuthClientHandler(Handler):
         except IdentityAlreadyBlacklistedError as e:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={
                 'message': 'Client is already blacklisted'if not e.reversed_ else 'Client is not blacklisted yet',
-            })
-
-        except ClientTokenHeaderNotProvidedError as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
-                'message': 'Client token header not provided',
-            })
-
-        except AuthzSignatureMisMatchError as e:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={
-                'message': 'Authorization Signature mismatch',
             })
         
         except GroupDoesNotExistError as e:
@@ -463,7 +481,6 @@ class AuthClientHandler(Handler):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED
             )
-
 
 class ValueErrorHandler(Handler):
 
@@ -521,7 +538,6 @@ class MotorErrorHandler(Handler):
         except DocumentDoesNotExistsError as e:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,detail=f"Document with id '{e.id}' does not exists")
-
 
 class MongooseHandler(Handler):
 
@@ -629,6 +645,7 @@ class ORMCacheHandler(Handler):
     
     async def handle(self, function, *args, **kwargs):
         return await function(*args,**kwargs)
+
 
 async def handle_http_exception(function, *args, **kwargs):
     
@@ -1324,7 +1341,6 @@ class EmbeddingHandler(Handler):
                 detail="An embedding operation failed"
             ) from e
         
-
 class AgentHandler(Handler):
 
     async def handle(self, function, *args, **kwargs):
@@ -1438,14 +1454,3 @@ class DataSourceHandler(Handler):
             return await super().handle(function, *args, **kwargs)
         except DataSourceNotSupportedError as e:
             raise  
-
-class SecurityHandler(Handler):
-
-    async def handle(self, function, *args, **kwargs):
-        try:
-            return await super().handle(function, *args, **kwargs)
-        except ProvidedHashNotEquivalentError as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={'message': 'Provided value does not match the expected hash'}
-            )

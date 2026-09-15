@@ -4,8 +4,9 @@ from app.classes.auth_permission import AuthType, ClientType
 from app.definition._error import BaseError
 
 class ClientDoesNotExistError(BaseError):
-    def __init__(self,client_id:str):
+    def __init__(self,client_id:str,from_auth:bool=False):
         self.client_id = client_id
+        self.from_auth = from_auth
 
 class ClientAlreadyExistError(BaseError):
     def __init__(self):

@@ -4,7 +4,8 @@ from typing import Literal, Type, TypeVar
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from psycopg2 import sql
-from tortoise import Tortoise
+from tortoise import Tortoise,connections
+from tortoise.connection import get_connection
 from tortoise.context import TortoiseContext
 from tortoise.models import Model
 from app.definition._service import DEFAULT_BUILD_STATE, LinkDep, Service, ServiceLockType
@@ -24,8 +25,6 @@ from pydantic import BaseModel
 SECURITY_CREDS='security'
 
 CREDENTIALS_SET:set[CredentialName] = {'default',SECURITY_CREDS}
-
-
 
 NOTIFYR_MODELS = [
                     "app.models.orm.contacts_model",
@@ -150,26 +149,44 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
     def close_sync_connection(self):
         self.sync_conn.close()
 
+    def build_configuration(self):
+        security_url = self.compute_url(HostConstant.POSTGRES_HOST,creds=SECURITY_CREDS,database=PostgresConstant.SECURITY_DATABASE_NAME)
+        notifyr_url = self.compute_url(self.configService.POSTGRES_HOST)
+
+        config = {
+            'connections': {'notifyr':notifyr_url,'security':security_url},
+            'apps':{PostgresConstant.SECURITY_APP:{'models':SECURITY_MODELS,'default_connection':'security'},
+                    PostgresConstant.NOTIFYR_APP:{'models':NOTIFYR_MODELS,'default_connection':'notifyr'}}
+        }
+        return config
+    
     async def init_connection(self, close=False):
 
         if close:
             await self.close_connections()
+        config = self.build_configuration()
+        await Tortoise.init(config=config,_enable_global_fallback=True)
+        # notifyrClient = connections.get('notifyr')
+        # securityClient = connections.get('security')
 
-        async with TortoiseContext() as securityContext:
-            url = self.compute_url(HostConstant.POSTGRES_HOST,creds=SECURITY_CREDS,database=PostgresConstant.SECURITY_DATABASE_NAME)
-            config = {'connections':{'default':url},'apps':{PostgresConstant.SECURITY_APP:{'models':SECURITY_MODELS,'default_connection':'default'}}}
-            await securityContext.init(config = config)
-            await self.contextStore.add_client(SECURITY_CREDS,securityContext)
+        # securityContext = TortoiseContext()
+        # securityContext.__enter__()
+        # url = self.compute_url(HostConstant.POSTGRES_HOST,creds=SECURITY_CREDS,database=PostgresConstant.SECURITY_DATABASE_NAME)
+        # config = {'connections':{'default':url},'apps':{PostgresConstant.SECURITY_APP:{'models':SECURITY_MODELS,'default_connection':'default'}}}
+        # await securityContext.init(config = config)
+        # await self.contextStore.add_client(SECURITY_CREDS,securityContext)
 
-        async with TortoiseContext() as notifyrContext:
-            url = self.compute_url(self.configService.POSTGRES_HOST)
-            config = {'connections':{'default':url},'apps':{PostgresConstant.NOTIFYR_APP:{'models':NOTIFYR_MODELS,'default_connection':'default'}}}
-            await notifyrContext.init(config=config)
-            await self.contextStore.add_client('default',notifyrContext)
+        # notifyrContext=TortoiseContext()
+        # notifyrContext.__enter__()
+        # url = self.compute_url(self.configService.POSTGRES_HOST)
+        # config = {'connections':{'default':url},'apps':{PostgresConstant.NOTIFYR_APP:{'models':NOTIFYR_MODELS,'default_connection':'default'}}}
+        # await notifyrContext.init(config=config)
+        # await self.contextStore.add_client('default',notifyrContext)
 
     async def close_connections(self):
         for context in self.contextStore.iter():
             await context.close_connections()
+        await Tortoise.close_connections()
         await RunInThreadPool(self.close_sync_connection)()  
         self.contextStore.clear()
 
@@ -189,10 +206,12 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
     async def transaction(self,name:CredentialName='default',retries=1,timeout=5,wait=1,lock:ServiceLockType='none'):
         if name not in CREDENTIALS_SET:
             raise VaultCredentialNameDoesNotExistError(name)
+
+        connection = 'notifyr' if name == 'default' else 'security'
         async with self.lock(lock):
             for attempts in range(retries):
                 try:
-                    async with self.contextStore.get_connection(name)._in_transaction() as ctx:
+                    async with get_connection(connection)._in_transaction() as ctx:
                         yield ctx
                     break
                 except (OperationalError,IntegrityError) as e:
@@ -205,7 +224,6 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
     @asynccontextmanager
     async def connection(self,credentials:CredentialName='default',lock:ServiceLockType='none'):
         async with self.lock(lock):
-            async with self.contextStore.get_context(credentials) as ctx:
-                conn = self.contextStore.get_connection(credentials) 
-                yield conn,ctx
+            conn = self.contextStore.get_connection(credentials) 
+            yield conn
             

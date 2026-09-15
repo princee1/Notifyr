@@ -118,6 +118,8 @@ class ClientMiniService(BaseMiniService):
                 ...
 
     def combine_policy(self,policies:list[PolicyModel])->AuthPermission:
+        if not policies:
+            return {}
         authPermission = get_combined_policies(policies)        
         filter_asset_permission(authPermission)
         parse_authPermission_enum(authPermission)

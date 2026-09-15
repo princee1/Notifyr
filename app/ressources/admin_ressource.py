@@ -28,7 +28,7 @@ from app.container import InjectInMethod, Get
 from app.definition._ressource import PingService, UseInterceptor, LockService, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter,HTTPStatusCode
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
 from app.classes.auth_permission import AccessModel, AuthPermission, AuthType, ClientAccessInfo, ClientType, PoliciesNotMatchingError, PolicyModel, PolicyUpdateMode, Role, Scope
-from app.decorators.handlers import AsyncIOHandler, CostHandler, DataSourceHandler, MiniServiceHandler, ORMCacheHandler, PydanticHandler, RedisHandler, AuthClientHandler, SecurityHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler, VaultHandler
+from app.decorators.handlers import AsyncIOHandler, CostHandler, DataSourceHandler, MiniServiceHandler, ORMCacheHandler, PydanticHandler, RedisHandler, ClientHandler, ClientSecurityHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler, VaultHandler
 from app.decorators.pipes import  AccessTokenModelPipe, ForceClientPipe, ForceGroupPipe, FunctionInjectorPipe, MiniServiceInjectorPipe, ObjectRelationalFriendlyPipe
 from app.utils.helper import  generateId
 from app.utils.toolbox import RunInThreadPool
@@ -122,7 +122,7 @@ class ClientRessource(BaseHTTPRessource):
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @UseInterceptor(DataCostInterceptor(CostConstant.CLIENT_CREDIT))
     @LockService(SettingService,VaultService,AdminService,lockType='reader')
-    @UseHandler(CostHandler,RedisHandler,VaultHandler,AuthClientHandler,SecurityHandler)
+    @UseHandler(CostHandler,RedisHandler,VaultHandler,ClientHandler,ClientSecurityHandler)
     @BaseHTTPRessource.Post('/')
     async def create_client(self,broker:Annotated[Broker,Depends(Broker)], merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[DataCost,Depends(DataCost)],request:Request,response:Response, clientModel: ClientModel, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
 
@@ -159,7 +159,7 @@ class ClientRessource(BaseHTTPRessource):
     @UseInterceptor(InvalidBlacklistTokenInterceptor)
     @UsePipe(ObjectRelationalFriendlyPipe,before=False)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
-    @UseHandler(ValueErrorHandler,ORMCacheHandler,VaultHandler,AuthClientHandler,SecurityHandler,MiniServiceHandler)
+    @UseHandler(ValueErrorHandler,ORMCacheHandler,VaultHandler,ClientHandler,ClientSecurityHandler,MiniServiceHandler)
     @LockService(VaultService,SettingService,AdminService,as_manager=True,lockType='reader',miniLockType='reader')
     @BaseHTTPRessource.HTTPRoute('/{client}/', methods=[HTTPMethod.PUT])
     async def update_client(self,request:Request,response:Response, updateClient:UpdateClientModel,broker:Annotated[Broker,Depends(Broker)],client: Annotated[ClientMiniService, Depends(get_client)],mode:PolicyUpdateMode = Depends(policy_update_mode_query),profile:str=Depends(get_client), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info) ):
@@ -188,7 +188,7 @@ class ClientRessource(BaseHTTPRessource):
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @LockService(SettingService,VaultService,AdminService,as_manager=True,miniLockType='reader')
     @UseInterceptor(DataCostInterceptor(CostConstant.CLIENT_CREDIT,'refund'))
-    @UseHandler(ORMCacheHandler,CostHandler,RedisHandler,VaultHandler,SecurityHandler,MiniServiceHandler)
+    @UseHandler(ORMCacheHandler,CostHandler,RedisHandler,VaultHandler,ClientSecurityHandler,MiniServiceHandler)
     @BaseHTTPRessource.Delete('/{client}/')
     async def delete_client(self,broker:Annotated[Broker,Depends(Broker)], merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[DataCost,Depends(DataCost)],request:Request,response:Response, client: Annotated[ClientMiniService, Depends(get_client)],profile:str=Depends(get_client), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         
@@ -233,7 +233,7 @@ class ClientRessource(BaseHTTPRessource):
     @UsePermission(AdminPermission)
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @LockService(VaultService,lockType='reader')
-    @UseHandler(SecurityHandler,VaultHandler)
+    @UseHandler(ClientSecurityHandler,VaultHandler)
     @UsePipe(ObjectRelationalFriendlyPipe,before=False)
     @UseGuard(TortoiseHardLimitGuard(10,GroupClientORM))
     @BaseHTTPRessource.Post('/group/')
@@ -298,7 +298,7 @@ class AdminRessource(BaseHTTPRessource):
     @UseLimiter(limit_value='20/week')
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @LockService(VaultService,JWTAuthService,lockType='reader')
-    @UseHandler(AuthClientHandler,ORMCacheHandler,RedisHandler,SecurityHandler)
+    @UseHandler(ClientHandler,ORMCacheHandler,RedisHandler,ClientSecurityHandler)
     @BaseHTTPRessource.HTTPRoute('/blacklist/', methods=[HTTPMethod.POST])
     async def blacklist_tokens(self,blacklist:BlacklistModel, response:Response, request: Request,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         
@@ -345,7 +345,7 @@ class AdminRessource(BaseHTTPRessource):
 
     @UseLimiter(limit_value='20/week')
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
-    @UseHandler(AuthClientHandler,ORMCacheHandler,SecurityHandler,RedisHandler)
+    @UseHandler(ClientHandler,ORMCacheHandler,ClientSecurityHandler,RedisHandler)
     @BaseHTTPRessource.HTTPRoute('/blacklist/', methods=[HTTPMethod.DELETE])
     async def un_blacklist_tokens(self, blacklist:BlacklistModel,response:Response, request: Request, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
 
@@ -371,7 +371,7 @@ class AdminRessource(BaseHTTPRessource):
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @PingService([VaultService,AdminService],is_manager=True)
-    @UseHandler(AuthClientHandler,ORMCacheHandler,MiniServiceHandler)
+    @UseHandler(ClientHandler,ORMCacheHandler,MiniServiceHandler)
     @UseGuard(AdminModificationGuard,AuthenticationClientGuard,ClientAuthTypeGuard())
     @LockService(VaultService,SettingService,AdminService,JWTAuthService,lockType='reader',as_manager=True)
     @BaseHTTPRessource.HTTPRoute('/revoke/{client}/', methods=[HTTPMethod.DELETE])
@@ -388,7 +388,7 @@ class AdminRessource(BaseHTTPRessource):
     @UsePipe(AccessTokenModelPipe,before=False)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @PingService([VaultService,AdminService],is_manager=True)
-    @UseHandler(AuthClientHandler,ORMCacheHandler,MiniServiceHandler)
+    @UseHandler(ClientHandler,ORMCacheHandler,MiniServiceHandler)
     @LockService(VaultService,SettingService,AdminService,lockType='reader',as_manager=True)
     @UseGuard(AdminModificationGuard,BlacklistClientGuard,ClientAuthTypeGuard(accept_access=False, accept_api=True), AuthenticationClientGuard(reverse=True),)
     @BaseHTTPRessource.HTTPRoute('/issue-auth/{client}/', methods=[HTTPMethod.GET],response_model=AccessModel)
@@ -412,7 +412,7 @@ class AdminRessource(BaseHTTPRessource):
     @PingService([VaultService])
     @UseLimiter(limit_value='1/day')
     @UsePipe(AccessTokenModelPipe,before=False)
-    @UseHandler(AuthClientHandler,ORMCacheHandler,VaultHandler,SecurityHandler)
+    @UseHandler(ClientHandler,ORMCacheHandler,VaultHandler,ClientSecurityHandler)
     @LockService(VaultService,SettingService,JWTAuthService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/revoke-all/', methods=[HTTPMethod.DELETE],deprecated=True,mount=False,response_class=AccessModel)
     async def revoke_all_tokens(self, request: Request, broker:Annotated[Broker,Depends(Broker)],clear:bool=Depends(clear_cache_query), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
@@ -430,7 +430,7 @@ class AdminRessource(BaseHTTPRessource):
     
     @PingService([VaultService])
     @UseLimiter(limit_value='1/day')
-    @UseHandler(AuthClientHandler,ORMCacheHandler,VaultHandler,SecurityHandler)
+    @UseHandler(ClientHandler,ORMCacheHandler,VaultHandler,ClientSecurityHandler)
     @LockService(VaultService,SettingService,JWTAuthService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/unrevoke-all/', methods=[HTTPMethod.POST],deprecated=True,mount=False,response_class=AccessModel)
     async def un_revoke_all_tokens(self, request: Request, unRevokeModel:UnRevokeGenerationIDModel, broker:Annotated[Broker,Depends(Broker)],clear:bool=Depends(clear_cache_query), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):   
