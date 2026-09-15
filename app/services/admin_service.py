@@ -23,7 +23,7 @@ class ClientMiniService(BaseMiniService):
 
     def __init__(self,vaultService:VaultService,configService:ConfigService,jwtService:JWTAuthService,securityService:SecurityService,client:ClientORM, policies:list[PolicyModel]=[]):
         self.client = client
-        super().__init__(None, self.client.client_id)
+        super().__init__(None, str(self.client.client_id))
         self.vaultService = vaultService
         self.configService = configService
         self.jwtService = jwtService

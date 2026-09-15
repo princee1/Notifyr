@@ -281,7 +281,8 @@ class SecurityService(BaseService, EncryptDecryptInterface):
 
     def hash(self, value:str, key:str, salt:bytes|str=None,algorithm=None):
         if salt == None:
-            salt = generate_salt()
+            salt = generateId(8)
+            salt = salt.encode()
         elif isinstance(salt,str):
             salt = salt.encode()
         else:

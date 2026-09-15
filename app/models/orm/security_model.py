@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, PrivateAttr, Secret, field_validator, mod
 from app.classes.auth_permission import API_TOKEN_CLIENT_TYPE_SET, AuthType, ClientType, Scope
 from app.utils.constant import PostgresConstant
 from app.utils.helper import subset_model, uuid_v1_mc
-from app.utils.validation import ipv4_subnet_validator, ipv4_validator,PasswordValidator
+from app.utils.validation import email_validator, ipv4_subnet_validator, ipv4_validator,PasswordValidator
 
 SCHEMA = 'clients'
 
@@ -31,14 +31,14 @@ class GroupClientORM(models.Model):
 
 class ClientORM(models.Model):
     client_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    client_name = fields.CharField(max_length=50, unique=True, null=True)
+    client_name = fields.CharField(max_length=50, unique=False, null=False)
     client_email = fields.CharField(max_length=200,unique=True,null=False)
     client_username = fields.CharField(max_length=30, unique=True, null=False)
     client_description = fields.TextField()
     client_scope = fields.CharEnumField(enum_type=Scope, default=Scope.SoloDolo, max_length=25)
     client_type = fields.CharEnumField(enum_type=ClientType, default=ClientType.User, max_length=25)
     authenticated = fields.BooleanField(default=False) #NOTE Whether the client has been authenticated or not
-    issued_for = fields.CharField(max_length=50, null=False, unique=True)
+    issued_for = fields.CharField(max_length=30, null=True, unique=False)
     group = fields.ForeignKeyField(GroupClientORM, related_name="group", on_delete=fields.SET_NULL, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
@@ -122,11 +122,17 @@ class GroupModel(BaseModel):
         return group_name.capitalize()
 
 class AdminClientModel(BaseModel):
-    client_username:str = Field(min_length=12,max_length=30)
+    client_email:str = Field(min_length=8,max_length=200)
+    client_username:str = Field(min_length=8,max_length=30)
     issued_for:Optional[str] = Field(None,min_length=15,max_length=15)
-    client_name:str = Field(min_length=10,max_length=70)
+    client_name:str = Field(min_length=5,max_length=50)
     client_scope:Scope = Field(Scope.Free)
     password:Secret[str]
+
+    @field_validator('client_email')
+    def check_email(cls,e):
+        email_validator(e)
+        return e
 
     @field_validator('password')
     def check_password(cls,p:Secret):

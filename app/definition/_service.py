@@ -241,9 +241,9 @@ class BaseService():
             
         if _lock == NONE_LOCK_TYPE:
             yield self
-
-        async with _lock:
-            yield self
+        else:
+            async with _lock:
+                yield self
         
     def __repr__(self) -> str:
         return super().__repr__()

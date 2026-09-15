@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS GroupClient (
 
 CREATE TABLE IF NOT EXISTS Client (
     client_id UUID DEFAULT public.uuid_generate_v1mc (),
-    client_name VARCHAR(50) UNIQUE,
+    client_name VARCHAR(50),
     client_email VARCHAR(200) UNIQUE,
     client_description TEXT DEFAULT NULL,
     client_username VARCHAR(30) UNIQUE DEFAULT 'notifyr-user-' || secure_random_string(12),
@@ -49,9 +49,10 @@ CREATE TABLE IF NOT EXISTS Client (
     authenticated BOOLEAN DEFAULT FALSE,
     -- max_connection INT DEFAULT 1,
     -- current_connection_count INT DEFAULT 0,
-    issued_for VARCHAR(50) UNIQUE DEFAULT secure_random_string(20),
+    issued_for VARCHAR(30) DEFAULT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT cname CHECK (client_name IS NOT NULL),
     PRIMARY KEY (client_id),
     FOREIGN KEY (group_id) REFERENCES GroupClient (group_id) ON DELETE SET NULL ON UPDATE CASCADE
     -- CHECK (SELECT COUNT(*) FROM Client WHERE client_type ='Admin') = 1

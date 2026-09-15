@@ -656,7 +656,7 @@ database_connection_config(){
         port=6379 \
         username="redis-vaultadmin" \
         password="$VAULTPASS" \
-        allowed_roles="admin-redis-ntfr-role, app-redis-ntfr-role, ncs-redis-ntfr-role, agentic-redis-ntfr-role, app-redis-credit-ntfr-role"
+        allowed_roles="admin-redis-ntfr-role, app-redis-ntfr-role, ncs-redis-ntfr-role, agentic-redis-ntfr-role, app-redis-credit-ntfr-role, app-redis-security-ntfr-role"
     vault write -f notifyr-database/rotate-root/redis-notifyr
     
     vault write notifyr-database/config/redis \

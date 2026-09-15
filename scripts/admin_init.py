@@ -6,9 +6,12 @@ import asyncio
 from pydantic import ValidationError
 
 import app.models.orm.security_model as security
+from app.services.config_service import ConfigService
+from app.services.security_service import JWTAuthService, SecurityService
 from app.utils.constant import RedisConstant
 from app.utils.prettyprint import PrettyPrinter_
 from app.utils.toolbox import RunAsync
+from app.utils.helper import generateId
 
 parser = argparse.ArgumentParser(description="Read and validate JSON from a file or stdin.")
 parser.add_argument("-f", "--file",required=False,help="Path to the JSON file. If omitted, JSON is read from stdin.")
@@ -48,28 +51,32 @@ ADMIN_INIT_KEY='admin-init'
 async def main():
     vaultService:VaultService = Get(VaultService)
     redisService:RedisService = Get(RedisService)
+    configService:ConfigService = Get(ConfigService)
+    jwtService:JWTAuthService = Get(JWTAuthService)
+    securityService:SecurityService = Get(SecurityService)
     tortoiseService:TortoiseConnectionService = Get(TortoiseConnectionService)
 
     setup = await redisService.retrieve(RedisConstant.CONFIG_DB,ADMIN_INIT_KEY)
     if bool(setup):
         await redisService.close_connections()
-        print('alloap')
+        await RunAsync(redisService.revoke_lease)()
+        await RunAsync(vaultService.revoke_auth_token)()
         return 
-
+    
     await tortoiseService.init_connection()
 
     admin_info = admin.model_dump(mode='python',exclude={'password',})
     clientORM = security.ClientORM(client_type=ClientType.Admin,client_description='Admin Account',**admin_info)
 
-    client = BuildMiniService(ClientMiniService,client=clientORM) 
-    encrypted_password,salt =await client.encrypt_password(admin.password.get_secret_value())
+    client = ClientMiniService(vaultService,configService,jwtService,securityService,clientORM)
+    encrypted_password,salt = await client.encrypt_password(admin.password.get_secret_value())
 
     async with tortoiseService.transaction(SECURITY_CREDS) as ctx:
         await clientORM.save(ctx)
-        await client.store_password(encrypted_password)
+        await client.store_password(encrypted_password,salt)
         await client.create_auth_signature()
 
-    await redisService.store(RedisConstant.CONFIG_DB,ADMIN_INIT_KEY,True)
+    await redisService.store(RedisConstant.CONFIG_DB,ADMIN_INIT_KEY,0,True)
 
     await redisService.close_connections()
     await tortoiseService.close_connections()
@@ -80,6 +87,6 @@ async def main():
 
     return
 
-if __name__ == '__name__':
+if __name__ == '__main__':
     asyncio.run(main())
     
