@@ -140,6 +140,7 @@ class ClientMiniService(BaseMiniService):
 
     async def update_client(self, updateClient:UpdateClientModel,group:GroupClientORM|None,ctx=None):
         is_revoked=False
+        password,salt = None,None
         if group==None:
             if updateClient.remove_group:
                 self.client.group_id = None
@@ -147,13 +148,15 @@ class ClientMiniService(BaseMiniService):
         else:
             self.client.group_id = group.group_id
             is_revoked = True
+        
+        if updateClient.client_username != None:
+            self.client.client_username = updateClient.client_username
 
         if updateClient.password:
             if self.client.auth_type == AuthType.API_TOKEN:
                 raise PasswordLessAuthTypeStrategyError(self.client.client_type,self.client.auth_type,"No password needed for 'API_TOKEN' authorization type")
             password,salt = await self.encrypt_password(updateClient.password)
-            await self.store_password(password,salt)
-
+            
         if updateClient.client_description != None:
             self.client.client_description = updateClient.client_description
 
@@ -169,12 +172,14 @@ class ClientMiniService(BaseMiniService):
             is_revoked = True
 
         await self.client.save(ctx)
-        return is_revoked
+        return is_revoked,password,salt
 
-    async def revoke_itself(self,ctx=None,authenticated:bool|None=False)->str:
+    async def revoke_itself(self,ctx=None,authenticated:bool|None=False,save=True)->str:
         if authenticated != None:
             self.client.authenticated = authenticated
-        await self.client.save(ctx)
+
+        if save:
+            await self.client.save(ctx)
         return await self.create_auth_signature()
 
     async def delete_itself(self,ctx=None):
@@ -198,6 +203,10 @@ class ClientMiniService(BaseMiniService):
         
         return auth_token,refresh_token
 
+
+    async def save(self,ctx):
+        await self.client.save(ctx)
+
     @property
     def client_id(self):
         return self.miniService_id
@@ -209,7 +218,7 @@ class ClientMiniService(BaseMiniService):
 @Service(is_manager=True,links=[
             LinkDep(VaultService),
             LinkDep(TortoiseConnectionService),
-         ])
+        ])
 class AdminService(BaseMiniServiceManager[ClientMiniService]):
 
     def __init__(self,configService:ConfigService,jwtAuthService:JWTAuthService,tortoiseConnService:TortoiseConnectionService,vaultService:VaultService,redisService:RedisService,securityService:SecurityService):
@@ -221,19 +230,30 @@ class AdminService(BaseMiniServiceManager[ClientMiniService]):
         self.redisService = redisService
         self.securityService = securityService
 
+        self.policies:dict[str,PolicyModel] = {}
+        self.mappings:list[dict] = []
+
     def build(self,build_state=DEFAULT_BUILD_STATE):
+
+        if self.configService.AUTH_MECHANISM != 'jwt':
+            return
+        
         policies = {} 
         mappings = self.tortoiseConnService.fetch(PolicyMappingORM,listing='list')
         for pk in self.vaultService.security_engine.list('policies'):
             p = self.vaultService.security_engine.read('policies',pk)
             policies[pk] = PolicyModel(**p)
 
+        self.policies= policies
+        self.mappings = mappings
+
+    async def load_clients(self,build_state=-1):
         self.MiniServiceStore.clear()
-        for client in self.tortoiseConnService.fetch(ClientORM,mode='orm'):
+        for client in await ClientORM.filter():
             policy = []
-            for pmap in mappings:
+            for pmap in self.mappings:
                 if client.client_id == pmap.get('client_id',None) or client.client_id == pmap.get('group_id',None):
-                    policy.append(policies[pmap['policy_id']])
+                    policy.append(self.policies[pmap['policy_id']])
             service = ClientMiniService(self.vaultService,
                                         self.configService,
                                         self.jwtAuthService,

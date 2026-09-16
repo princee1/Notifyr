@@ -49,12 +49,16 @@ build_container()
 ADMIN_INIT_KEY='admin-init'
 
 async def main():
+    configService:ConfigService = Get(ConfigService)
     vaultService:VaultService = Get(VaultService)
     redisService:RedisService = Get(RedisService)
     configService:ConfigService = Get(ConfigService)
     jwtService:JWTAuthService = Get(JWTAuthService)
     securityService:SecurityService = Get(SecurityService)
     tortoiseService:TortoiseConnectionService = Get(TortoiseConnectionService)
+
+    if configService.AUTH_MECHANISM != 'jwt':
+        return 
 
     setup = await redisService.retrieve(RedisConstant.CONFIG_DB,ADMIN_INIT_KEY)
     if bool(setup):

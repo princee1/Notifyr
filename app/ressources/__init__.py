@@ -26,10 +26,8 @@ from app.definition._ressource import BaseHTTPRessource
 
 
 SERVER_RESSOURCES:list[Type[BaseHTTPRessource]] = [
-                                                 AdminRessource,
                                                  ResultBackendRessource,
                                                  ContactsRessource,
-                                                 AuthRessource,
                                                  AppRessource,
                                                  LinkRessource,
                                                  PingPongRessource,
@@ -39,6 +37,9 @@ SERVER_RESSOURCES:list[Type[BaseHTTPRessource]] = [
                                                  CostRessource,
                                                  CeleryRessource]
 
+if configService.AUTH_MECHANISM =='jwt':
+    SERVER_RESSOURCES.append(AdminRessource)
+    SERVER_RESSOURCES.append(AuthRessource)
 
 if CAPABILITIES['object']:
     from .object_s3_ressource import S3ObjectRessource
@@ -46,7 +47,6 @@ if CAPABILITIES['object']:
     if configService.ASSET_MODE == AssetMode.s3:
         SERVER_RESSOURCES.append(S3ObjectRessource)
     SERVER_RESSOURCES.append(BlogsRessource)
-    
 
 if CAPABILITIES['webhook']:
     ...
@@ -69,7 +69,6 @@ if CAPABILITIES['agentic']:
     SERVER_RESSOURCES.append(DataIngestRessource)
     SERVER_RESSOURCES.append(GatewayAgenticRessource)
     SERVER_RESSOURCES.append(AgentsRessource)
-
 
 if CAPABILITIES['notification']:
     from .ntfr.notification_ressource import NotificationRessource

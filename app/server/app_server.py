@@ -8,12 +8,13 @@ from app.classes.secrets import ChaCha20SecretsWrapper
 from app.container import Get, CONTAINER
 from app.definition._error import ServerFileError
 from app.callback import Callbacks_Stream,Callbacks_Sub
-from app.definition._service import ACCEPTABLE_STATES, BaseService, ServiceStatus
+from app.definition._service import ACCEPTABLE_STATES, DEFAULT_BUILD_STATE, BaseService, ServiceStatus
 from app.interface.timers import  SchedulerInterface
 from app.models.odm.agents_model import AgentModel
 from app.models.odm.custom_model import CustomModel
 from app.models.odm.tools_model import ToolModel
 from app.ressources import *
+from app.services.admin_service import AdminService
 from app.services.agent.remote_agent_service import RemoteAgentService
 from app.services.cost_service import CostService
 from app.services.database.memcached_service import MemCachedService
@@ -309,6 +310,16 @@ class AppServer(EventInterface):
             return
         
         await tortoiseConnService.init_connection()
+
+    @register_hook('startup')
+    async def register_client(self):
+        configService = Get(ConfigService)
+        if configService.AUTH_MECHANISM != 'jwt':
+            return
+        
+        adminService = Get(AdminService)
+        await adminService.load_clients(DEFAULT_BUILD_STATE)
+
 
     @register_hook('shutdown')
     async def close_tortoise(self):

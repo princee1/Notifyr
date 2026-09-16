@@ -67,6 +67,27 @@ class LoadBalancerMiddleWare(MiddleWare):
         # TODO add headers like application id, notifyr-service id, Signature-Service, myb generation id 
         return response
 
+class APIAuthMiddleware(MiddleWare):
+    def __init__(self, app, dispatch = None):
+        super().__init__(app, dispatch)
+        self.securityService= Get(SecurityService)
+
+    @BypassOn(configService.AUTH_MECHANISM != 'api')
+    @ExcludeOn(['/','/contacts/manage/*'])
+    @ExcludeOn(['/docs/*','/openapi.json'])
+    @ExcludeOn(['/link/visits/*','/link/email-track/*'])
+    @ExcludeOn(['/auth/login/','/auth/revoke/','/auth/refresh/'])
+    async def dispatch(self, request:Request, call_next:Callable[...,Response]):
+
+        token = get_bearer_token_from_request(request)
+        async with self.securityService.lock('reader'):
+            try:
+                self.securityService.verify_server_access(token)
+            except:
+                ...
+
+        return await call_next(request)
+
 class JWTAuthMiddleware(MiddleWare):
     priority = MiddlewarePriority.AUTH
 
@@ -77,7 +98,7 @@ class JWTAuthMiddleware(MiddleWare):
         self.adminService: AdminService = Get(AdminService)
         self.redisService: RedisService = Get(RedisService)
 
-    @BypassOn(not configService.SECURITY_FLAG)
+    @BypassOn(configService.AUTH_MECHANISM != 'jwt')
     @ExcludeOn(['/','/contacts/manage/*'])
     @ExcludeOn(['/docs/*','/openapi.json'])
     @ExcludeOn(['/link/visits/*','/link/email-track/*'])

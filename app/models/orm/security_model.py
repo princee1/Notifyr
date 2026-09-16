@@ -185,13 +185,13 @@ class ClientModel(ClientModelBase):
 
     @field_validator('client_username')
     def validate_username(cls,usr):
-        if ' 'in usr:
+        if ' ' in usr:
             raise ValueError('The username cannot contain space')
 
         return usr
 
 
-UpdateClientModelBase = subset_model(ClientModel,'UpdateClientModelBase',include={'client_name','issued_for','client_email','client_description','client_scope','password','policies'})
+UpdateClientModelBase = subset_model(ClientModel,'UpdateClientModelBase',include={'client_name','issued_for','client_username','client_description','client_scope','group','password','policies'})
 
 class UpdateClientModel(UpdateClientModelBase):
 
@@ -228,11 +228,11 @@ class UpdateClientModel(UpdateClientModelBase):
             return super().normalize_policies(val)
         return val
     
-    # @model_validator(mode="after")
-    # def final_validate(self) -> Self:
-    #     if all([self.client_scope is None, self.password is None, self.client_name is None, self.issued_for is None,self.group_id]):
-    #         raise ValueError('At least one field must be provided for update.')
-    #     return self
+    @model_validator(mode="after")
+    def final_validate(self) -> Self:
+        if all([self.client_scope is None, self.password is None, self.client_name is None, self.issued_for is None,self.group_id]):
+            raise ValueError('At least one field must be provided for update.')
+        return self
 
 class BlacklistModel(BaseModel):
     mode:Literal['group','client','token']

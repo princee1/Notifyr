@@ -98,10 +98,8 @@ class CostService(BaseService):
     def build(self,build_state=-1):
         
         if APP_MODE == ApplicationMode.server:
+            storage_uri=self.redisService.compute_url(db=RedisConstant.LIMITER_DB)
             storage_uri = None
-            if self.configService.SECURITY_FLAG:
-                storage_uri=self.redisService.compute_url(db=RedisConstant.LIMITER_DB)
-                storage_uri = None
 
             self.GlobalLimiter = Limiter(get_remote_address, storage_uri=storage_uri, headers_enabled=True)
 

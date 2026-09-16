@@ -155,7 +155,7 @@ class ConfigService(_service.BaseService):
         self.GRAPHITI_MAX_COROUTINES:int = ConfigService.parseToInt(self.getenv('GRAPHITI_MAX_COROUTINES'))
 
         # SECURITY CONFIG #
-        self.SECURITY_FLAG: bool = ConfigService.parseToBool(self.getenv('SECURITY_FLAG'), False)
+        self.AUTH_MECHANISM: Literal['jwt','api','none'] = self.getenv('AUTH_MECHANISM','jwt').lower()
         self.COST_FLAG:bool = ConfigService.parseToBool(self.getenv('COST_FLAG','true'),True)
         self.ADMIN_KEY:str = self.getenv("ADMIN_KEY")
         
@@ -251,8 +251,15 @@ class ConfigService(_service.BaseService):
         if self.CELERY_BROKER_PROVIDER not in ['redis','rabbitmq']:
             raise BuildWarningError()
 
-        if not self.SECURITY_FLAG:
-            raise BuildWarningError(f"SECURITY_FLAG {self.SECURITY_FLAG} is set to False, this is not recommended for production environments")
+        if self.AUTH_MECHANISM not in ['jwt','api','none']:
+            raise BuildAbortError('AUTH MECHANISM must be either "jwt", "api", "none"')
+
+        if self.AUTH_MECHANISM == 'none':
+            if self.MODE == MODE.DEV_MODE:
+                raise BuildWarningError(f"AUTH_MECHANISM {self.AUTH_MECHANISM} is set to None, this is not recommended for production environments")
+
+            if self.MODE == MODE.PROD_MODE:
+                raise BuildAbortError('AUTH_MECHANISM must be either jwt or api, but jwt is better')
 
     def __getitem__(self, key):
         try:

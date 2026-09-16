@@ -11,16 +11,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE DOMAIN Role AS VARCHAR(15) CHECK (
-    VALUE IN ('PUBLIC','ADMIN','RELAY','CUSTOM','MFA_OTP','CHAT','RESULT','STATIC','REFRESH','CONTACTS','TWILIO','SUBSCRIPTION','CLIENT','LINK','PROFILE',
-    'ASSETS'
-)
-);
-
-CREATE DOMAIN AuthType AS VARCHAR(15) CHECK(
-    VALUE IN ('ACCESS_TOKEN','API_TOKEN')
-);
-
 CREATE DOMAIN Scope AS VARCHAR(15) CHECK (
     VALUE IN ('SoloDolo', 'Organization','Domain','Free')
 );
@@ -172,7 +162,7 @@ CREATE OR REPLACE FUNCTION guard_admin_deletion() RETURNS TRIGGER AS $guard_admi
 BEGIN
     SET search_path = clients;
     IF OLD.client_type = 'Admin' THEN
-        RAISE EXCEPTION 'Admin cannot be deleted or updated';
+        RAISE EXCEPTION 'Admin cannot be deleted';
         RETURN NULL;  
     END IF;
     RETURN NEW;
@@ -180,10 +170,47 @@ END;
 $guard_admin_deletion$ LANGUAGE plpgsql;
 
 CREATE TRIGGER guard_admin_deletion
-    BEFORE DELETE OR UPDATE
+    BEFORE DELETE
     ON Client
     FOR EACH ROW
     EXECUTE FUNCTION guard_admin_deletion();
+
+CREATE OR REPLACE FUNCTION guard_client_identity_modification() RETURNS TRIGGER AS $guard_client_identity_modification$
+BEGIN
+    IF OLD.client_id IS DISTINCT FROM NEW.client_id THEN
+        RAISE EXCEPTION 'Client ID cannot be modified';
+    END IF;
+
+    IF OLD.client_type IS DISTINCT FROM NEW.client_type THEN
+        RAISE EXCEPTION 'Client type cannot be modified';
+    END IF;
+
+    RETURN NEW;
+END;
+$guard_client_identity_modification$ LANGUAGE plpgsql;
+
+CREATE TRIGGER guard_client_identity_modification
+    BEFORE UPDATE
+    ON Client
+    FOR EACH ROW
+    EXECUTE FUNCTION guard_client_identity_modification();
+
+CREATE OR REPLACE FUNCTION guard_admin_group_modification() RETURNS TRIGGER AS $guard_admin_group_modification$
+BEGIN
+    IF OLD.client_type = 'Admin' AND OLD.group_id IS DISTINCT FROM NEW.group_id THEN
+        RAISE EXCEPTION 'The Admin client group cannot be modified';
+    END IF;
+
+    RETURN NEW;
+END;
+$guard_admin_group_modification$ LANGUAGE plpgsql;
+
+CREATE TRIGGER guard_admin_group_modification
+    BEFORE UPDATE
+    ON Client
+    FOR EACH ROW
+    EXECUTE FUNCTION guard_admin_group_modification();
+
 
 -- ------------------------------------             -------------------------------------------#
 

@@ -43,11 +43,13 @@ async def refresh_logout_handler(func,*args,**kwargs):
 class AuthRessource(BaseHTTPRessource):
 
     @InjectInMethod()
-    def __init__(self,tortoiseService:TortoiseConnectionService,adminService:AdminService):
+    def __init__(self,tortoiseService:TortoiseConnectionService,adminService:AdminService,settingService:SettingService):
         super().__init__(None,None)
         self.tortoiseService = tortoiseService
+        self.settingService = settingService
         self.adminService = adminService
         self.blacklist_guard = BlacklistClientGuard()
+        self.access_token_pipe = AccessTokenModelPipe()
 
     @Throttle(normal=(300,30))
     @UseHandler(MiniServiceHandler)
@@ -100,7 +102,7 @@ class AuthRessource(BaseHTTPRessource):
                 session.login(refresh_token)
 
         broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))
-        return {'access':auth_token,'auth_type':AuthType.ACCESS_TOKEN}
+        return self.access_token_pipe.pipe(auth_token,client)
 
     @Throttle(uniform=(100,250))
     @UseLimiter('5/day',key_func='ip')
@@ -130,7 +132,7 @@ class AuthRessource(BaseHTTPRessource):
                 session.login(refresh_token)
 
         broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))
-        return {'access':auth_token,'auth_type':AuthType.ACCESS_TOKEN}
+        return self.access_token_pipe.pipe(auth_token,client)
 
     @Throttle(normal=(200,30))
     @UseLimiter('5/day',key_func='ip')
@@ -160,7 +162,7 @@ class AuthRessource(BaseHTTPRessource):
                 session.login(refresh_token)
         
         broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))
-        return {'access':auth_token,'auth_type':AuthType.ACCESS_TOKEN}
+        return self.access_token_pipe.pipe(auth_token,client)
 
     @Throttle(uniform=(150,200))
     @UseLimiter('10/day',key_func='client')

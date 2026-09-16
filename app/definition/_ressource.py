@@ -146,7 +146,7 @@ class Helper:
                 result = JSONResponse({},)
             
             elif isinstance(result,BaseModel):
-                result = JSONResponse(result.model_dump())
+                result = JSONResponse(result.model_dump(mode='json'))
 
             return copy_response(result, response)
 
@@ -584,7 +584,7 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
             @functools.wraps(function)
             async def callback(*args, **kwargs):
 
-                if not configService.SECURITY_FLAG:
+                if not configService.AUTH_MECHANISM == 'jwt':
                     return await function(*args, **kwargs)
 
                 if empty_decorator:
@@ -1010,14 +1010,14 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
     cost_callback = cost_decorator()
 
     def client_private_key_func(request:Request):
-        if not configService.SECURITY_FLAG:
+        if not configService.AUTH_MECHANISM == 'jwt':
             return workerService.INSTANCE_ID
         authPermission:AuthPermission =  get_auth_permission(request)
         clientInfo:ClientAccessInfo = get_client_info(request)
         return clientInfo['client_id']
 
     def group_private_key_func(request:Request):
-        if not configService.SECURITY_FLAG:
+        if not configService.AUTH_MECHANISM == 'jwt':
             return workerService.HOSTNAME
         authPermission:AuthPermission = get_auth_permission(request)
         clientInfo:ClientAccessInfo = get_client_info(request)
@@ -1033,7 +1033,7 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
         authPermission:AuthPermission = get_auth_permission(request)
         return 'private'
 
-
+    
     if isinstance(key_func,str):
         match key_func:
             case 'default':

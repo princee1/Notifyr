@@ -72,7 +72,7 @@ def Get_Contact(skip_permission:bool,raise_file:bool):
 
         if not skip_permission:
             if authPermission == None:
-                if Get(ConfigService).SECURITY_FLAG:
+                if Get(ConfigService).AUTH_MECHANISM != 'none':
                     raise HTTPException(status_code=401, detail="Unauthorized")
 
             else:

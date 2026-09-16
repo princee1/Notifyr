@@ -73,7 +73,7 @@ class PolicyRessource(BaseHTTPRessource):
             await PolicyMappingORM.filter(policy_id=policy).using_db(ctx).delete()
             await RunInThreadPool(self.vaultService.security_engine.delete)('policies',policy._policy_id)
 
-        broker.propagate(StateProtocol(service=AdminService))
+        broker.propagate(StateProtocol(service=AdminService,to_build=True,callback_state_function=AdminService.load_clients.__name__))
         return {**policy.model_dump(), **{'policy_id':policy._policy_id}}
 
     @UseGuard(PolicyGuard)
@@ -87,7 +87,7 @@ class PolicyRessource(BaseHTTPRessource):
         policy.update(policyModel,mode)
         data = policy.model_dump()
         await RunInThreadPool(self.vaultService.security_engine.put)('policies',data,policy._policy_id)
-        broker.propagate(StateProtocol(service=AdminService))
+        broker.propagate(StateProtocol(service=AdminService,to_build=True,callback_state_function=AdminService.load_clients.__name__))
         return {**data, **{'policy_id':policy._policy_id}}
         
     @UsePipe(FunctionInjectorPipe(fetch_policy,'policy'))
@@ -149,7 +149,7 @@ class ClientRessource(BaseHTTPRessource):
         async def rollback():
             await RunInThreadPool(self.vaultService.secrets_engine.delete)('clients',clientModel._client_id)
 
-        broker.propagate(StateProtocol(service=AdminService))
+        broker.propagate(StateProtocol(service=AdminService,to_build=True,callback_state_function=AdminService.load_clients.__name__))
 
         return client_data
 
@@ -164,21 +164,26 @@ class ClientRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/{client}/', methods=[HTTPMethod.PUT])
     async def update_client(self,request:Request,response:Response, updateClient:UpdateClientModel,broker:Annotated[Broker,Depends(Broker)],client: Annotated[ClientMiniService, Depends(get_client)],mode:PolicyUpdateMode = Depends(policy_update_mode_query),profile:str=Depends(get_client), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info) ):
 
-        clientORM = await ClientORM.filter(Q(client_username=updateClient.client_username) | Q(client_email=updateClient.client_email)).first()
-        if clientORM != None:
-            raise ClientAlreadyExistError 
+        if updateClient.client_username:
+            clientORM = await ClientORM.filter(Q(client_username=updateClient.client_username)).first()
+            if clientORM != None:
+                raise ClientAlreadyExistError 
 
         group = await fetch_group(updateClient.group) if updateClient.group  else None
+
         async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
-            is_revoked = await client.update_client(updateClient,group,ctx)
+            is_revoked,password,salt = await client.update_client(updateClient,group,ctx)
             if updateClient.policies != None:
                 await self.adminService.update_policy(updateClient.policies,mode,client,group,ctx)
             if is_revoked:
                 await client.revoke_itself(ctx,authenticated=False)
                 request.state.clear = True
+            await client.save(ctx)
+            if password:
+                await client.store_password(password,salt)
 
-            broker.propagate(StateProtocol(service=AdminService))
-            return client.client
+        broker.propagate(StateProtocol(service=AdminService,to_build=True,callback_state_function=AdminService.load_clients.__name__))
+        return client.client
 
     @PingService([VaultService])        
     @UsePermission(AdminPermission)
@@ -202,7 +207,7 @@ class ClientRessource(BaseHTTPRessource):
             None,
             transaction
         )
-        broker.propagate(StateProtocol(service=AdminService))
+        broker.propagate(StateProtocol(service=AdminService,to_build=True,callback_state_function=AdminService.load_clients.__name__))
         return client.client
     
     @UsePermission(AdminPermission)
@@ -261,7 +266,7 @@ class ClientRessource(BaseHTTPRessource):
             await group.delete(ctx)
             await BlacklistGroupCache.InvalidAll([group.group_id,WILDCARD])
 
-        broker.propagate(StateProtocol(service=AdminService))
+        broker.propagate(StateProtocol(service=AdminService,to_build=True,callback_state_function=AdminService.load_clients.__name__))
 
         return group
 

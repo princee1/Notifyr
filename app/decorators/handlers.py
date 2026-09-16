@@ -5,6 +5,7 @@ from typing import Callable
 
 import aiohttp
 from amqp import AccessRefused
+import asyncpg
 from fastapi.exceptions import ResponseValidationError
 import grpc
 import hvac
@@ -383,6 +384,13 @@ class TortoiseHandler(Handler):
             mess = str(mess)
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
                                 'message': 'Parameters error', 'detail': mess, })
+
+        except asyncpg.exceptions.RaiseError as e:
+            err = e.as_dict()
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={
+                'message':e.sqlstate,
+                'error':err
+            })
         
         except TortoiseTransactionFailureError as e :
             raise ...
