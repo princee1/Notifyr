@@ -107,7 +107,7 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
     def compute_url(self,host:str,port:int=5432,creds:CredentialName='default',database=PostgresConstant.DEFAULT_DATABASE_NAME):
         return f'postgres://{self.db_user(creds)}:{self.db_password(creds)}@{host}:{port}/{database}'
 
-    def sync_find(self,model:Type[R],projection:list[str]=None,mode:Literal['json','orm']='json',listing:Literal['list','generator','dict']='generator',key=None):
+    def fetch(self,model:Type[R],projection:list[str]=None,mode:Literal['json','orm']='json',listing:Literal['list','generator','dict']='generator',key=None):
         proj = projection or []
         if mode=='orm' and projection:
             raise ValueError('Cannot build an ORM from a partial json mapping')
@@ -116,26 +116,35 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
             raise ValueError('Key should be specified if the listing is a dict')
             
         columns = list(set(proj))
-        query = sql.SQL("""SELECT {columns} FROM {schema}.{table}""").format(columns=sql.SQL(", ").join(sql.Identifier(column) for column in columns),
+        if columns:
+            columns = sql.SQL(", ").join(sql.Identifier(column) for column in columns)
+        else:
+            columns = sql.SQL("*")
+        
+        query = sql.SQL("""SELECT {columns} FROM {schema}.{table}""").format(columns=columns,
                 schema=sql.Identifier(model.Meta.schema),
                 table=sql.Identifier(model.Meta.table),)
+        objs = []
         with self.sync_context() as cur:
             cur.execute(query)
             response = {} if listing == 'dict' else []
-            for obj in cur.fetchall():
-                k = None if key == None else obj[key]
-                if mode=='orm':
-                    obj = model(**obj)
-                match listing:
-                    case 'generator':
-                        yield obj
-                    case 'list':
-                        response.append(obj)
-                    case 'dict':
-                        response[k] = obj
-            
-            if listing != 'generator':
-                return response
+            objs = cur.fetchall()
+
+        for obj in objs:
+            k = None if key == None else obj[key]
+            obj=dict(obj)
+            if mode=='orm':
+                obj = model(**obj)
+            match listing:
+                case 'generator':
+                    yield obj
+                case 'list':
+                    response.append(obj)
+                case 'dict':
+                    response[k] = obj
+        
+        if listing != 'generator':
+            return response
 
     def init_sync_connection(self):
         self.sync_conn = psycopg2.connect(

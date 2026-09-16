@@ -85,24 +85,28 @@ class TaskService(BaseService,SchedulerInterface):
             self.shutdown(False)
 
         self.redis_client = self.redisService.db[RedisConstant.CONFIG_DB]
-        jobstores = {
-            "redis": RedisJobStore(
-                host=self.redisService.redis_celery.connection_pool.connection_kwargs.get("host", "localhost"),
-                port=self.redisService.redis_celery.connection_pool.connection_kwargs.get("port", 6379),
-                db=RedisConstant.CELERY_DB,
-                jobs_key=f"{SCHEDULER_JOBSTORE_PREFIX}/jobs@",
-                run_times_key=f"{SCHEDULER_JOBSTORE_PREFIX}:run_times",
-                username=self.redisService.redis_celery.connection_pool.connection_kwargs.get('username'),
-                password=self.redisService.redis_celery.connection_pool.connection_kwargs.get('password')
-                ),
-            'memory':MemoryJobStore(),
-            'mongodb':NotifyrMongoDBJobStore(
+        jobstore = self.configService.JOBSTORE_DB
+
+        jobstores = {'memory':MemoryJobStore(),}
+        if jobstore == 'redis':
+            jobstores.update({
+                "redis": RedisJobStore(
+                    host=self.redisService.redis_celery.connection_pool.connection_kwargs.get("host", "localhost"),
+                    port=self.redisService.redis_celery.connection_pool.connection_kwargs.get("port", 6379),
+                    db=RedisConstant.CELERY_DB,
+                    jobs_key=f"{SCHEDULER_JOBSTORE_PREFIX}/jobs@",
+                    run_times_key=f"{SCHEDULER_JOBSTORE_PREFIX}:run_times",
+                    username=self.redisService.redis_celery.connection_pool.connection_kwargs.get('username'),
+                    password=self.redisService.redis_celery.connection_pool.connection_kwargs.get('password')
+                ),})
+        elif jobstore == 'mongodb':
+            jobstores.update({'mongodb':NotifyrMongoDBJobStore(
                 MongooseDBConstant.JOB_DATABASE_NAME,
                 collection=MongooseDBConstant.APS_COLLECTION,
                 client=self.mongooseService.client_store.get_client(JOBS_CREDS,'sync')
                 )
-        }
-        jobstore = self.configService.JOBSTORE_DB
+            })
+            
         SchedulerInterface.__init__(self,None,jobstores,jobstore,executor='asyncio-executor',replace_existing=True,coalesce=True,thread_pool_count=50)
 
     def start(self):

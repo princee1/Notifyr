@@ -346,6 +346,8 @@ services:
       - vault-data:/vault/data
       - vault-shared:/vault/shared
       - vault-audit:/vault/logs
+    # ports:
+    #   - "8200:8200"
     networks:
       - data_net
       - vault_net

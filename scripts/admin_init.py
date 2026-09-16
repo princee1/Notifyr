@@ -76,7 +76,7 @@ async def main():
         await client.store_password(encrypted_password,salt)
         await client.create_auth_signature()
 
-    await redisService.store(RedisConstant.CONFIG_DB,ADMIN_INIT_KEY,0,True)
+    await redisService.store(RedisConstant.CONFIG_DB,ADMIN_INIT_KEY,1,0)
 
     await redisService.close_connections()
     await tortoiseService.close_connections()

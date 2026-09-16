@@ -18,6 +18,20 @@ from app.utils.toolbox import RunInThreadPool
 class AuthSignature(TypedDict):
     signature:str
 
+class ClientVaultPath:
+
+    @staticmethod
+    def AUTH_SIGNATURE_PATH(client_id:str):
+        return f'{client_id}/auth-signature'
+
+    @staticmethod
+    def CREDENTIALS_PATH(client_id:str):
+        return f'{client_id}/credentials'
+
+    @staticmethod
+    def RECOVERY_PATH(client_id:str):
+        return f'{client_id}/recovery'
+
 @MiniService()
 class ClientMiniService(BaseMiniService):
 
@@ -31,11 +45,10 @@ class ClientMiniService(BaseMiniService):
         self.authPermission:AuthPermission = self.combine_policy(policies)
 
     def build(self, build_state = DEFAULT_BUILD_STATE):
-        path = f"/{self.miniService_id}/auth-signature/"
-        signature:AuthSignature = self.vaultService.secrets_engine.read('clients',path)
+        path = ClientVaultPath.AUTH_SIGNATURE_PATH(self.miniService_id)
+        signature:AuthSignature = self.vaultService.security_engine.read('clients',path)
         self.signature = ChaCha20SecretsWrapper(signature)
-        return super().build(build_state)
-
+        
     @RunInThreadPool
     def encrypt_password(self,password:str):
         password,salt= self.securityService.hash(password,self.vaultService.CLIENT_PASSWORD_HASH_KEY)
@@ -46,12 +59,12 @@ class ClientMiniService(BaseMiniService):
     @RunInThreadPool
     def store_password(self,password:str,salt:str):
         credentials = Credentials(password=password,salt=salt)
-        path = f"{self.miniService_id}/credentials/"
+        path = ClientVaultPath.CREDENTIALS_PATH(self.miniService_id)
         self.vaultService.security_engine.put('clients',credentials,path)
 
     @RunInThreadPool
     def fetch_password(self,):
-        path = f"{self.miniService_id}/credentials/"
+        path = ClientVaultPath.CREDENTIALS_PATH(self.miniService_id)
         credentials:Credentials=self.vaultService.security_engine.read('clients',path)
         return credentials
 
@@ -66,17 +79,17 @@ class ClientMiniService(BaseMiniService):
     def create_auth_signature(self):
         signature = generateId(20)
         authSignature ={'signature': signature}
-        path = f"{self.miniService_id}/auth-signature"
+        path = ClientVaultPath.AUTH_SIGNATURE_PATH(self.miniService_id)
         self.vaultService.security_engine.put('clients',authSignature,path)
         return signature
 
     @RunInThreadPool
     def create_recovery_code(self,recovery:EncryptedRecoveryTokens):
-        path = f'{self.client_id}/recovery'
+        path = ClientVaultPath.RECOVERY_PATH(self.client_id)
         self.vaultService.security_engine.put('clients',recovery,path)
 
     async def verify_recovery_code(self,code:str):
-        path = f'{self.client_id}/recovery'
+        path = ClientVaultPath.RECOVERY_PATH(self.client_id)
         recovery:EncryptedRecoveryTokens=self.vaultService.security_engine.read('clients',path)
         tokens = recovery.get('tokens',[])
 
@@ -210,26 +223,24 @@ class AdminService(BaseMiniServiceManager[ClientMiniService]):
 
     def build(self,build_state=DEFAULT_BUILD_STATE):
         policies = {} 
-        mappings = self.tortoiseConnService.sync_find(PolicyMappingORM,listing='list')
+        mappings = self.tortoiseConnService.fetch(PolicyMappingORM,listing='list')
         for pk in self.vaultService.security_engine.list('policies'):
             p = self.vaultService.security_engine.read('policies',pk)
             policies[pk] = PolicyModel(**p)
-        
-        self.MiniServiceStore.clear()
 
-        for client in self.tortoiseConnService.sync_find(ClientORM,mode='orm'):
+        self.MiniServiceStore.clear()
+        for client in self.tortoiseConnService.fetch(ClientORM,mode='orm'):
             policy = []
             for pmap in mappings:
                 if client.client_id == pmap.get('client_id',None) or client.client_id == pmap.get('group_id',None):
                     policy.append(policies[pmap['policy_id']])
-            
             service = ClientMiniService(self.vaultService,
                                         self.configService,
                                         self.jwtAuthService,
                                         self.securityService,
                                         client,policy)
             service._builder(BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
-            self.MiniServiceStore.add(p)
+            self.MiniServiceStore.add(service)
 
     async def update_policy(self, policy_ids: list[str], mode: PolicyUpdateMode, client:ClientMiniService  = None, group: GroupClientORM = None,ctx=None):
         # Get all current policy mappings for this client/group
