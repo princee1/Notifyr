@@ -479,7 +479,8 @@ class ClientHandler(Handler):
 
         except ClientAuthenticationFlagError as e:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={'message': 'Client is already logged in' if e.auth_flag_found else 'Client is already logged out'}
             )
 
 class ValueErrorHandler(Handler):

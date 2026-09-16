@@ -39,14 +39,18 @@ class EncryptDecryptInterface(Interface):
     def __init__(self,nonce:str):
         self.nonce = nonce.encode()
 
-    def _encode_value(self, value: str, key: bytes | str) -> str:
+    def _encode_value(self, value: str, key: bytes | str,wrapper=False) -> str:
+        if not wrapper:
+            return value
         key = key.encode()
         value = base64.b64encode(value.encode()).decode()
         cipher = ChaCha20SecretsWrapper(value,key,self.nonce)
         return cipher.cipher_data.decode()
 
     @Time
-    def _decode_value(self, value: str, key: bytes | str) -> str:
+    def _decode_value(self, value: str, key: bytes | str,skip=False) -> str:
+        if skip:
+            return value
         key = key.encode()
         cipher = ChaCha20SecretsWrapper(value,key,self.nonce)
         cipher.cipher_data = value
@@ -80,7 +84,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
             created_time = time.time()
             permission = ClientAccessInfo(generation_id=self.GENERATION_ID, created_at=created_time,expired_at=created_time + exp,
                                         salt=salt,client_id=client_id,authz_id=authz_id)
-            token = self._encode_token(permission)
+            token = self._encode_token(permission,)
             return token
         except Exception as e:
             print(e)
@@ -133,9 +137,9 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         salt = str(self.salt)
         permission = ContactPermission(
             expired_at=expiration, create_at=now, scope=scope, contact_id=contact_id, salt=salt)
-        return self._encode_token(permission, self.vaultService.CONTACT_JWT_SECRET_KEY,False)
+        return self._encode_token(permission, self.vaultService.CONTACT_JWT_SECRET_KEY,True)
 
-    def _encode_token(self, obj, secret_key: str = None, lookup=True):
+    def _encode_token(self, obj, secret_key: str = None, lookup=True,wrapper=False):
         if secret_key == None:
             secret_key = self.vaultService.JWT_SECRET_KEY
         else:
@@ -143,18 +147,18 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
                 secret_key = self.vaultService.tokens.get(secret_key,self.vaultService.JWT_SECRET_KEY)
 
         encoded = jwt.encode(obj, secret_key, algorithm=self.vaultService.JWT_ALGORITHM)
-        token = self._encode_value(encoded, self.vaultService.ON_TOP_SECRET_KEY)
+        token = self._encode_value(encoded, self.vaultService.ON_TOP_SECRET_KEY,wrapper=wrapper)
         return token
 
     @cached(TTLCache(50,60*60*3))
-    def _decode_token(self, token: str, secret_key: str = None) -> dict:
+    def _decode_token(self, token: str, secret_key: str = None,wrapper=False) -> dict:
         try:
             if secret_key == None:
                 secret_key = self.vaultService.JWT_SECRET_KEY
             else:
                 secret_key = self.vaultService.tokens(secret_key, self.vaultService.JWT_SECRET_KEY)
 
-            token = self._decode_value(token, self.vaultService.ON_TOP_SECRET_KEY)
+            token = self._decode_value(token, self.vaultService.ON_TOP_SECRET_KEY,skip=wrapper)
             decoded = jwt.decode(token, secret_key,algorithms=self.vaultService.JWT_ALGORITHM)
             return decoded
 
@@ -212,7 +216,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
 
     def verify_contact_permission(self, token: str) -> ContactPermission:
 
-        token = self._decode_token(token, 'CONTACT_JWT_SECRET_KEY')
+        token = self._decode_token(token, 'CONTACT_JWT_SECRET_KEY',True)
         permission: ContactPermission = ContactPermission(**token)
 
         try:

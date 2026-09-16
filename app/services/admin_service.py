@@ -142,10 +142,10 @@ class ClientMiniService(BaseMiniService):
         is_revoked=False
         if group==None:
             if updateClient.remove_group:
-                self.client.group = None
+                self.client.group_id = None
                 is_revoked = True
         else:
-            self.client.group = group.group_id
+            self.client.group_id = group.group_id
             is_revoked = True
 
         if updateClient.password:
@@ -189,7 +189,7 @@ class ClientMiniService(BaseMiniService):
             raise CouldNotCreateAuthTokenError()
         
         if refresh:
-            refresh_token = self.jwtService.encode_refresh_token(signature)
+            refresh_token = self.jwtService.encode_refresh_token(signature,self.client_id)
             if refresh_token == None:
                 raise CouldNotCreateRefreshTokenError()
 
@@ -204,7 +204,7 @@ class ClientMiniService(BaseMiniService):
 
     @property
     def group_id(self):
-        return None if self.client.group == None else str(self.client.group.group_id)
+        return None if self.client.group is None else str(self.client.group.group_id)
 
 @Service(is_manager=True,links=[
             LinkDep(VaultService),

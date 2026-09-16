@@ -98,9 +98,9 @@ class ClientAccessInfo(TypedDict):
     expired_at: float
     generation_id: str
     client_id: str
-    status:PermissionStatus= 'active'
+    status:PermissionStatus= 'active' # NOTE Computed value
     auth_type:AuthType # NOTE Computed value
-    client_type:ClientType
+    client_type:ClientType # NOTE computed value
     salt:str
     authz_id:str
 

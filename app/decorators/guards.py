@@ -193,6 +193,9 @@ class BlacklistClientGuard(Guard):
         self.redisService = Get(RedisService)
     
     async def guard(self,client:ClientMiniService):
+        if client.client.client_type == ClientType.Admin:
+            return True,''
+        
         async with self.redisService.redis_security.pipeline() as pipe:
             if client.group_id!= None: 
                 await BlacklistGroupCache.Get([client.group_id],pipe)
@@ -200,7 +203,7 @@ class BlacklistClientGuard(Guard):
             flags = await pipe.execute()
         
         if any(flags):
-            raise IdentityBlacklistedError()
+            raise IdentityBlacklistedError(client.client_id,)
         return True,''
 
 class AdminModificationGuard(Guard):

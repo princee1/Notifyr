@@ -86,7 +86,7 @@ class AuthRessource(BaseHTTPRessource):
         self.verify_client(credentials.username, clientORM,True)
         origin = get_client_ip(request)
 
-        async with self.adminService.lock('reader',clientORM.client_id) as client:
+        async with self.adminService.lock('reader',str(clientORM.client_id)) as client:
             async with self.tortoiseService.transaction() as ctx:
 
                 await self.blacklist_guard.guard(client)
@@ -118,7 +118,7 @@ class AuthRessource(BaseHTTPRessource):
         self.verify_client(refreshPermission['client_id'], clientORM,False)
         origin = get_client_ip(request)
 
-        async with self.adminService.lock('reader',clientORM.client_id) as client:
+        async with self.adminService.lock('reader',str(clientORM.client_id)) as client:
             async with self.tortoiseService.transaction() as ctx:
 
                 await self.blacklist_guard.guard(client)
@@ -132,8 +132,8 @@ class AuthRessource(BaseHTTPRessource):
         broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))
         return {'access':auth_token,'auth_type':AuthType.ACCESS_TOKEN}
 
-    @UseLimiter('5/day')
     @Throttle(normal=(200,30))
+    @UseLimiter('5/day',key_func='ip')
     @PingService([TortoiseConnectionService])
     @LockService(TortoiseConnectionService,lockType='reader')
     @LockService(VaultService,SettingService,JWTAuthService,RedisService,lockType='reader')
@@ -142,13 +142,13 @@ class AuthRessource(BaseHTTPRessource):
     async def login(self,broker:Annotated[Broker,Depends(Broker)],request:Request,response:Response, credentials: Annotated[HTTPBasicCredentials, Depends(HTTPBasic())],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)]):
 
         clientORM = await ClientORM.filter(Q(client_username=credentials.username) | Q(client_email=credentials.username)).first()
-
+        
         self.verify_client(credentials.username, clientORM,True)
         origin = get_client_ip(request)
-            
-        async with self.adminService.lock('reader',clientORM.client_id) as client:
-            async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
 
+        async with self.adminService.lock('reader',str(clientORM.client_id)) as client:
+            async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
+                
                 await self.blacklist_guard.guard(client)
                 client.verify_client_origin(origin)
 
@@ -196,7 +196,6 @@ class AuthRessource(BaseHTTPRessource):
 
         return {'client':info,'policies':policies}
 
-
     @Throttle(normal=(300,30))
     @UsePermission(UserPermission)
     @UseHandler(MiniServiceHandler)
@@ -222,6 +221,6 @@ class AuthRessource(BaseHTTPRessource):
         
         if clientORM.auth_type != AuthType.ACCESS_TOKEN:
             raise ClientDoesNotExistError(username)
-
+        
         if clientORM.authenticated == authenticated_flag:
             raise ClientAuthenticationFlagError(username,authenticated_flag)

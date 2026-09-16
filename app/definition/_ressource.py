@@ -28,6 +28,7 @@ import asyncio
 from asgiref.sync import sync_to_async
 import warnings
 from app.classes.operation_id import OperationIDFactory,MCPOperationID,SimpleOperationID
+from slowapi.util import get_ipaddr
 
 configService: ConfigService = Get(ConfigService)
 costService:CostService = Get(CostService)
@@ -963,7 +964,7 @@ def Throttle(fixed: float | None = None,fn: Callable[[], float] | None = None,un
 
     return decorator    
 
-def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]|None|Dict[ClientTypeLiteral,int]=None,key_func:Callable[[Request],str]|Literal['group','client','public','private','default','worker','none','session','ip']='client'):
+def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]|None|Dict[ClientTypeLiteral,int]=None,key_func:Callable[[Request],str]|Literal['group','client','public','private','default','worker','none','session','ip','subnet']='client'):
     """
     *Description copied from the slowapi library*
 
@@ -1028,6 +1029,7 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
         return ...
     
     def private_key_func(request:Request)->str:
+        clientInfo:ClientAccessInfo = get_client_info(request)
         authPermission:AuthPermission = get_auth_permission(request)
         return 'private'
 
@@ -1036,8 +1038,10 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
         match key_func:
             case 'default':
                 key_func = None # use the global key_func
+            case 'subnet':
+                key_func = None
             case 'ip':
-                ...
+                key_func = get_ipaddr
             case 'public':
                 key_func = lambda r: 'public'
             case 'private':
