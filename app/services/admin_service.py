@@ -215,6 +215,8 @@ class ClientMiniService(BaseMiniService):
     def group_id(self):
         return None if self.client.group is None else str(self.client.group.group_id)
 
+SYNC_ADMIN_BUILD_STATE = 4234
+
 @Service(is_manager=True,links=[
             LinkDep(VaultService),
             LinkDep(TortoiseConnectionService),
@@ -247,7 +249,7 @@ class AdminService(BaseMiniServiceManager[ClientMiniService]):
         self.policies= policies
         self.mappings = mappings
 
-    async def load_clients(self,build_state=-1):
+    async def load_clients(self,build_state=SYNC_ADMIN_BUILD_STATE):
         self.MiniServiceStore.clear()
         for client in await ClientORM.filter():
             policy = []
