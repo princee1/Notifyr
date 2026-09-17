@@ -423,17 +423,6 @@ class ForceGroupPipe(Pipe):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Group information is missing or invalid.")
 
         return {'group': group}
-
-class RefreshTokenPipe(Pipe):
-
-    def __init__(self,):
-        super().__init__(True)
-        self.jwtAuthService:JWTAuthService = Get(JWTAuthService)
-    
-    async def pipe(self,tokens:TokensModel):
-        tokens = tokens.tokens
-        tokens = self.jwtAuthService.verify_refresh_permission(tokens)
-        return {'tokens':tokens}
     
 class ContactStatusPipe(Pipe):
  

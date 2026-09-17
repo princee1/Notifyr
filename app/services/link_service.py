@@ -1,6 +1,5 @@
 from typing import Callable, Literal
 from urllib.parse import urlparse
-from fastapi import HTTPException, Request, Response, status
 from app.classes.template import HTMLTemplate
 from app.definition._service import BaseService, BuildFailureError, Service, ServiceStatus
 from app.models.orm.link_model import LinkORM, QRCodeModel
@@ -24,8 +23,8 @@ def ip_lookup_key_builder(
     func: Callable,
     namespace: str = "",
     *,
-    request: Request = None,
-    response: Response = None,
+    request = None,
+    response = None,
     **kwargs,
 ):
     args = kwargs.get('args', [])
@@ -60,7 +59,7 @@ class LinkService(BaseService):
     def verify_safe_domain(self, domain: str):
         ...
 
-    async def parse_info(self, request: Request, link_id: str, path: str, link_query):
+    async def parse_info(self, request, link_id: str, path: str, link_query):
         if not path:
             path = None
         user_agent = request.headers.get('user-agent')

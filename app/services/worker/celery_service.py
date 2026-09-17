@@ -1,6 +1,4 @@
 from functools import wraps
-
-from fastapi import Response
 from kombu import Queue
 from typing import Any, Callable, Literal, Self
 from aiorwlock import RWLock
@@ -68,13 +66,13 @@ class ChannelMiniService(BaseMiniService):
     def celery_guard(func:Callable):     
 
         @wraps(func)
-        async def wrapper(self:Self,*args,response:Response=None,**kwargs):
+        async def wrapper(self:Self,*args,response=None,**kwargs):
             if not self.has_celery:
                 return
 
             if self.celeryService.service_status != ServiceStatus.AVAILABLE:
                 if response != None:
-                    ...
+                    ... # TODO
                 return
             return await func(self,*args,**kwargs)
         

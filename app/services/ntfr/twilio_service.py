@@ -4,7 +4,6 @@ https://www.youtube.com/watch?v=-AChTCBoTUM
 
 import functools
 from typing import Annotated, Callable, Coroutine, Literal
-from fastapi import HTTPException, Header, Request
 import requests
 from app.classes.profiles import ProfileModelException,ProfileState
 from app.classes.template import SMSTemplate
@@ -101,22 +100,6 @@ class TwilioAccountMiniService(_service.BaseMiniService,TwilioInterface):
             self.verify_dependency()
             return True
 
-    async def verify_twilio_token(self, request: Request):
-        twilio_signature = request.headers.get("X-Twilio-Signature", None)
-
-        if not twilio_signature:
-            raise HTTPException(
-                status_code=400, detail='Twilio Signature not available')
-
-        full_url = str(request.url)
-
-        form_data = await request.form()
-        params = {key: form_data[key] for key in form_data}
-
-        validator = RequestValidator(self.auth_token)
-        if not validator.validate(full_url, params, twilio_signature):
-            raise HTTPException(
-                status_code=403, detail="Invalid Twilio Signature")
 
     async def phone_lookup(self, phone_number: str, carrier=True, caller_name=False) -> tuple[int, dict]:
         phone_number, query = self._parse_phone_and_query(phone_number, carrier, caller_name)
@@ -200,8 +183,6 @@ class TwilioService(_service.BaseMiniServiceManager[TwilioAccountMiniService],Tw
     
         super().build(state_counter)
 
-    async def verify_twilio_token(self, request):
-        return await self.main.verify_twilio_token(request)
         
     async def phone_lookup(self, phone_number, carrier=True, caller_name=False):
         return await self.main.phone_lookup(phone_number,carrier,caller_name)

@@ -143,3 +143,16 @@ class QdrantCollectionDoesNotExistError(BaseError):
     def __init__(self, collection_name):
         super().__init__()
         self.collection_name = collection_name
+
+class QdrantCollectionAlreadyExistError(BaseError):
+    def __init__(self, collection_name):
+        super().__init__()
+        self.collection_name = collection_name
+
+class QdrantPointDeletionOperationError(BaseError):
+    def __init__(self, e):
+        super().__init__(e)
+        self.e = e
+
+class QdrantDocumentIdentificationMissingError(BaseError):
+    ...

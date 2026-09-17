@@ -235,7 +235,7 @@ class AdminService(BaseMiniServiceManager[ClientMiniService]):
 
     def build(self,build_state=DEFAULT_BUILD_STATE):
 
-        if self.configService.AUTH_MECHANISM != 'jwt':
+        if self.configService.AUTH_MECHANISM != 'userpass':
             return
         
         policies = {} 

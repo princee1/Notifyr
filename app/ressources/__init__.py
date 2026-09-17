@@ -37,7 +37,7 @@ SERVER_RESSOURCES:list[Type[BaseHTTPRessource]] = [
                                                  CostRessource,
                                                  CeleryRessource]
 
-if configService.AUTH_MECHANISM =='jwt':
+if configService.AUTH_MECHANISM == 'userpass':
     SERVER_RESSOURCES.append(AdminRessource)
     SERVER_RESSOURCES.append(AuthRessource)
 

@@ -584,7 +584,7 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
             @functools.wraps(function)
             async def callback(*args, **kwargs):
 
-                if not configService.AUTH_MECHANISM == 'jwt':
+                if configService.AUTH_MECHANISM != 'userpass':
                     return await function(*args, **kwargs)
 
                 if empty_decorator:
@@ -1010,14 +1010,14 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
     cost_callback = cost_decorator()
 
     def client_private_key_func(request:Request):
-        if not configService.AUTH_MECHANISM == 'jwt':
+        if configService.AUTH_MECHANISM != 'userpass':
             return workerService.INSTANCE_ID
         authPermission:AuthPermission =  get_auth_permission(request)
         clientInfo:ClientAccessInfo = get_client_info(request)
         return clientInfo['client_id']
 
     def group_private_key_func(request:Request):
-        if not configService.AUTH_MECHANISM == 'jwt':
+        if configService.AUTH_MECHANISM != 'userpass':
             return workerService.HOSTNAME
         authPermission:AuthPermission = get_auth_permission(request)
         clientInfo:ClientAccessInfo = get_client_info(request)

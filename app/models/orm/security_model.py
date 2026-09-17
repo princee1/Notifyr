@@ -153,6 +153,7 @@ class ClientModel(ClientModelBase):
     password:Optional[str] = None
     client_scope:Scope = Field(Scope.SoloDolo)
     group:str | None = Field(None)
+    client_username:str = Field(min_length=8,max_length=30)
     client_description:str = Field(default=None,max_length=500)
     policies:list[str] = Field(default_factory=list,max_length=30)
 
@@ -185,6 +186,7 @@ class ClientModel(ClientModelBase):
 
     @field_validator('client_username')
     def validate_username(cls,usr):
+
         if ' ' in usr:
             raise ValueError('The username cannot contain space')
 
@@ -233,6 +235,17 @@ class UpdateClientModel(UpdateClientModelBase):
         if all([self.client_scope is None, self.password is None, self.client_name is None, self.issued_for is None,self.group_id]):
             raise ValueError('At least one field must be provided for update.')
         return self
+
+    @field_validator('client_username')
+    def validate_username(cls,usr):
+        if usr == None:
+            return  usr
+        
+        if ' ' in usr:
+            raise ValueError('The username cannot contain space')
+
+        return usr
+
 
 class BlacklistModel(BaseModel):
     mode:Literal['group','client','token']

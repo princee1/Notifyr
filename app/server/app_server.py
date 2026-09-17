@@ -314,7 +314,7 @@ class AppServer(EventInterface):
     @register_hook('startup')
     async def register_client(self):
         configService = Get(ConfigService)
-        if configService.AUTH_MECHANISM != 'jwt':
+        if configService.AUTH_MECHANISM != 'userpass':
             return
         
         adminService = Get(AdminService)

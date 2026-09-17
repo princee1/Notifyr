@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from app.classes.auth_permission import AuthPermission, ClientAccessInfo, ClientType, filter_asset_permission, parse_authPermission_enum
 from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE
 from app.depends.orm_cache import BlacklistClientCache, BlacklistGroupCache
-from app.errors.security_error import SecurityIdentityNotResolvedError
+from app.errors.security_error import APIKeyMismatchError, APIKeyMissingError, JWTInvalidTokenError, SecurityIdentityNotResolvedError, TokenDataMissingError, TokenExpiredError, TokenGenerationMismatchError
 from app.errors.service_error import MiniServiceDoesNotExistsError
 from app.services.admin_service import AdminService
 from app.services.database.redis_service import RedisService
@@ -83,8 +83,12 @@ class APIAuthMiddleware(MiddleWare):
         async with self.securityService.lock('reader'):
             try:
                 self.securityService.verify_server_access(token)
-            except:
-                ...
+            except APIKeyMissingError as e:
+                return JSONResponse({'message':'AUTH_MECHANISM set as "token" but not token was found, contact the server administrator'},
+                                    status.HTTP_503_SERVICE_UNAVAILABLE)
+            except APIKeyMismatchError as e:
+                return JSONResponse({'message':'Token provided does not match'},
+                                    status_code=status.HTTP_401_UNAUTHORIZED)
 
         return await call_next(request)
 
@@ -98,7 +102,7 @@ class JWTAuthMiddleware(MiddleWare):
         self.adminService: AdminService = Get(AdminService)
         self.redisService: RedisService = Get(RedisService)
 
-    @BypassOn(configService.AUTH_MECHANISM != 'jwt')
+    @BypassOn(configService.AUTH_MECHANISM != 'userpass')
     @ExcludeOn(['/','/contacts/manage/*'])
     @ExcludeOn(['/docs/*','/openapi.json'])
     @ExcludeOn(['/link/visits/*','/link/email-track/*'])
@@ -143,8 +147,17 @@ class JWTAuthMiddleware(MiddleWare):
         except HTTPException as e:
             return JSONResponse(e.detail,e.status_code,e.headers)
 
+        except TokenDataMissingError as e:
+            return JSONResponse({'message':'could not properly decode the token'},status.HTTP_401_UNAUTHORIZED)
+    
+        except JWTInvalidTokenError as e:
+            return JSONResponse(e.detail,status.HTTP_401_UNAUTHORIZED)
+
+        except (TokenExpiredError,TokenGenerationMismatchError) as e:
+            return JSONResponse(status_code=status.HTTP_403_FORBIDDEN,content=e.detail)
+
         except MiniServiceDoesNotExistsError as e:
-            return JSONResponse(status_code= status.HTTP_401_UNAUTHORIZED)
+            return JSONResponse(status_code= status.HTTP_401_UNAUTHORIZED,message='could not properly authenticate the user')
         
         except SecurityIdentityNotResolvedError as e:
             return JSONResponse({'message':e.reason},status_code= status.HTTP_401_UNAUTHORIZED)

@@ -3,7 +3,15 @@ from cachetools import cached,TTLCache
 from typing import Any, Dict, Literal
 from app.classes.secrets import ChaCha20SecretsWrapper
 from app.definition._interface import Interface, IsInterface
-from app.errors.security_error import ProvidedHashNotEquivalentError
+from app.errors.security_error import (
+    APIKeyMismatchError,
+    APIKeyMissingError,
+    JWTInvalidTokenError,
+    ProvidedHashNotEquivalentError,
+    TokenDataMissingError,
+    TokenExpiredError,
+    TokenGenerationMismatchError,
+)
 from app.errors.service_error import BuildWarningError
 from app.services.setting_service import SettingService
 from app.utils.constant import VaultConstant
@@ -14,7 +22,6 @@ from .file.file_service import FileService
 from app.definition._service import AbstractServiceClass, BaseService, BuildFailureError, Service, ServiceStatus
 import jwt
 import base64
-from fastapi import HTTPException, Request, status
 import time
 from app.classes.auth_permission import AuthPermission, AuthType, ClientAccessInfo, ClientType, ContactPermission, ContactPermissionScope, ClientRefresh, Role, RoutePermission, Scope, WSPermission
 from random import randint, random
@@ -162,70 +169,67 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
             decoded = jwt.decode(token, secret_key,algorithms=self.vaultService.JWT_ALGORITHM)
             return decoded
 
-        # TODO: For each exception, we should return a specific error message
-
         except jwt.InvalidSignatureError as e:
-            ...
+            raise JWTInvalidTokenError(token=token, reason='invalid signature') from e
         except jwt.InvalidAlgorithmError as e:
-
-            ...
+            raise JWTInvalidTokenError(token=token, reason='invalid algorithm') from e
         except jwt.InvalidKeyError as e:
-
-            ...
+            raise JWTInvalidTokenError(token=token, reason='invalid signing key') from e
         except jwt.ExpiredSignatureError as e:
-
-            ...
+            raise TokenExpiredError(token=token, token_type='token', reason='expired signature') from e
         except jwt.InvalidTokenError as e:
-            ...
+            raise JWTInvalidTokenError(token=token, reason='invalid token') from e
         except Exception as e:
-            ...
-
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid token")
+            raise JWTInvalidTokenError(token=token, reason=str(e)) from e
                 
     def verify_client_token_permission(self, token: str,raise_on_expired=False) -> ClientAccessInfo:
 
-        token = self._decode_token(token)
-        clientInfo: ClientAccessInfo = ClientAccessInfo(**token)
+        decoded = self._decode_token(token)
+        clientInfo: ClientAccessInfo = ClientAccessInfo(**decoded)
         try:
             self.set_status(clientInfo,'auth')
             if clientInfo['status'] == 'expired' and raise_on_expired:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,  detail="Token expired")
-            
+                raise TokenExpiredError(token=token, token_type='auth', reason='auth token expired')
+
             if clientInfo["generation_id"] != self.GENERATION_ID:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Old Token not valid anymore")
-            
+                raise TokenGenerationMismatchError(
+                    expected_generation_id=self.GENERATION_ID,
+                    actual_generation_id=clientInfo["generation_id"],
+                    token_type='auth',
+                )
+
             return clientInfo
         except KeyError as e:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Data missing')
+            raise TokenDataMissingError(missing_fields=['generation_id', 'expired_at', 'created_at'], token=token) from e
 
     def verify_refresh_permission(self,tokens:str,raise_on_expired:bool=False):
-        token =self._decode_token(tokens)
-        permission = ClientRefresh(**token)
+        decoded = self._decode_token(tokens)
+        permission = ClientRefresh(**decoded)
         self.set_status(permission,'refresh')
 
         if permission['status'] == 'expired' and raise_on_expired:
-            raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,  detail="Token expired")
+            raise TokenExpiredError(token=tokens, token_type='refresh', reason='refresh token expired')
 
         if permission["generation_id"] != self.GENERATION_ID:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Old Token not valid anymore")
+            raise TokenGenerationMismatchError(
+                expected_generation_id=self.GENERATION_ID,
+                actual_generation_id=permission["generation_id"],
+                token_type='refresh',
+            )
 
-        
         return permission
 
     def verify_contact_permission(self, token: str) -> ContactPermission:
 
-        token = self._decode_token(token, 'CONTACT_JWT_SECRET_KEY',True)
-        permission: ContactPermission = ContactPermission(**token)
+        decoded = self._decode_token(token, 'CONTACT_JWT_SECRET_KEY',True)
+        permission: ContactPermission = ContactPermission(**decoded)
 
         try:
             if permission["expired_at"] < time.time():
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,  detail="Token expired")
+                raise TokenExpiredError(token=token, token_type='contact', reason='contact token expired')
+            return permission
         except KeyError as e:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail='Data missing')
+            raise TokenDataMissingError(missing_fields=['expired_at'], token=token) from e
 
     def read_generation_id(self):
         data=self.vaultService.generation_engine.read('',self.gen_id_path)
@@ -264,10 +268,12 @@ class SecurityService(BaseService, EncryptDecryptInterface):
 
     def verify_server_access(self, token: str) -> bool:
         if not self.API_KEY:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,detail='Could not retrieve the api key')
+            raise APIKeyMissingError(source='server_api_key')
 
         if token != self.API_KEY:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Api Key provided does not match the one given")
+            raise APIKeyMismatchError(source='server_api_key', provided=token)
+
+        return True
 
     def build(self,build_state=-1):
         api_key = self.fileService.readFile('/run/secrets/api_key.txt',flag=FDFlag.READ)
@@ -298,8 +304,11 @@ class SecurityService(BaseService, EncryptDecryptInterface):
     def compare_hash(self, stored_hash:str,provided:str,key:str,salt:bytes|str=None,algorithm=None):
         provided_hash,_ = self.hash(provided,key,salt)
         if not hmac.compare_digest(stored_hash, provided_hash):
-            raise ProvidedHashNotEquivalentError()
+            raise ProvidedHashNotEquivalentError(provided_hash,'hashed value')
         return True
+
+    def simple_hash(self,value:str):
+        return
     
     def verify_admin_signature(self,):
         ...

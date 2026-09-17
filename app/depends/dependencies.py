@@ -81,7 +81,7 @@ def get_bearer_token_from_request(request: Request):
 
 
 def get_auth_permission(request: Request):
-    if not configService.AUTH_MECHANISM == 'jwt':
+    if configService.AUTH_MECHANISM != 'userpass':
         return None
     if not hasattr(request.state, "authPermission") or request.state.authPermission is None:
         raise HTTPException(status_code=401, detail="Unauthorized")
@@ -94,7 +94,7 @@ def wrapper_auth_permission(request:Request):
         return None
 
 async def get_client_from_request(request:Request):
-    if not configService.AUTH_MECHANISM == 'jwt':
+    if configService.AUTH_MECHANISM != 'userpass':
         return None
     if not hasattr(request.state, "client") or request.state.client is None:
         raise HTTPException(status_code=401, detail="Unauthorized")

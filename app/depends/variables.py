@@ -25,10 +25,6 @@ def _wrap_checker(name: str, predicate: Callable[[object], bool], choices: list 
         return msg or f"Invalid value for {name!s}: {value!r}"
     return _checker
 
-if CAPABILITIES['twilio']:
-    from app.services.ntfr.twilio_service import TwilioService
-    verify_twilio_token: Callable = GetDependsFunc(TwilioService, 'verify_twilio_token')
-
 # ----------------------------------------------                                    ---------------------------------- #
 
 summary_query:Callable = get_query_params('summary','false',True)

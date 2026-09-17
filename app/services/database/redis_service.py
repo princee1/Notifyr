@@ -242,7 +242,7 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         if self.configService.JOBSTORE_DB == 'redis':
             self.add_credentials(VaultConstant.REDIS_ROLE,CELERY_BACKEND_CREDS,suffix='celery-backend')
 
-        if self.configService.AUTH_MECHANISM == 'jwt':
+        if self.configService.AUTH_MECHANISM == 'userpass':
             self.add_credentials(VaultConstant.REDIS_ROLE,SECURITY_CREDS,suffix='security')
 
         if self.configService.CELERY_BROKER_PROVIDER == 'redis':
@@ -278,7 +278,7 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
             'cost':self.redis_cost
         })
 
-        if self.configService.AUTH_MECHANISM == 'jwt':
+        if self.configService.AUTH_MECHANISM == 'userpass':
             self.redis_security = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.SECURITY_DB,decode_responses=True,username=self.db_user(SECURITY_CREDS),password=self.db_password(SECURITY_CREDS))
             self.db['security'] = self.redis_security
             self.db[RedisConstant.SECURITY_DB] = self.redis_security

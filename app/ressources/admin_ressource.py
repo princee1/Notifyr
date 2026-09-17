@@ -128,7 +128,7 @@ class ClientRessource(BaseHTTPRessource):
 
         clientORM = await ClientORM.filter(Q(client_username=clientModel.client_username) | Q(client_email=clientModel.client_email)).first()
         if clientORM != None:
-            raise ClientAlreadyExistError 
+            raise ClientAlreadyExistError(clientModel.client_username or clientModel.client_email)
         
         valid_policies = await RunInThreadPool(self.vaultService.security_engine.list)('policies')
         if len((policies_error:=set(clientModel).difference(valid_policies)))>0:
@@ -167,7 +167,7 @@ class ClientRessource(BaseHTTPRessource):
         if updateClient.client_username:
             clientORM = await ClientORM.filter(Q(client_username=updateClient.client_username)).first()
             if clientORM != None:
-                raise ClientAlreadyExistError 
+                raise ClientAlreadyExistError(updateClient.client_username)
 
         group = await fetch_group(updateClient.group) if updateClient.group  else None
 
