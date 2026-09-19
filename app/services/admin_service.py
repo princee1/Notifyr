@@ -2,10 +2,10 @@ from datetime import timedelta
 from typing import TypedDict
 
 from tortoise.expressions import Q
-from app.classes.auth_permission import AuthPermission, AuthType, Credentials, EncryptedRecoveryTokens, PolicyModel, PolicyUpdateMode, RecoveryTokens, Scope, filter_asset_permission, get_combined_policies, parse_authPermission_enum
+from app.classes.auth_permission import AuthPermission, AuthType, ClientRefresh, Credentials, EncryptedRecoveryTokens, PolicyModel, PolicyUpdateMode, RecoveryTokens, Scope, filter_asset_permission, get_combined_policies, parse_authPermission_enum
 from app.classes.secrets import ChaCha20SecretsWrapper
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BaseService, BuildFailureError, LinkDep, MiniService, Service, ServiceStatus
-from app.errors.security_error import AuthzSignatureMisMatchError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError,IdentityAlreadyBlacklistedError, PasswordLessAuthTypeStrategyError, ProvidedHashNotEquivalentError
+from app.errors.security_error import AuthzSignatureMisMatchError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError,IdentityAlreadyBlacklistedError, PasswordLessAuthTypeStrategyError, ProvidedHashNotEquivalentError, SecurityIdentityNotResolvedError
 from app.models.orm.security_model import ClientORM, GroupClientORM, PolicyMappingORM, UpdateClientModel
 from app.services.config_service import ConfigService
 from app.services.database.redis_service import RedisService
@@ -137,6 +137,12 @@ class ClientMiniService(BaseMiniService):
         filter_asset_permission(authPermission)
         parse_authPermission_enum(authPermission)
         return authPermission
+
+    def verify_refresh_token(self,refreshPermission:ClientRefresh):
+        if refreshPermission['client_id'] != self.client_id:
+            raise SecurityIdentityNotResolvedError(refreshPermission['client_id'],'Refresh Token client id mismatch')
+        
+        self.compare_auth_signature(refreshPermission['auth_signature'])
 
     async def update_client(self, updateClient:UpdateClientModel,group:GroupClientORM|None,ctx=None):
         is_revoked=False
@@ -284,6 +290,9 @@ class AdminService(BaseMiniServiceManager[ClientMiniService]):
         
         if self.redisService.service_status != ServiceStatus.AVAILABLE:
             raise BuildFailureError("Could not synchronize secruity updates")
+
+    async def disconnect_all(self,admin:bool=False,ctx=None):
+        ...
     
     @RunInThreadPool
     def revoke_all_tokens(self) -> None:

@@ -17,7 +17,7 @@ def verify_dmz_token(x_dmz_token:Annotated[str,Header()]):
 if CAPABILITIES['twilio']:
     from app.services.ntfr.twilio_service import TwilioService,RequestValidator
 
-    async def verify_twilio_token(self, request: Request):
+    async def verify_twilio_token(request: Request):
         twilioService = Get(TwilioService)
         twilio_signature = request.headers.get("X-Twilio-Signature", None)
 

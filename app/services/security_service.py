@@ -55,8 +55,8 @@ class EncryptDecryptInterface(Interface):
         return cipher.cipher_data.decode()
 
     @Time
-    def _decode_value(self, value: str, key: bytes | str,skip=False) -> str:
-        if skip:
+    def _decode_value(self, value: str, key: bytes | str,wrapper=False) -> str:
+        if not wrapper:
             return value
         key = key.encode()
         cipher = ChaCha20SecretsWrapper(value,key,self.nonce)
@@ -84,24 +84,24 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         self.settingService = settingService
         self.vaultService = vaultService
 
-    def encode_auth_token(self,authz_id:str, client_id:str,auth_type:AuthType)->str:
+    def encode_auth_token(self,signature:str, client_id:str,auth_type:AuthType)->str:
         try:
             salt = str(self.salt)
             exp = self.settingService.API_EXPIRATION if auth_type == AuthType.API_TOKEN else self.settingService.AUTH_EXPIRATION
             created_time = time.time()
             permission = ClientAccessInfo(generation_id=self.GENERATION_ID, created_at=created_time,expired_at=created_time + exp,
-                                        salt=salt,client_id=client_id,authz_id=authz_id)
+                                        salt=salt,client_id=client_id,auth_signature=signature)
             token = self._encode_token(permission,)
             return token
         except Exception as e:
             print(e)
         return None
 
-    def encode_refresh_token(self,authz_id:str,client_id:str):
+    def encode_refresh_token(self,signature:str,client_id:str):
         try:
             salt = str(self.salt)
             created_time = time.time()
-            permission = ClientRefresh(client_id=client_id,authz_id=authz_id, generation_id=self.GENERATION_ID, created_at=created_time, salt=salt,
+            permission = ClientRefresh(client_id=client_id,auth_signature=signature, generation_id=self.GENERATION_ID, created_at=created_time, salt=salt,
                                            expired_at=created_time + self.settingService.REFRESH_EXPIRATION)
             token = self._encode_token(permission)
             return token
@@ -157,15 +157,15 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         token = self._encode_value(encoded, self.vaultService.ON_TOP_SECRET_KEY,wrapper=wrapper)
         return token
 
-    @cached(TTLCache(50,60*60*3))
+    #@cached(TTLCache(50,60*60*3))
     def _decode_token(self, token: str, secret_key: str = None,wrapper=False) -> dict:
         try:
             if secret_key == None:
                 secret_key = self.vaultService.JWT_SECRET_KEY
             else:
-                secret_key = self.vaultService.tokens(secret_key, self.vaultService.JWT_SECRET_KEY)
+                secret_key = self.vaultService.tokens.get(secret_key, self.vaultService.JWT_SECRET_KEY)
 
-            token = self._decode_value(token, self.vaultService.ON_TOP_SECRET_KEY,skip=wrapper)
+            token = self._decode_value(token, self.vaultService.ON_TOP_SECRET_KEY,wrapper=wrapper)
             decoded = jwt.decode(token, secret_key,algorithms=self.vaultService.JWT_ALGORITHM)
             return decoded
 
@@ -187,16 +187,16 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         decoded = self._decode_token(token)
         clientInfo: ClientAccessInfo = ClientAccessInfo(**decoded)
         try:
-            self.set_status(clientInfo,'auth')
-            if clientInfo['status'] == 'expired' and raise_on_expired:
-                raise TokenExpiredError(token=token, token_type='auth', reason='auth token expired')
-
             if clientInfo["generation_id"] != self.GENERATION_ID:
                 raise TokenGenerationMismatchError(
                     expected_generation_id=self.GENERATION_ID,
                     actual_generation_id=clientInfo["generation_id"],
                     token_type='auth',
                 )
+
+            self.set_status(clientInfo,'auth')
+            if clientInfo['status'] == 'expired' and raise_on_expired:
+                raise TokenExpiredError(token=token, token_type='auth', reason='auth token expired')
 
             return clientInfo
         except KeyError as e:
@@ -205,17 +205,17 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
     def verify_refresh_permission(self,tokens:str,raise_on_expired:bool=False):
         decoded = self._decode_token(tokens)
         permission = ClientRefresh(**decoded)
-        self.set_status(permission,'refresh')
-
-        if permission['status'] == 'expired' and raise_on_expired:
-            raise TokenExpiredError(token=tokens, token_type='refresh', reason='refresh token expired')
 
         if permission["generation_id"] != self.GENERATION_ID:
-            raise TokenGenerationMismatchError(
-                expected_generation_id=self.GENERATION_ID,
-                actual_generation_id=permission["generation_id"],
-                token_type='refresh',
-            )
+                    raise TokenGenerationMismatchError(
+                        expected_generation_id=self.GENERATION_ID,
+                        actual_generation_id=permission["generation_id"],
+                        token_type='refresh',
+                    )
+        
+        self.set_status(permission,'refresh')
+        if permission['status'] == 'expired' and raise_on_expired:
+            raise TokenExpiredError(token=tokens, token_type='refresh', reason='refresh token expired')
 
         return permission
 

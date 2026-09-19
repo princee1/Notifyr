@@ -108,10 +108,11 @@ class PermissionDefaultException(DecoratorException):
 
 class Interceptor(DecoratorObj):
 
-    def __init__(self,filter_before_params:bool= True,filter_after_params:bool=True):
+    def __init__(self,filter_before_params:bool= True,filter_after_params:bool=True,inject_meta=False):
         super().__init__(self.intercept, True)
         self.filter_before_params = filter_before_params
         self.filter_after_params = filter_after_params
+        self.inject_meta = inject_meta
 
 
     def intercept_before(self):

@@ -59,6 +59,9 @@ class AuthType(Enum):
     ACCESS_TOKEN = 'ACCESS_TOKEN'
     API_TOKEN = 'API_TOKEN'
 
+class AuthState(Enum):
+    ...
+    
 API_TOKEN_CLIENT_TYPE_SET = {ClientType.Twilio,ClientType.App,ClientType.Service}
 
 class FuncMetaData(TypedDict):
@@ -97,16 +100,17 @@ class ClientAccessInfo(TypedDict):
     created_at: float
     expired_at: float
     generation_id: str
+    auth_signature:str
     client_id: str
+    salt:str
+
     status:PermissionStatus= 'active' # NOTE Computed value
     auth_type:AuthType # NOTE Computed value
     client_type:ClientType # NOTE computed value
-    salt:str
-    authz_id:str
 
 class ClientRefresh(TypedDict): # NOTE if someone from an organization change the auth permission, the refresh token will be invalid for other people in the organization
     generation_id: str
-    authz_id:str
+    auth_signature:str
     salt:str
     client_id:str
     created_at:float
@@ -169,7 +173,7 @@ class RecoveryTokenGenerator:
             asyncio.sleep(self.wait)
 
     def export(self):
-        return RecoveryTokens(tokens=self.tokens,)
+        return RecoveryTokens(tokens=self.tokens,recovery_id=self.id)
 
 class MCPPermissionModel(BaseModel):
     tags:List[str] = Field(default_factory=list, description="List of tags that the user is allowed to access",max_length=20)

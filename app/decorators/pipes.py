@@ -893,10 +893,13 @@ class FunctionInjectorPipe(Pipe):
 
 class AccessTokenModelPipe(Pipe):
 
-    def __init__(self,mode:Literal['service','info']='service'):
+    def __init__(self,mode:Literal['service','info']='service',accept_none=False):
         super().__init__(False)
         self.mode = mode
+        self.accept_none = accept_none
 
     def pipe(self,result:str,client:ClientMiniService=None,clientInfo:ClientAccessInfo=None):
+        if self.accept_none and result == None:
+            return None
         auth_type = client.client.auth_type if self.mode == 'service' else clientInfo['auth_type']
-        return {'access':result,'auth_type':auth_type}
+        return {'access':result,'auth_type':auth_type.value}

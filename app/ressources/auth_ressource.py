@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Any
 from fastapi import Depends, HTTPException, Request, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from starlette import status
@@ -37,6 +37,9 @@ async def refresh_logout_handler(func,*args,**kwargs):
             session.logout()
         raise e
 
+async def auth_state_pipe(result:Any,session:AuthSessionManager,request:Request,response:Response):
+    return result
+
 @PingService([VaultService])
 @UseHandler(VaultHandler,ClientHandler)
 @HTTPRessource('auth')
@@ -63,7 +66,7 @@ class AuthRessource(BaseHTTPRessource):
     async def get_recovery_token(self,request:Request,response:Response,client:Annotated[ClientMiniService,Depends(get_client_from_info)],profile:str=Depends(get_client_from_info),authPermission:AuthPermission=Depends(get_auth_permission),clientInfo:ClientAccessInfo=Depends(get_client_info)):
 
         tokens = []
-        recovery = RecoveryTokenGenerator()
+        recovery = RecoveryTokenGenerator(count=4,part=3)
         async for token in recovery.generate():
             encrypted_code,salt = await client.encrypt_password(token)
             tokens.append(Credentials(password=encrypted_code,salt=salt))
@@ -76,6 +79,7 @@ class AuthRessource(BaseHTTPRessource):
     @UseLimiter('5/day')
     @Throttle(normal=(300,30))
     @UseLimiter('5/day',key_func='ip')
+    @UsePipe(auth_state_pipe,before=False)
     @PingService([TortoiseConnectionService])
     @LockService(TortoiseConnectionService,lockType='reader')
     @LockService(VaultService,SettingService,JWTAuthService,RedisService,lockType='reader')
@@ -85,11 +89,15 @@ class AuthRessource(BaseHTTPRessource):
         session.logout()
 
         clientORM = await ClientORM.filter(Q(client_username=credentials.username) | Q(client_email=credentials.username)).first()
-        self.verify_client(credentials.username, clientORM,True)
+        authenticated = self.verify_client(credentials.username, clientORM,None)
         origin = get_client_ip(request)
 
         async with self.adminService.lock('reader',str(clientORM.client_id)) as client:
-            async with self.tortoiseService.transaction() as ctx:
+            async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
+
+                if authenticated:
+                    refreshPermission = session.verify_refresh_token(False)
+                    client.verify_refresh_token(refreshPermission)
 
                 await self.blacklist_guard.guard(client)
                 client.verify_client_origin(origin)
@@ -107,35 +115,42 @@ class AuthRessource(BaseHTTPRessource):
     @Throttle(uniform=(100,250))
     @UseLimiter('5/day',key_func='ip')
     @UseHandler(refresh_logout_handler)
+    @UsePipe(auth_state_pipe,before=False)
     @PingService([TortoiseConnectionService])
-    @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @UseHandler(ORMCacheHandler,MiniServiceHandler,ClientSecurityHandler,RedisHandler,ClientHandler)
     @LockService(VaultService,SettingService,JWTAuthService,TortoiseConnectionService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/refresh/',methods=[HTTPMethod.PUT],response_class=AccessModel)
     async def refresh(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)]):
-        refreshPermission:ClientRefresh =  session.verify_refresh_token()
         session.logout()
-
+        refreshPermission:ClientRefresh =  session.verify_refresh_token(True)
+        
         clientORM = await ClientORM.filter(client_id=refreshPermission['client_id']).first()
-        self.verify_client(refreshPermission['client_id'], clientORM,False)
+        self.verify_client(refreshPermission['client_id'], clientORM,None)
         origin = get_client_ip(request)
 
+        res = None
         async with self.adminService.lock('reader',str(clientORM.client_id)) as client:
-            async with self.tortoiseService.transaction() as ctx:
+            async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
+                
+                if refreshPermission['status'] == 'active':
+                    await self.blacklist_guard.guard(client)
+                    client.verify_client_origin(origin)
 
-                await self.blacklist_guard.guard(client)
-                client.verify_client_origin(origin)
-                client.compare_auth_signature(refreshPermission['authz_id'])
-
-                new_signature = await client.revoke_itself(ctx=ctx,authenticated=True)
-                auth_token,refresh_token = await client.generate_access(new_signature,ctx=ctx)
-                session.login(refresh_token)
-
+                    new_signature = await client.revoke_itself(ctx=ctx,authenticated=True)
+                    auth_token,refresh_token = await client.generate_access(new_signature,ctx=ctx)
+                    session.login(refresh_token)
+                    res = self.access_token_pipe.pipe(auth_token,client)
+                else:
+                    client.compare_auth_signature(refreshPermission['auth_signature'])
+                    new_signature = await client.revoke_itself(ctx=ctx,authenticated=False)
+                    response.status_code = status.HTTP_204_NO_CONTENT
+                    
         broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))
-        return self.access_token_pipe.pipe(auth_token,client)
+        return res
 
     @Throttle(normal=(200,30))
     @UseLimiter('5/day',key_func='ip')
+    @UsePipe(auth_state_pipe,before=False)
     @PingService([TortoiseConnectionService])
     @LockService(TortoiseConnectionService,lockType='reader')
     @LockService(VaultService,SettingService,JWTAuthService,RedisService,lockType='reader')
@@ -144,13 +159,17 @@ class AuthRessource(BaseHTTPRessource):
     async def login(self,broker:Annotated[Broker,Depends(Broker)],request:Request,response:Response, credentials: Annotated[HTTPBasicCredentials, Depends(HTTPBasic())],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)]):
 
         clientORM = await ClientORM.filter(Q(client_username=credentials.username) | Q(client_email=credentials.username)).first()
-        
-        self.verify_client(credentials.username, clientORM,True)
+
+        authenticated = self.verify_client(credentials.username, clientORM ,None)
+        print(authenticated)
         origin = get_client_ip(request)
 
         async with self.adminService.lock('reader',str(clientORM.client_id)) as client:
             async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
-                
+                if authenticated:
+                    refreshPermission = session.verify_refresh_token(False)
+                    client.verify_refresh_token(refreshPermission)
+                    
                 await self.blacklist_guard.guard(client)
                 client.verify_client_origin(origin)
 
@@ -161,22 +180,23 @@ class AuthRessource(BaseHTTPRessource):
                 auth_token,refresh_token = await client.generate_access(authSignature['signature'],ctx=ctx)
                 session.login(refresh_token)
         
-        broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))
+        broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id))
         return self.access_token_pipe.pipe(auth_token,client)
 
     @Throttle(uniform=(150,200))
+    @UsePipe(auth_state_pipe,before=False)
     @UseLimiter('10/day',key_func='client')
     @PingService([TortoiseConnectionService])
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @UseInterceptor(InvalidBlacklistTokenInterceptor)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @UsePermission(JWTRouteHTTPPermission(True),UserPermission)
-    @UseHandler(ORMCacheHandler,MiniServiceHandler,ClientSecurityHandler,RedisHandler)
     @LockService(VaultService,TortoiseConnectionService,AdminService,as_manager=True)
+    @UseHandler(ORMCacheHandler,MiniServiceHandler,ClientSecurityHandler,RedisHandler)
     @UseGuard(ClientAuthTypeGuard(accept_access=True, accept_api=False), AuthenticationClientGuard(True))
-    @BaseHTTPRessource.HTTPRoute('/logout/',methods=[HTTPMethod.POST])
+    @BaseHTTPRessource.HTTPRoute('/logout/',methods=[HTTPMethod.DELETE])
     async def logout(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],client:Annotated[ClientMiniService,Depends(get_client_from_info)],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)],profile:str=Depends(get_client_from_info),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
-        async with self.tortoiseService.transaction() as ctx:
+        async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
             await client.revoke_itself(ctx,authenticated=False)
             request.state.clear = True
             session.logout()
@@ -216,13 +236,25 @@ class AuthRessource(BaseHTTPRessource):
 
         updateClient.policies = None
         return await ClientRessource.update_client(request,response,updateClient,broker,client,None)
-    
-    def verify_client(self, username:str, clientORM:ClientORM,authenticated_flag:bool):
+
+
+    @BaseHTTPRessource.HTTPRoute('/password-forget/',methods=[HTTPMethod.POST],deprecated=True,mount=False)
+    async def password_forgot(self,request:Request,response:Response):
+        ...
+
+    @BaseHTTPRessource.HTTPRoute('/password-reset/',methods=[HTTPMethod.POST],deprecated=True, mount=False)
+    async def password_reset(self,request:Request,response:Response):
+        ...
+
+
+    def verify_client(self, username:str, clientORM:ClientORM,authenticated_flag:bool|None):
         if clientORM == None:
             raise ClientDoesNotExistError(username,True)
         
         if clientORM.auth_type != AuthType.ACCESS_TOKEN:
             raise ClientDoesNotExistError(username)
         
-        if clientORM.authenticated == authenticated_flag:
+        if authenticated_flag!=None and clientORM.authenticated == authenticated_flag:
             raise ClientAuthenticationFlagError(username,authenticated_flag)
+
+        return clientORM.authenticated

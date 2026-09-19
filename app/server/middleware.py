@@ -2,8 +2,9 @@ from uuid import uuid4
 from fastapi.responses import JSONResponse
 from app.classes.auth_permission import AuthPermission, ClientAccessInfo, ClientType, filter_asset_permission, parse_authPermission_enum
 from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE
+from app.definition._ressource import HTTPMethod
 from app.depends.orm_cache import BlacklistClientCache, BlacklistGroupCache
-from app.errors.security_error import APIKeyMismatchError, APIKeyMissingError, JWTInvalidTokenError, SecurityIdentityNotResolvedError, TokenDataMissingError, TokenExpiredError, TokenGenerationMismatchError
+from app.errors.security_error import APIKeyMismatchError, APIKeyMissingError, AuthzSignatureMisMatchError, JWTInvalidTokenError, SecurityIdentityNotResolvedError, TokenDataMissingError, TokenExpiredError, TokenGenerationMismatchError
 from app.errors.service_error import MiniServiceDoesNotExistsError
 from app.services.admin_service import AdminService
 from app.services.database.redis_service import RedisService
@@ -67,7 +68,11 @@ class LoadBalancerMiddleWare(MiddleWare):
         # TODO add headers like application id, notifyr-service id, Signature-Service, myb generation id 
         return response
 
-class APIAuthMiddleware(MiddleWare):
+class APITokenAuthMiddleware(MiddleWare):
+
+    priority = MiddlewarePriority.AUTH
+
+
     def __init__(self, app, dispatch = None):
         super().__init__(app, dispatch)
         self.securityService= Get(SecurityService)
@@ -76,7 +81,6 @@ class APIAuthMiddleware(MiddleWare):
     @ExcludeOn(['/','/contacts/manage/*'])
     @ExcludeOn(['/docs/*','/openapi.json'])
     @ExcludeOn(['/link/visits/*','/link/email-track/*'])
-    @ExcludeOn(['/auth/login/','/auth/revoke/','/auth/refresh/'])
     async def dispatch(self, request:Request, call_next:Callable[...,Response]):
 
         token = get_bearer_token_from_request(request)
@@ -106,7 +110,7 @@ class JWTAuthMiddleware(MiddleWare):
     @ExcludeOn(['/','/contacts/manage/*'])
     @ExcludeOn(['/docs/*','/openapi.json'])
     @ExcludeOn(['/link/visits/*','/link/email-track/*'])
-    @ExcludeOn(['/auth/login/','/auth/revoke/','/auth/refresh/'])
+    @ExcludeOn(['/auth/login/','/auth/refresh/'])
     async def dispatch(self,  request: Request, call_next: Callable[..., Response]):
         try:  
             token = get_bearer_token_from_request(request)
@@ -161,6 +165,9 @@ class JWTAuthMiddleware(MiddleWare):
         
         except SecurityIdentityNotResolvedError as e:
             return JSONResponse({'message':e.reason},status_code= status.HTTP_401_UNAUTHORIZED)
+
+        except AuthzSignatureMisMatchError as e:
+            return JSONResponse(e.detail,status_code=status.HTTP_403_FORBIDDEN)
 
         return await call_next(request)
 class CustomSlowApiMiddleware(SlowAPIMiddleware):

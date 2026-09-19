@@ -288,6 +288,7 @@ class ClientRessource(BaseHTTPRessource):
 class AdminRessource(BaseHTTPRessource):
 
     clear_cache_query = get_query_params('clear','false',parse=True,raise_except=True)
+    admin_disconnect_query = get_query_params('admin','true',parse=True,raise_except=True)
 
     @InjectInMethod()
     def __init__(self, configService: ConfigService, jwtAuthService: JWTAuthService, securityService: SecurityService,tortoiseService:TortoiseConnectionService,vaultService:VaultService,adminService:AdminService):
@@ -329,7 +330,7 @@ class AdminRessource(BaseHTTPRessource):
                 path = f"{client.client_id}/auth-signature/"
                 signature:AuthSignature = await RunInThreadPool(self.vaultService.security_engine.read)('clients',path)
                 signature = await RunInThreadPool(self.vaultService.transit_engine.decrypt)(signature['signature'],'security-key')
-                if signature != clientInfo['authz_id']:
+                if signature != clientInfo['auth_signature']:
                     raise AuthzSignatureMisMatchError(blacklist.identity)
                 
             case 'client':
@@ -416,40 +417,47 @@ class AdminRessource(BaseHTTPRessource):
 
     @PingService([VaultService])
     @UseLimiter(limit_value='1/day')
-    @UsePipe(AccessTokenModelPipe,before=False)
+    @UsePipe(AccessTokenModelPipe(accept_none=True),before=False)
     @UseHandler(ClientHandler,ORMCacheHandler,VaultHandler,ClientSecurityHandler)
     @LockService(VaultService,SettingService,JWTAuthService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/revoke-all/', methods=[HTTPMethod.DELETE],deprecated=True,mount=False,response_class=AccessModel)
-    async def revoke_all_tokens(self, request: Request, broker:Annotated[Broker,Depends(Broker)],clear:bool=Depends(clear_cache_query), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
-        await self.adminService.revoke_all_tokens()
+    async def revoke_all_tokens(self, request: Request, broker:Annotated[Broker,Depends(Broker)],clear:bool=Depends(clear_cache_query),admin:bool=Depends(admin_disconnect_query), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
 
+        async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
+            await self.adminService.disconnect_all(admin,ctx=ctx)
+            await self.adminService.revoke_all_tokens()
+
+        if clear: await BlacklistGroupCache.InvalidAll([WILDCARD])
+        broker.propagate(StateProtocol(service=self.jwtService.name,to_build=True,bypass_async_verify=True,force_sync_verify=True))
+
+        if admin: return
         async with self.adminService.lock('reader',clientInfo['client_id']) as client:
             authSignature:AuthSignature = client.signature.to_plain()
             access_token,refresh_token = client.generate_access(authSignature['signature'])
 
-            if clear:
-                await BlacklistGroupCache.InvalidAll([WILDCARD])
-
-        broker.propagate(StateProtocol(service=self.jwtService.name,to_build=True,bypass_async_verify=True,force_sync_verify=True))
         return access_token
     
     @PingService([VaultService])
     @UseLimiter(limit_value='1/day')
+    @UsePipe(AccessTokenModelPipe(accept_none=True),before=False)
     @UseHandler(ClientHandler,ORMCacheHandler,VaultHandler,ClientSecurityHandler)
     @LockService(VaultService,SettingService,JWTAuthService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/unrevoke-all/', methods=[HTTPMethod.POST],deprecated=True,mount=False,response_class=AccessModel)
-    async def un_revoke_all_tokens(self, request: Request, unRevokeModel:UnRevokeGenerationIDModel, broker:Annotated[Broker,Depends(Broker)],clear:bool=Depends(clear_cache_query), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):   
+    async def un_revoke_all_tokens(self, request: Request, unRevokeModel:UnRevokeGenerationIDModel, broker:Annotated[Broker,Depends(Broker)],admin:bool=Depends(admin_disconnect_query),clear:bool=Depends(clear_cache_query), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):   
         unRevokeModel = unRevokeModel.model_dump()
-        await self.adminService.unrevoke_all_tokens(**unRevokeModel)
-        
+
+        async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
+            await self.adminService.disconnect_all(admin,ctx=ctx)
+            await self.adminService.unrevoke_all_tokens(**unRevokeModel)
+
+        if clear: await BlacklistGroupCache.InvalidAll([WILDCARD])
+        broker.propagate(StateProtocol(service=self.jwtService.name,to_build=True,bypass_async_verify=True,force_sync_verify=True))
+
+        if admin: return
         async with self.adminService.lock('reader',clientInfo['client_id']) as client:
             authSignature:AuthSignature = client.signature.to_plain()
             access_token,refresh_token = client.generate_access(authSignature['signature'])
 
-            if clear:
-                await BlacklistGroupCache.InvalidAll([WILDCARD])
-
-        broker.propagate(StateProtocol(service=self.jwtService.name,to_build=True,bypass_async_verify=True,force_sync_verify=True))
         return access_token
     
     @UseLimiter(limit_value='1/day')

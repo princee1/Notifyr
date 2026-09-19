@@ -50,7 +50,7 @@ class SecurityIdentityNotResolvedError(SecurityBaseError):
     def __init__(self, token: str, reason: str):
         self.token = token
         self.reason = reason
-        super().__init__("Security identity could not be resolved", token=token, reason=reason)
+        super().__init__("Security identity could not be resolved", reason=reason)
 
 
 class GroupIdNotMatchError(SecurityBaseError):
@@ -92,7 +92,7 @@ class JWTInvalidTokenError(SecurityBaseError):
     def __init__(self, token: str | None = None, reason: str | None = None):
         self.token = token
         self.reason = reason
-        super().__init__("Invalid token", token=token, reason=reason)
+        super().__init__("Invalid token", reason=reason)
 
 
 class TokenExpiredError(SecurityBaseError):
@@ -100,7 +100,7 @@ class TokenExpiredError(SecurityBaseError):
         self.token = token
         self.token_type = token_type
         self.reason = reason
-        super().__init__("Token expired", token=token, token_type=token_type, reason=reason)
+        super().__init__("Token expired", token_type=token_type, reason=reason)
 
 
 class TokenGenerationMismatchError(SecurityBaseError):
@@ -115,14 +115,13 @@ class TokenDataMissingError(SecurityBaseError):
     def __init__(self, missing_fields: list[str] | tuple[str, ...] | None = None, token: str | None = None):
         self.missing_fields = list(missing_fields or [])
         self.token = token
-        super().__init__("Token data is missing required fields", missing_fields=self.missing_fields, token=token)
+        super().__init__("Token data is missing required fields", missing_fields=self.missing_fields)
 
 
 class APIKeyMissingError(SecurityBaseError):
     def __init__(self, source: str = 'api_key'):
         self.source = source
         super().__init__("API key is missing", source=source)
-
 
 class APIKeyMismatchError(SecurityBaseError):
     def __init__(self, source: str = 'api_key', provided: str | None = None):
