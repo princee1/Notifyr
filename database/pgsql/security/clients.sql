@@ -36,16 +36,13 @@ CREATE TABLE IF NOT EXISTS Client (
     client_scope Scope DEFAULT 'SoloDolo',
     client_type ClientType DEFAULT 'User',
     group_id UUID DEFAULT NULL,
-    authenticated BOOLEAN DEFAULT FALSE,
-    -- max_connection INT DEFAULT 1,
-    -- current_connection_count INT DEFAULT 0,
+    max_connection INT DEFAULT NULL,
     issued_for VARCHAR(30) DEFAULT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT cname CHECK (client_name IS NOT NULL),
     PRIMARY KEY (client_id),
     FOREIGN KEY (group_id) REFERENCES GroupClient (group_id) ON DELETE SET NULL ON UPDATE CASCADE
-    -- CHECK (SELECT COUNT(*) FROM Client WHERE client_type ='Admin') = 1
 );
 
 CREATE TABLE IF NOT EXISTS PolicyMapping(

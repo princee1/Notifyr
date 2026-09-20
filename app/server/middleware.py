@@ -130,9 +130,6 @@ class JWTAuthMiddleware(MiddleWare):
                 
                 clientService.verify_client_origin(client_ip)
                 clientService.compare_auth_signature(clientInfo['auth_signature'])
-
-                if not clientService.client.authenticated:
-                    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Client is not authenticated")
                 
                 if clientService.client.client_type != ClientType.Admin: 
                     async with self.redisService.redis_security.pipeline() as pipe:

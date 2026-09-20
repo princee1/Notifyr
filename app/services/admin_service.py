@@ -138,7 +138,7 @@ class ClientMiniService(BaseMiniService):
         parse_authPermission_enum(authPermission)
         return authPermission
 
-    def verify_refresh_token(self,refreshPermission:ClientRefresh):
+    async def verify_refresh_token(self,refreshPermission:ClientRefresh):
         if refreshPermission['client_id'] != self.client_id:
             raise SecurityIdentityNotResolvedError(refreshPermission['client_id'],'Refresh Token client id mismatch')
         
@@ -181,9 +181,6 @@ class ClientMiniService(BaseMiniService):
         return is_revoked,password,salt
 
     async def revoke_itself(self,ctx=None,authenticated:bool|None=False,save=True)->str:
-        if authenticated != None:
-            self.client.authenticated = authenticated
-
         if save:
             await self.client.save(ctx)
         return await self.create_auth_signature()
@@ -204,9 +201,7 @@ class ClientMiniService(BaseMiniService):
             if refresh_token == None:
                 raise CouldNotCreateRefreshTokenError()
 
-        self.client.authenticated = True
         await self.client.save(ctx)
-        
         return auth_token,refresh_token
 
 

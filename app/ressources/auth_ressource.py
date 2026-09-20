@@ -2,9 +2,9 @@ from typing import Annotated, Any
 from fastapi import Depends, HTTPException, Request, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from starlette import status
-from app.classes.auth_permission import AccessModel, AuthPermission, AuthType, ClientAccessInfo, ClientRefresh, ClientType, Credentials, EncryptedRecoveryTokens, RecoveryTokenGenerator, RecoveryTokens
+from app.classes.auth_permission import AccessModel, AuthPermission, AuthState, AuthType, ClientAccessInfo, ClientRefresh, ClientType, Credentials, EncryptedRecoveryTokens, RecoveryTokenGenerator, RecoveryTokens
 from app.container import InjectInMethod
-from app.decorators.guards import AuthenticationClientGuard, BlacklistClientGuard, ClientAuthTypeGuard
+from app.decorators.guards import BlacklistClientGuard, ClientAuthTypeGuard
 from app.decorators.handlers import ClientHandler, MiniServiceHandler, ORMCacheHandler, RedisHandler, ClientSecurityHandler, VaultHandler
 from app.decorators.interceptors import InvalidBlacklistTokenInterceptor
 from app.decorators.permissions import JWTRouteHTTPPermission, UserPermission
@@ -61,7 +61,7 @@ class AuthRessource(BaseHTTPRessource):
     @UsePermission(JWTRouteHTTPPermission,UserPermission)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @LockService(VaultService,AdminService,as_manager=True,lockType='reader',miniLockType='reader')
-    @UseGuard(ClientAuthTypeGuard(accept_access=True, accept_api=False), AuthenticationClientGuard(True),BlacklistClientGuard)
+    @UseGuard(ClientAuthTypeGuard(accept_access=True, accept_api=False),BlacklistClientGuard)
     @BaseHTTPRessource.HTTPRoute('/recover/',methods=[HTTPMethod.GET])
     async def get_recovery_token(self,request:Request,response:Response,client:Annotated[ClientMiniService,Depends(get_client_from_info)],profile:str=Depends(get_client_from_info),authPermission:AuthPermission=Depends(get_auth_permission),clientInfo:ClientAccessInfo=Depends(get_client_info)):
 
@@ -76,7 +76,6 @@ class AuthRessource(BaseHTTPRessource):
 
         return recovery.export()
 
-    @UseLimiter('5/day')
     @Throttle(normal=(300,30))
     @UseLimiter('5/day',key_func='ip')
     @UsePipe(auth_state_pipe,before=False)
@@ -89,15 +88,11 @@ class AuthRessource(BaseHTTPRessource):
         session.logout()
 
         clientORM = await ClientORM.filter(Q(client_username=credentials.username) | Q(client_email=credentials.username)).first()
-        authenticated = self.verify_client(credentials.username, clientORM,None)
+        self.verify_client(credentials.username, clientORM)
         origin = get_client_ip(request)
 
         async with self.adminService.lock('reader',str(clientORM.client_id)) as client:
             async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
-
-                if authenticated:
-                    refreshPermission = session.verify_refresh_token(False)
-                    client.verify_refresh_token(refreshPermission)
 
                 await self.blacklist_guard.guard(client)
                 client.verify_client_origin(origin)
@@ -125,7 +120,7 @@ class AuthRessource(BaseHTTPRessource):
         refreshPermission:ClientRefresh =  session.verify_refresh_token(True)
         
         clientORM = await ClientORM.filter(client_id=refreshPermission['client_id']).first()
-        self.verify_client(refreshPermission['client_id'], clientORM,None)
+        self.verify_client(refreshPermission['client_id'], clientORM)
         origin = get_client_ip(request)
 
         res = None
@@ -135,15 +130,19 @@ class AuthRessource(BaseHTTPRessource):
                 if refreshPermission['status'] == 'active':
                     await self.blacklist_guard.guard(client)
                     client.verify_client_origin(origin)
+                    await client.verify_refresh_token(refreshPermission)
 
                     new_signature = await client.revoke_itself(ctx=ctx,authenticated=True)
                     auth_token,refresh_token = await client.generate_access(new_signature,ctx=ctx)
                     session.login(refresh_token)
                     res = self.access_token_pipe.pipe(auth_token,client)
+                    session.update_auth_state(AuthState.AUTH_BY_REFRESH)
                 else:
-                    client.compare_auth_signature(refreshPermission['auth_signature'])
+                    await client.verify_refresh_token(refreshPermission)
                     new_signature = await client.revoke_itself(ctx=ctx,authenticated=False)
                     response.status_code = status.HTTP_204_NO_CONTENT
+                    session.update_auth_state(AuthState.LOGOUT_BY_REFRESH)
+
                     
         broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))
         return res
@@ -160,15 +159,11 @@ class AuthRessource(BaseHTTPRessource):
 
         clientORM = await ClientORM.filter(Q(client_username=credentials.username) | Q(client_email=credentials.username)).first()
 
-        authenticated = self.verify_client(credentials.username, clientORM ,None)
-        print(authenticated)
+        self.verify_client(credentials.username, clientORM)
         origin = get_client_ip(request)
 
         async with self.adminService.lock('reader',str(clientORM.client_id)) as client:
             async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
-                if authenticated:
-                    refreshPermission = session.verify_refresh_token(False)
-                    client.verify_refresh_token(refreshPermission)
                     
                 await self.blacklist_guard.guard(client)
                 client.verify_client_origin(origin)
@@ -191,9 +186,9 @@ class AuthRessource(BaseHTTPRessource):
     @UseInterceptor(InvalidBlacklistTokenInterceptor)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @UsePermission(JWTRouteHTTPPermission(True),UserPermission)
+    @UseGuard(ClientAuthTypeGuard(accept_access=True, accept_api=False))
     @LockService(VaultService,TortoiseConnectionService,AdminService,as_manager=True)
     @UseHandler(ORMCacheHandler,MiniServiceHandler,ClientSecurityHandler,RedisHandler)
-    @UseGuard(ClientAuthTypeGuard(accept_access=True, accept_api=False), AuthenticationClientGuard(True))
     @BaseHTTPRessource.HTTPRoute('/logout/',methods=[HTTPMethod.DELETE])
     async def logout(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],client:Annotated[ClientMiniService,Depends(get_client_from_info)],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)],profile:str=Depends(get_client_from_info),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
@@ -209,7 +204,7 @@ class AuthRessource(BaseHTTPRessource):
     @UsePermission(JWTRouteHTTPPermission,UserPermission)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @LockService(AdminService,as_manager=True,lockType='reader',miniLockType='reader')
-    @UseGuard(ClientAuthTypeGuard(accept_access=True, accept_api=False), AuthenticationClientGuard(True),BlacklistClientGuard)
+    @UseGuard(ClientAuthTypeGuard(accept_access=True, accept_api=False),BlacklistClientGuard)
     @BaseHTTPRessource.HTTPRoute('/me/',methods=[HTTPMethod.GET])
     async def me(self,request:Request,response:Response,client:Annotated[ClientMiniService,Depends(get_client_from_info)],profile:str=Depends(get_client_from_info),authPermission:AuthPermission=Depends(get_auth_permission),clientInfo:ClientAccessInfo=Depends(get_client_info)):
 
@@ -226,7 +221,7 @@ class AuthRessource(BaseHTTPRessource):
     @UsePipe(ObjectRelationalFriendlyPipe,before=False)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @LockService(VaultService,SettingService,AdminService,as_manager=True,lockType='reader',miniLockType='reader')
-    @UseGuard(ClientAuthTypeGuard(accept_access=True, accept_api=False), AuthenticationClientGuard(True),BlacklistClientGuard)
+    @UseGuard(ClientAuthTypeGuard(accept_access=True, accept_api=False),BlacklistClientGuard)
     @BaseHTTPRessource.HTTPRoute('/me/',methods=[HTTPMethod.PUT])
     async def update_myself(self,request:Request,response:Response,updateClient:UpdateClientModel,broker:Annotated[Broker,Depends(Broker)],client:Annotated[ClientMiniService,Depends(get_client_from_info)],profile:str=Depends(get_client_from_info),authPermission:AuthPermission=Depends(get_auth_permission),clientInfo:ClientAccessInfo=Depends(get_client_info)):
         if clientInfo['client_type'] != ClientType.Admin:
@@ -247,14 +242,10 @@ class AuthRessource(BaseHTTPRessource):
         ...
 
 
-    def verify_client(self, username:str, clientORM:ClientORM,authenticated_flag:bool|None):
+    def verify_client(self, username:str, clientORM:ClientORM):
         if clientORM == None:
             raise ClientDoesNotExistError(username,True)
         
         if clientORM.auth_type != AuthType.ACCESS_TOKEN:
             raise ClientDoesNotExistError(username)
         
-        if authenticated_flag!=None and clientORM.authenticated == authenticated_flag:
-            raise ClientAuthenticationFlagError(username,authenticated_flag)
-
-        return clientORM.authenticated

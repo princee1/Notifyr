@@ -6,7 +6,7 @@ from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService
 from app.services.setting_service import SettingService
 
-REFRESH_TOKEN_KEY='refresh_token'
+REFRESH_TOKEN_KEY='notifyr_refresh_token'
 REFRESH_PATH ='/auth/'
 
 class AuthSessionManager:
@@ -20,9 +20,11 @@ class AuthSessionManager:
         self.settingService = Get(SettingService)
         self.configService = Get(ConfigService)
         self.jwtService = Get(JWTAuthService)
+
+        self.authState:AuthState = None
     
-    def update_connection_state(self,authState:AuthState):
-        ...
+    def update_auth_state(self,authState:AuthState):
+        self.authState = authState
 
     def verify_refresh_token(self,raise_on_expired:bool=True):
         if self.refresh_token == None:

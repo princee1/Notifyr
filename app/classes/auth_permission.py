@@ -60,7 +60,8 @@ class AuthType(Enum):
     API_TOKEN = 'API_TOKEN'
 
 class AuthState(Enum):
-    ...
+    LOGOUT_BY_REFRESH='logout-by-refresh'
+    AUTH_BY_REFRESH='auth-by-refresh'
     
 API_TOKEN_CLIENT_TYPE_SET = {ClientType.Twilio,ClientType.App,ClientType.Service}
 

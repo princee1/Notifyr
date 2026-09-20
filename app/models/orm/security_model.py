@@ -37,8 +37,8 @@ class ClientORM(models.Model):
     client_description = fields.TextField()
     client_scope = fields.CharEnumField(enum_type=Scope, default=Scope.SoloDolo, max_length=25)
     client_type = fields.CharEnumField(enum_type=ClientType, default=ClientType.User, max_length=25)
-    authenticated = fields.BooleanField(default=False) #NOTE Whether the client has been authenticated or not
     issued_for = fields.CharField(max_length=30, null=True, unique=False)
+    max_connection = fields.SmallIntField(False,null=True,default=None)
     group = fields.ForeignKeyField(GroupClientORM, related_name="group", on_delete=fields.SET_NULL, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
@@ -60,8 +60,8 @@ class ClientORM(models.Model):
             "client_username": self.client_username,
             "client_description": self.client_description,
             "client_scope": self.client_scope.value,
-            "authenticated": self.authenticated,
             "client_type": self.client_type.value,
+            "max_connection":self.max_connection,
             "issued_for": self.issued_for,
             "group_id": str(self.group_id) if self.group else None,
             "created_at": self.created_at.isoformat(),

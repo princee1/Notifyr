@@ -4,7 +4,7 @@ from typing import Annotated, Callable, get_args
 from fastapi import Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
 from tortoise.expressions import Q
-from app.decorators.guards import AdminModificationGuard, AuthenticationClientGuard, BlacklistClientGuard, ClientAuthTypeGuard, PolicyGuard, TortoiseHardLimitGuard
+from app.decorators.guards import AdminModificationGuard,  BlacklistClientGuard, ClientAuthTypeGuard, PolicyGuard, TortoiseHardLimitGuard
 from app.decorators.interceptors import DataCostInterceptor, InvalidBlacklistTokenInterceptor
 from app.definition._cost import DataCost
 from app.definition._service import MiniStateProtocol, StateProtocol

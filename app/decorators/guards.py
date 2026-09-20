@@ -149,24 +149,6 @@ class TwilioLookUpPhoneGuard(Guard):
     def guard(self):
         return super().guard()
 
-class AuthenticationClientGuard(Guard):
-    def __init__(self,verify_authenticate:bool=False,reverse:bool=False):
-        super().__init__()
-        self.verify_authenticate = verify_authenticate
-        self.reverse = reverse
-
-    def guard(self,client:ClientMiniService):
-        if self.verify_authenticate:
-            if self.reverse:
-                if client.client.authenticated:
-                    return False,'Client is already authenticated'
-                return True,''
-            
-            if not client.client.authenticated:
-                return False,'Client is not authenticated'
-                
-        return True,''
-
 class ClientAuthTypeGuard(Guard):
     def __init__(self,accept_access:bool=True,accept_api:bool=True,message:Callable[...,str]= lambda a: f'Auth type:{a} is not accepted'):
         super().__init__()
