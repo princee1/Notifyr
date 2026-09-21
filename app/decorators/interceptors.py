@@ -2,7 +2,7 @@ from typing import Any, Callable, Type, get_args
 from fastapi.responses import JSONResponse
 from typing_extensions import Literal
 from fastapi import BackgroundTasks, Request, Response,status
-from app.classes.auth_permission import ClientType
+from app.classes.auth_permission import ClientAccessInfo, ClientType
 from app.classes.cost_definition import CostLessThanZeroError, CostMoreThanZeroError
 from app.container import Get, InjectInMethod
 from app.definition._cost import Cost, DataCost, SimpleTaskCost,Bill
@@ -192,7 +192,7 @@ class InvalidBlacklistTokenInterceptor(Interceptor):
         super().__init__(True, True)
         self.redisService = redisService
 
-    async def intercept_after(self, result:Any,request:Request,client:ClientMiniService):
+    async def intercept_after(self, result:Any,request:Request,client:ClientMiniService,clientInfo:ClientAccessInfo):
         if client.client.client_type == ClientType.Admin:
             return
         if not getattr(request.state,'clear',False):
@@ -201,6 +201,6 @@ class InvalidBlacklistTokenInterceptor(Interceptor):
 
         await BlacklistClientCache.InvalidAll([client.client_id,WILDCARD])
         if client_blacklisted:
-            BlacklistClientCache.Store([client.client_id,''],True,)
+          await BlacklistClientCache.Store([client.client_id,''],True,)
 
         return

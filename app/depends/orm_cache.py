@@ -319,4 +319,4 @@ ContactORMCache = generate_cache_type(ContactORM,Get_Contact(True,True,),prefix=
 ContactSummaryORMCache = generate_cache_type(ContactSummary,contactService.read_contact,prefix='orm-contact-summary',use_to_json=False)
 
 BlacklistGroupCache = generate_cache_type(bool,lambda : True,RedisConstant.SECURITY_DB,prefix=['blacklist'],expiry=lambda o:o[1])
-BlacklistClientCache = generate_cache_type(bool,lambda:True,RedisConstant.SECURITY_DB,prefix=['blacklist','token'],expiry=lambda o:o[1])
+BlacklistClientCache = generate_cache_type(bool,lambda:True,RedisConstant.SECURITY_DB,prefix=['blacklist','session'],expiry=lambda o:o[1])

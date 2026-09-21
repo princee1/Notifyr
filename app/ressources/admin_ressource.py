@@ -15,7 +15,7 @@ from app.errors.depends_error import DataSourceNotSupportedError
 from app.manager.broker_manager import Broker
 from app.manager.merchant_manager import Merchant
 from app.models.orm.security_model import BlacklistModel, ClientModel, ClientORM, GroupClientORM, GroupModel, PolicyMappingORM, UnRevokeGenerationIDModel, UpdateClientModel
-from app.services.admin_service import AdminService, AuthSignature, ClientMiniService
+from app.services.admin_service import AdminService, ClientMiniService
 from app.services.database.tortoise_service import TortoiseConnectionService,SECURITY_CREDS
 from app.services.profile_service import ProfileService
 from app.services.vault_service import VaultService
@@ -27,12 +27,12 @@ from app.depends.dependencies import get_auth_permission, get_client_info, get_q
 from app.container import InjectInMethod, Get
 from app.definition._ressource import PingService, UseInterceptor, LockService, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter,HTTPStatusCode
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
-from app.classes.auth_permission import AccessModel, AuthPermission, AuthType, ClientAccessInfo, ClientType, PoliciesNotMatchingError, PolicyModel, PolicyUpdateMode, Role, Scope
+from app.classes.auth_permission import AccessModel, AuthPermission, AuthSignature, AuthType, ClientAccessInfo, ClientType, PoliciesNotMatchingError, PolicyModel, PolicyUpdateMode, Role, Scope
 from app.decorators.handlers import AsyncIOHandler, CostHandler, DataSourceHandler, MiniServiceHandler, ORMCacheHandler, PydanticHandler, RedisHandler, ClientHandler, ClientSecurityHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler, VaultHandler
 from app.decorators.pipes import  AccessTokenModelPipe, ForceClientPipe, ForceGroupPipe, FunctionInjectorPipe, MiniServiceInjectorPipe, ObjectRelationalFriendlyPipe
 from app.utils.helper import  generateId
 from app.utils.toolbox import RunInThreadPool
-from app.errors.security_error import ClientAlreadyExistError, IdentityAlreadyBlacklistedError, AuthzSignatureMisMatchError, ClientDoesNotExistError, GroupIdNotMatchError, SecurityIdentityNotResolvedError
+from app.errors.security_error import ClientAlreadyExistError, IdentityAlreadyBlacklistedError, AuthzSignatureMisMatchError, ClientDoesNotExistError, GroupIdNotMatchError, SecurityIdentityNotResolvedError, SessionNotValidatedError
 
 ADMIN_PREFIX = 'admin'
 CLIENT_PREFIX = 'client'
@@ -144,7 +144,6 @@ class ClientRessource(BaseHTTPRessource):
                 await PolicyMappingORM.bulk_create(mapping,using_db=ctx)
                 client = ClientMiniService(self.vaultService,self.configService,self.jwtAuthService,self.securityService,clientORM,[])
                 await client.store_password(clientModel.password)
-                await client.create_auth_signature()
 
         async def rollback():
             await RunInThreadPool(self.vaultService.secrets_engine.delete)('clients',clientModel._client_id)
@@ -176,7 +175,7 @@ class ClientRessource(BaseHTTPRessource):
             if updateClient.policies != None:
                 await self.adminService.update_policy(updateClient.policies,mode,client,group,ctx)
             if is_revoked:
-                await client.revoke_itself(ctx,authenticated=False)
+                await client.revoke_itself(ctx)
                 request.state.clear = True
             await client.save(ctx)
             if password:
@@ -230,7 +229,7 @@ class ClientRessource(BaseHTTPRessource):
                     clients = []
                     async for c in self.adminService.MiniServiceStore.aiter(predicate=lambda c:c.client.client_type!=ClientType.Admin):
                         clients.append(c.client)
-                    return client
+                    return clients
             case _:
                 raise DataSourceNotSupportedError(source,['database','memory'])
 
@@ -309,29 +308,22 @@ class AdminRessource(BaseHTTPRessource):
     async def blacklist_tokens(self,blacklist:BlacklistModel, response:Response, request: Request,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         
         match blacklist.mode:
-            case 'token':
-                try:
-                    clientInfo =  self.jwtService.verify_client_token_permission(blacklist.identity,True)
-                except HTTPException as e:
-                    raise e
-                except:
-                    raise SecurityIdentityNotResolvedError(blacklist.identity,'Could not decode the token provided')
+            case 'session':
+                client_id,session = blacklist.identity.split('@')
                                 
-                if clientInfo['client_id'] != blacklist.identity:
-                    raise SecurityIdentityNotResolvedError(blacklist.identity,'Client Info does match the identity provided')
-                
-                client = await ClientORM.filter(client_id=blacklist.identity).first()
+                client = await ClientORM.filter(client_id=client_id).first()
                 if client == None or client.client_type == ClientType.Admin:
-                    raise ClientDoesNotExistError(blacklist.identity)
+                    raise ClientDoesNotExistError(client_id)
 
-                if await BlacklistClientCache.Get([client.client_id,blacklist.identity]) and not blacklist.force:
-                    raise IdentityAlreadyBlacklistedError(blacklist.identity,'token')
+                if await BlacklistClientCache.Get([client.client_id,session]) and not blacklist.force:
+                    raise IdentityAlreadyBlacklistedError(blacklist.identity,'session')
 
-                path = f"{client.client_id}/auth-signature/"
-                signature:AuthSignature = await RunInThreadPool(self.vaultService.security_engine.read)('clients',path)
-                signature = await RunInThreadPool(self.vaultService.transit_engine.decrypt)(signature['signature'],'security-key')
-                if signature != clientInfo['auth_signature']:
-                    raise AuthzSignatureMisMatchError(blacklist.identity)
+                path = f"/clients/{client.client_id}/auth-signature"
+                sessions:list[str] = await RunInThreadPool(self.vaultService.security_engine.list)(path)
+
+                if session not in sessions:
+                    raise SessionNotValidatedError(client_id,session)
+                await BlacklistGroupCache.Store([client_id,session],True,blacklist.time)
                 
             case 'client':
                 if await BlacklistClientCache.Get([blacklist.identity,'']) and not blacklist.force:
@@ -340,14 +332,15 @@ class AdminRessource(BaseHTTPRessource):
                 client = await ClientORM.filter(client_id=blacklist.identity).first()
                 if client == None or client.client_type == ClientType.Admin:
                     raise ClientDoesNotExistError(blacklist.identity)
-                
+
+                await BlacklistGroupCache.Store([blacklist.identity,''],True,blacklist.time)
+
             case 'group':
                 if await BlacklistGroupCache.Get([blacklist.identity]) and not blacklist.force:
                     raise IdentityAlreadyBlacklistedError(blacklist.identity,'group')
                 
                 await fetch_group(blacklist.identity)                
-
-        await BlacklistGroupCache.Store(blacklist.identity,True,blacklist.time)
+                await BlacklistGroupCache.Store(blacklist.identity,True,blacklist.time)
 
     @UseLimiter(limit_value='20/week')
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
@@ -356,11 +349,13 @@ class AdminRessource(BaseHTTPRessource):
     async def un_blacklist_tokens(self, blacklist:BlacklistModel,response:Response, request: Request, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
 
         match blacklist.mode:
-            case 'token':
-                if not await BlacklistClientCache.Get([WILDCARD,blacklist.identity]):
+            case 'session':
+                client_id,session = blacklist.identity.split('@')
+
+                if not await BlacklistClientCache.Get([client_id,session]):
                     raise IdentityAlreadyBlacklistedError(blacklist.identity,blacklist.mode,reversed_=True)
                 
-                await BlacklistClientCache.Invalid([WILDCARD,blacklist.identity])
+                await BlacklistClientCache.Invalid([client_id,session])
             case 'client':
                 if not await BlacklistClientCache.Get([blacklist.identity,'']):
                     raise IdentityAlreadyBlacklistedError(blacklist.identity,blacklist.mode,reversed_=True)
@@ -375,16 +370,16 @@ class AdminRessource(BaseHTTPRessource):
     @UseHandler(ORMCacheHandler)
     @UseLimiter(limit_value='10/day')
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
+    @UseGuard(AdminModificationGuard,ClientAuthTypeGuard())
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @PingService([VaultService,AdminService],is_manager=True)
-    @UseHandler(ClientHandler,ORMCacheHandler,MiniServiceHandler)
-    @UseGuard(AdminModificationGuard,AuthenticationClientGuard,ClientAuthTypeGuard())
+    @UseHandler(ClientHandler,ORMCacheHandler,MiniServiceHandler,ClientSecurityHandler)
     @LockService(VaultService,SettingService,AdminService,JWTAuthService,lockType='reader',as_manager=True)
     @BaseHTTPRessource.HTTPRoute('/revoke/{client}/', methods=[HTTPMethod.DELETE])
     async def revoke_tokens(self,broker:Annotated[Broker,Depends(Broker)], request: Request, client: Annotated[ClientMiniService, Depends(get_client)], authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
 
         async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:    
-            await client.revoke_itself(ctx,authenticated=False)
+            await client.revoke_itself(ctx)
             await BlacklistClientCache.InvalidAll([client.client_id,WILDCARD])
 
         broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id ))
@@ -396,12 +391,12 @@ class AdminRessource(BaseHTTPRessource):
     @PingService([VaultService,AdminService],is_manager=True)
     @UseHandler(ClientHandler,ORMCacheHandler,MiniServiceHandler)
     @LockService(VaultService,SettingService,AdminService,lockType='reader',as_manager=True)
-    @UseGuard(AdminModificationGuard,BlacklistClientGuard,ClientAuthTypeGuard(accept_access=False, accept_api=True), AuthenticationClientGuard(reverse=True),)
+    @UseGuard(AdminModificationGuard,BlacklistClientGuard,ClientAuthTypeGuard(accept_access=False, accept_api=True),)
     @BaseHTTPRessource.HTTPRoute('/issue-auth/{client}/', methods=[HTTPMethod.GET],response_model=AccessModel)
-    async def issue_auth_token(self,broker:Annotated[Broker,Depends(Broker)], client: Annotated[ClientMiniService, Depends(get_client)], request: Request, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def issue_auth_token(self,broker:Annotated[Broker,Depends(Broker)], client: Annotated[ClientMiniService, Depends(get_client)], request: Request, response:Response ,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         
         async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:    
-            signature = await client.revoke_itself(ctx,authenticated=True)
+            signature = await client.revoke_itself(ctx)
             api_token,_ = await client.generate_access(signature)
             
         broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))

@@ -1,5 +1,5 @@
 from typing import Any, Callable, List, Literal, Type
-from app.classes.auth_permission import AuthPermission, AuthType, ClientType, PolicyModel, ClientRefresh
+from app.classes.auth_permission import AuthPermission, AuthType, ClientAccessInfo, ClientType, PolicyModel, ClientRefresh
 from app.classes.cost_definition import CreditNotInPlanError
 from app.classes.mongo import BaseDocument
 from app.definition._error import ServerFileError
@@ -174,14 +174,18 @@ class BlacklistClientGuard(Guard):
         self.adminService = Get(AdminService)
         self.redisService = Get(RedisService)
     
-    async def guard(self,client:ClientMiniService):
+    async def guard(self,client:ClientMiniService,clientInfo:ClientAccessInfo,session_id:str=None):
         if client.client.client_type == ClientType.Admin:
             return True,''
         
         async with self.redisService.redis_security.pipeline() as pipe:
             if client.group_id!= None: 
                 await BlacklistGroupCache.Get([client.group_id],pipe)
+
             await BlacklistClientCache.Get([client.client_id,''],pipe)
+            session = clientInfo['session_id'] if clientInfo!= None else session_id
+            await BlacklistClientCache.Get([client.client_id,session],pipe)
+            
             flags = await pipe.execute()
         
         if any(flags):

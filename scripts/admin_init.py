@@ -78,7 +78,6 @@ async def main():
     async with tortoiseService.transaction(SECURITY_CREDS) as ctx:
         await clientORM.save(ctx)
         await client.store_password(encrypted_password,salt)
-        await client.create_auth_signature()
 
     await redisService.store(RedisConstant.CONFIG_DB,ADMIN_INIT_KEY,1,0)
 

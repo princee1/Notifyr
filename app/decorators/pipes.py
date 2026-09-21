@@ -16,6 +16,7 @@ from app.depends.class_dep import ObjectsSearch,ToPydanticModelInterface
 from app.errors.contact_error import ContactMissingInfoKeyError, ContactNotExistsError
 from app.errors.service_error import MiniServiceStrictValueNotValidError, ServiceNotAvailableError
 from app.manager.merchant_manager import Merchant
+from app.manager.session_manager import AuthSessionManager
 from app.manager.task_manager import TaskManager
 from app.models.call_model import CallCustomSchedulerModel
 from app.models.orm.contacts_model import Status, SubscriptionORM
@@ -846,13 +847,14 @@ class SParams(TypedDict):
     space:bool
 class SanitizePathParameterPipe(Pipe):
 
-    def __init__(self,params:SParams, service:bool = False,agent:bool=False,profile:bool=False,template:bool=False,client:bool=False):
+    def __init__(self,params:SParams, service:bool = False,agent:bool=False,profile:bool=False,template:bool=False,client:bool=False,session:bool=True):
         super().__init__(True)
         self.service = service
         self.agent = agent
         self.profile = profile
         self.template = template
         self.client = client
+        self.session = session
         self.params = params
 
     def sanitize(self,text:str):
@@ -864,7 +866,7 @@ class SanitizePathParameterPipe(Pipe):
             text = text.replace(' ','')
         return text
 
-    async def pipe(self,service:str=None,agent:str=None,profile:str=None,template:str=None,client:str=None):
+    async def pipe(self,service:str=None,agent:str=None,profile:str=None,template:str=None,client:str=None,session:str=None):
         data = {}
         if service != None:
             data['service'] = self.sanitize(service)
@@ -876,6 +878,9 @@ class SanitizePathParameterPipe(Pipe):
             data['template'] = self.sanitize(template)
         if client != None:
             data['client'] = self.sanitize(client)
+        
+        if session != None:
+            data['session'] = self.sanitize(session)
         
         return data
 
@@ -903,3 +908,15 @@ class AccessTokenModelPipe(Pipe):
             return None
         auth_type = client.client.auth_type if self.mode == 'service' else clientInfo['auth_type']
         return {'access':result,'auth_type':auth_type.value}
+
+async def refresh_logout_handler(func,*args,**kwargs):
+    try:
+        return await func(*args,**kwargs)
+    except HTTPException as e:
+        session:AuthSessionManager = kwargs.get('session',None)
+        if session:
+            session.logout()
+        raise e
+
+async def auth_state_pipe(result:Any,session:AuthSessionManager,request:Request,response:Response):
+    return result

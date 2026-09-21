@@ -4,7 +4,7 @@ from app.classes.auth_permission import AuthPermission, ClientAccessInfo, Client
 from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE
 from app.definition._ressource import HTTPMethod
 from app.depends.orm_cache import BlacklistClientCache, BlacklistGroupCache
-from app.errors.security_error import APIKeyMismatchError, APIKeyMissingError, AuthzSignatureMisMatchError, JWTInvalidTokenError, SecurityIdentityNotResolvedError, TokenDataMissingError, TokenExpiredError, TokenGenerationMismatchError
+from app.errors.security_error import APIKeyMismatchError, APIKeyMissingError, AuthzSignatureMisMatchError, JWTInvalidTokenError, SecurityIdentityNotResolvedError, SessionNotValidatedError, TokenDataMissingError, TokenExpiredError, TokenGenerationMismatchError
 from app.errors.service_error import MiniServiceDoesNotExistsError
 from app.services.admin_service import AdminService
 from app.services.database.redis_service import RedisService
@@ -129,14 +129,14 @@ class JWTAuthMiddleware(MiddleWare):
                 client_ip = get_client_ip(request) #TODO : check wether we must use the scope to verify the client
                 
                 clientService.verify_client_origin(client_ip)
-                clientService.compare_auth_signature(clientInfo['auth_signature'])
+                clientService.compare_auth_signature(clientInfo['auth_signature'],clientInfo['session_id'])
                 
                 if clientService.client.client_type != ClientType.Admin: 
                     async with self.redisService.redis_security.pipeline() as pipe:
                         if clientService.group_id:
                             await BlacklistGroupCache.Get([clientService.group_id],redis=pipe) # group 
                         await BlacklistClientCache.Get([client_id,''],redis=pipe) # client
-                        await BlacklistClientCache.Get([client_id,token],redis=pipe) # token
+                        await BlacklistClientCache.Get([client_id,clientInfo['session_id']],redis=pipe) # token
                         flags = await pipe.execute()
 
                     if any(flags):
@@ -164,6 +164,9 @@ class JWTAuthMiddleware(MiddleWare):
             return JSONResponse({'message':e.reason},status_code= status.HTTP_401_UNAUTHORIZED)
 
         except AuthzSignatureMisMatchError as e:
+            return JSONResponse(e.detail,status_code=status.HTTP_403_FORBIDDEN)
+
+        except SessionNotValidatedError as e:
             return JSONResponse(e.detail,status_code=status.HTTP_403_FORBIDDEN)
 
         return await call_next(request)

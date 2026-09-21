@@ -33,7 +33,7 @@ from app.errors.service_error import MiniServiceAlreadyExistsError,MiniServiceDo
 from app.errors.async_error import KeepAliveTimeoutError, LockNotFoundError, ReactiveSubjectNotFoundError
 from app.errors.contact_error import ContactAlreadyExistsError, ContactMissingInfoKeyError, ContactNotExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
 from app.errors.properties_error import GlobalKeyAlreadyExistsError, GlobalKeyDoesNotExistsError
-from app.errors.security_error import ClientAlreadyExistError, ClientAuthenticationFlagError, IdentityAlreadyBlacklistedError, AuthzSignatureMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupDoesNotExistError, GroupIdNotMatchError, IdentityBlacklistedError, JWTInvalidTokenError, ProvidedHashNotEquivalentError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError, TokenDataMissingError, TokenExpiredError, TokenGenerationMismatchError
+from app.errors.security_error import ClientAlreadyExistError, ClientAuthenticationFlagError, IdentityAlreadyBlacklistedError, AuthzSignatureMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupDoesNotExistError, GroupIdNotMatchError, IdentityBlacklistedError, JWTInvalidTokenError, ProvidedHashNotEquivalentError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError, SessionNotValidatedError, TokenDataMissingError, TokenExpiredError, TokenGenerationMismatchError
 from app.errors.twilio_error import TwilioCallBusyError, TwilioCallFailedError, TwilioCallNoAnswerError, TwilioPhoneNumberParseError
 from app.classes.profiles import ProfileModelRequestBodyError, ProfileDoesNotExistsError, ProfileHasNotCapabilitiesError, ProfileModelTypeDoesNotExistsError, ProfileNotAvailableError, ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
 from app.services.assets_service import AssetConfusionError, AssetNotFoundError, AssetTypeNotAllowedError, AssetTypeNotFoundError
@@ -435,6 +435,9 @@ class ClientSecurityHandler(Handler):
                 'message': 'Authorization Signature mismatch',
             })
         except (TokenExpiredError,TokenGenerationMismatchError) as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail=e.detail)
+
+        except SessionNotValidatedError as e:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail=e.detail)
 
         except TokenDataMissingError as e:

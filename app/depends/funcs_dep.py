@@ -197,3 +197,6 @@ def get_client_from_info(clientInfo:ClientAccessInfo = Depends(get_client_info))
 
 def get_blacklist(blacklist:BlacklistModel):
     return blacklist
+
+def get_credentials(credentials: Annotated[HTTPBasicCredentials, Depends(HTTPBasic())]):
+    return credentials

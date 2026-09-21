@@ -248,13 +248,23 @@ class UpdateClientModel(UpdateClientModelBase):
 
 
 class BlacklistModel(BaseModel):
-    mode:Literal['group','client','token']
-    identity:str  = Field(min_length=1,max_length=500)
+    mode:Literal['group','client','session']
+    identity:str  = Field(min_length=1,max_length=500,description='If mode == session the format should be {client}@{session}')
     time:float = Field(3600,le=36000,ge=3600)
     force:bool = Field(False)
 
+    @model_validator(mode='after')
+    def validate_session(self):
+        if self.mode == 'session':
+            part =self.identity.strip().split('@')
+            if len(part) != 2:
+                raise ValueError('format not available, try {client}@{session}')
+
+        return self
+
+
 class UnRevokeGenerationIDModel(BaseModel):
-        version:int|None = None
-        destroy:bool = False
-        delete:bool = False
-        version_to_delete:list[int] = []
+    version:int|None = None
+    destroy:bool = False
+    delete:bool = False
+    version_to_delete:list[int] = []

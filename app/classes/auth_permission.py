@@ -62,6 +62,14 @@ class AuthType(Enum):
 class AuthState(Enum):
     LOGOUT_BY_REFRESH='logout-by-refresh'
     AUTH_BY_REFRESH='auth-by-refresh'
+
+class AuthSignature(TypedDict):
+    signature:str
+    time:float
+    ip:str
+    user_agent:str
+    last_login:float
+
     
 API_TOKEN_CLIENT_TYPE_SET = {ClientType.Twilio,ClientType.App,ClientType.Service}
 
@@ -102,6 +110,7 @@ class ClientAccessInfo(TypedDict):
     expired_at: float
     generation_id: str
     auth_signature:str
+    session_id:str
     client_id: str
     salt:str
 
@@ -112,6 +121,7 @@ class ClientAccessInfo(TypedDict):
 class ClientRefresh(TypedDict): # NOTE if someone from an organization change the auth permission, the refresh token will be invalid for other people in the organization
     generation_id: str
     auth_signature:str
+    session_id:str
     salt:str
     client_id:str
     created_at:float

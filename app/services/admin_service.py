@@ -1,11 +1,12 @@
 from datetime import timedelta
+import time
 from typing import TypedDict
 
 from tortoise.expressions import Q
-from app.classes.auth_permission import AuthPermission, AuthType, ClientRefresh, Credentials, EncryptedRecoveryTokens, PolicyModel, PolicyUpdateMode, RecoveryTokens, Scope, filter_asset_permission, get_combined_policies, parse_authPermission_enum
+from app.classes.auth_permission import AuthPermission, AuthSignature, AuthType, ClientRefresh, Credentials, EncryptedRecoveryTokens, PolicyModel, PolicyUpdateMode, RecoveryTokens, Scope, filter_asset_permission, get_combined_policies, parse_authPermission_enum
 from app.classes.secrets import ChaCha20SecretsWrapper
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BaseService, BuildFailureError, LinkDep, MiniService, Service, ServiceStatus
-from app.errors.security_error import AuthzSignatureMisMatchError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError,IdentityAlreadyBlacklistedError, PasswordLessAuthTypeStrategyError, ProvidedHashNotEquivalentError, SecurityIdentityNotResolvedError
+from app.errors.security_error import AuthzSignatureMisMatchError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError,IdentityAlreadyBlacklistedError, PasswordLessAuthTypeStrategyError, ProvidedHashNotEquivalentError, SecurityIdentityNotResolvedError, SessionNotValidatedError
 from app.models.orm.security_model import ClientORM, GroupClientORM, PolicyMappingORM, UpdateClientModel
 from app.services.config_service import ConfigService
 from app.services.database.redis_service import RedisService
@@ -15,14 +16,17 @@ from app.services.vault_service import VaultService
 from app.utils.helper import generateId
 from app.utils.toolbox import RunInThreadPool
 
-class AuthSignature(TypedDict):
-    signature:str
-
 class ClientVaultPath:
 
     @staticmethod
-    def AUTH_SIGNATURE_PATH(client_id:str):
-        return f'{client_id}/auth-signature'
+    def AUTH_SIGNATURE_PATH(client_id:str,session:str=''):
+        if session:
+            if not session.startswith('/'):
+                session = f'/{session}'
+        else:
+            session=''
+            
+        return f'{client_id}/auth-signature{session}'
 
     @staticmethod
     def CREDENTIALS_PATH(client_id:str):
@@ -44,10 +48,16 @@ class ClientMiniService(BaseMiniService):
         self.securityService = securityService
         self.authPermission:AuthPermission = self.combine_policy(policies)
 
+        self.sessions:dict[str,ChaCha20SecretsWrapper] = {}
+
     def build(self, build_state = DEFAULT_BUILD_STATE):
-        path = ClientVaultPath.AUTH_SIGNATURE_PATH(self.miniService_id)
-        signature:AuthSignature = self.vaultService.security_engine.read('clients',path)
-        self.signature = ChaCha20SecretsWrapper(signature)
+        path = ClientVaultPath.AUTH_SIGNATURE_PATH(self.miniService_id,'')
+        sessions = self.vaultService.security_engine.list('clients',path)
+        self.sessions.clear()
+        for s in sessions:
+            p = ClientVaultPath.AUTH_SIGNATURE_PATH(self.miniService_id,s)
+            signature:AuthSignature = self.vaultService.security_engine.read('clients',p)
+            self.sessions[p] = ChaCha20SecretsWrapper(signature)
         
     @RunInThreadPool
     def encrypt_password(self,password:str):
@@ -76,12 +86,31 @@ class ClientMiniService(BaseMiniService):
         return True
 
     @RunInThreadPool
-    def create_auth_signature(self):
-        signature = generateId(20)
-        authSignature ={'signature': signature}
-        path = ClientVaultPath.AUTH_SIGNATURE_PATH(self.miniService_id)
+    def delete_session(self,session_id:str):
+        path = ClientVaultPath.AUTH_SIGNATURE_PATH(self.client_id,session_id)
+        self.vaultService.security_engine.delete('clients',path)
+
+    @RunInThreadPool
+    def upsert_session(self,session_id:str=None,ip:str=None,user_agent:str=None):
+        authSignature = None
+        if session_id:
+            if not session_id in self.sessions:
+                path = ClientVaultPath.AUTH_SIGNATURE_PATH(self.miniService_id,session_id)
+                authSignature = self.vaultService.security_engine.read('clients',path)
+            else:
+                authSignature = self.sessions.get(session_id)
+            authSignature['signature'] = generateId(20)
+
+        if authSignature == None:
+            authSignature:AuthSignature = {}
+            authSignature['ip'] = ip
+            authSignature['signature'] = generateId(20)
+            authSignature['time'] = time.time()
+            authSignature['last_login'] = time.time()
+            authSignature['user_agent'] = user_agent
+        
         self.vaultService.security_engine.put('clients',authSignature,path)
-        return signature
+        return authSignature
 
     @RunInThreadPool
     def create_recovery_code(self,recovery:EncryptedRecoveryTokens):
@@ -90,7 +119,7 @@ class ClientMiniService(BaseMiniService):
 
     async def verify_recovery_code(self,code:str):
         path = ClientVaultPath.RECOVERY_PATH(self.client_id)
-        recovery:EncryptedRecoveryTokens=self.vaultService.security_engine.read('clients',path)
+        recovery:EncryptedRecoveryTokens= await RunInThreadPool(self.vaultService.security_engine.read)('clients',path)
         tokens = recovery.get('tokens',[])
 
         if not tokens:
@@ -105,8 +134,12 @@ class ClientMiniService(BaseMiniService):
         
         raise ProvidedHashNotEquivalentError(code,'Recovery Code')
 
-    def compare_auth_signature(self,signature:str):
-        authSignature:AuthSignature = self.signature.to_plain()
+    def compare_auth_signature(self,signature:str,session:str=None):
+        if session not in self.sessions:
+            raise SessionNotValidatedError(self.client_id,session)
+        
+        authSignature:AuthSignature = self.sessions[session].to_plain()
+
         if 'signature' not in authSignature:
             raise AuthzSignatureMisMatchError(self.client_id)
         
@@ -142,7 +175,7 @@ class ClientMiniService(BaseMiniService):
         if refreshPermission['client_id'] != self.client_id:
             raise SecurityIdentityNotResolvedError(refreshPermission['client_id'],'Refresh Token client id mismatch')
         
-        self.compare_auth_signature(refreshPermission['auth_signature'])
+        self.compare_auth_signature(refreshPermission['auth_signature'],refreshPermission['session_id'])
 
     async def update_client(self, updateClient:UpdateClientModel,group:GroupClientORM|None,ctx=None):
         is_revoked=False
@@ -180,30 +213,30 @@ class ClientMiniService(BaseMiniService):
         await self.client.save(ctx)
         return is_revoked,password,salt
 
-    async def revoke_itself(self,ctx=None,authenticated:bool|None=False,save=True)->str:
+    async def revoke_itself(self,ctx=None,session_id:str=None,save=True)->str:
         if save:
             await self.client.save(ctx)
-        return await self.create_auth_signature()
+        path = ClientVaultPath.AUTH_SIGNATURE_PATH(self.client_id,session_id)
+        await RunInThreadPool(self.vaultService.security_engine.delete('clients',path))
 
     async def delete_itself(self,ctx=None):
         await self.client.delete(ctx)
-        await RunInThreadPool(self.vaultService.security_engine.delete('clients',self.miniService_id))
+        await RunInThreadPool(self.vaultService.security_engine.delete)('clients',self.miniService_id)
 
-    async def generate_access(self,signature:str,refresh:bool=True,ctx=None,):
+    async def generate_access(self,session:str,signature:str,refresh:bool=True,ctx=None,):
         refresh_token = None
-        auth_token = self.jwtService.encode_auth_token(signature,self.client_id,self.client.auth_type)
+        auth_token = self.jwtService.encode_auth_token(signature,session,self.client_id,self.client.auth_type)
 
         if auth_token == None:
             raise CouldNotCreateAuthTokenError()
         
         if refresh:
-            refresh_token = self.jwtService.encode_refresh_token(signature,self.client_id)
+            refresh_token = self.jwtService.encode_refresh_token(signature,session,self.client_id)
             if refresh_token == None:
                 raise CouldNotCreateRefreshTokenError()
 
         await self.client.save(ctx)
         return auth_token,refresh_token
-
 
     async def save(self,ctx):
         await self.client.save(ctx)

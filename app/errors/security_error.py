@@ -61,7 +61,7 @@ class GroupIdNotMatchError(SecurityBaseError):
 
 
 class IdentityAlreadyBlacklistedError(SecurityBaseError):
-    def __init__(self, identity: str, mode: Literal['client', 'group', 'token'], reversed_: bool = False):
+    def __init__(self, identity: str, mode: Literal['client', 'group', 'session'], reversed_: bool = False):
         self.identity = identity
         self.mode = mode
         self.reversed_ = reversed_
@@ -151,4 +151,10 @@ class ClientAuthenticationFlagError(SecurityBaseError):
         self.flag_auth_expected = not auth_flag_found
         super().__init__("Client authentication flag mismatch", client_id=client_id, auth_flag_found=auth_flag_found, flag_auth_expected=self.flag_auth_expected)
 
+class SessionNotValidatedError(SecurityBaseError):
+
+    def __init__(self,client_id:str,session:str):
+        self.client_id = client_id 
+        self.session = session
+        super().__init__('Session Could not be validated',client_id=client_id,session_provided=session)
 

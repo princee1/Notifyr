@@ -84,25 +84,25 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         self.settingService = settingService
         self.vaultService = vaultService
 
-    def encode_auth_token(self,signature:str, client_id:str,auth_type:AuthType)->str:
+    def encode_auth_token(self,signature:str,session_id:str, client_id:str,auth_type:AuthType,)->str:
         try:
             salt = str(self.salt)
             exp = self.settingService.API_EXPIRATION if auth_type == AuthType.API_TOKEN else self.settingService.AUTH_EXPIRATION
             created_time = time.time()
             permission = ClientAccessInfo(generation_id=self.GENERATION_ID, created_at=created_time,expired_at=created_time + exp,
-                                        salt=salt,client_id=client_id,auth_signature=signature)
+                                        salt=salt,client_id=client_id,auth_signature=signature,session_id=session_id)
             token = self._encode_token(permission,)
             return token
         except Exception as e:
             print(e)
         return None
 
-    def encode_refresh_token(self,signature:str,client_id:str):
+    def encode_refresh_token(self,signature:str,session_id:str,client_id:str):
         try:
             salt = str(self.salt)
             created_time = time.time()
             permission = ClientRefresh(client_id=client_id,auth_signature=signature, generation_id=self.GENERATION_ID, created_at=created_time, salt=salt,
-                                           expired_at=created_time + self.settingService.REFRESH_EXPIRATION)
+                                           expired_at=created_time + self.settingService.REFRESH_EXPIRATION,session_id=session_id)
             token = self._encode_token(permission)
             return token
         except Exception as e:
