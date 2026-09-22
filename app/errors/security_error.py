@@ -158,3 +158,27 @@ class SessionNotValidatedError(SecurityBaseError):
         self.session = session
         super().__init__('Session Could not be validated',client_id=client_id,session_provided=session)
 
+
+class ClientNotAllowedToLoginError(SecurityBaseError):
+
+    def __init__(self, username:str):
+        self.username = username
+        super().__init__('Client is not allowed to login at the moment', username=username)
+
+
+class PrimarySessionNotValidatedError(SecurityBaseError):
+
+    def __init__(self,client_id:str,session_id:str):
+        self.client_id = client_id
+        self.session_id = session_id
+
+        super().__init__('Primary session is needed to do this operation',client_id=client_id,session_id=session_id)
+
+
+class MaximumSessionReachedError(SecurityBaseError):
+
+    def __init__(self, client_id:str,session_id:str,max_session_allowed):
+        self.client_id = client_id
+        self.session_id = session_id 
+        self.max_session_allowed = max_session_allowed
+        super().__init__('Maximum session reached', client_id=client_id,session_id =session_id,max_session_allowed=max_session_allowed)

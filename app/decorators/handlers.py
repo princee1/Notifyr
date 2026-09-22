@@ -33,7 +33,7 @@ from app.errors.service_error import MiniServiceAlreadyExistsError,MiniServiceDo
 from app.errors.async_error import KeepAliveTimeoutError, LockNotFoundError, ReactiveSubjectNotFoundError
 from app.errors.contact_error import ContactAlreadyExistsError, ContactMissingInfoKeyError, ContactNotExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
 from app.errors.properties_error import GlobalKeyAlreadyExistsError, GlobalKeyDoesNotExistsError
-from app.errors.security_error import ClientAlreadyExistError, ClientAuthenticationFlagError, IdentityAlreadyBlacklistedError, AuthzSignatureMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupDoesNotExistError, GroupIdNotMatchError, IdentityBlacklistedError, JWTInvalidTokenError, ProvidedHashNotEquivalentError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError, SessionNotValidatedError, TokenDataMissingError, TokenExpiredError, TokenGenerationMismatchError
+from app.errors.security_error import ClientAlreadyExistError, ClientAuthenticationFlagError, ClientNotAllowedToLoginError, IdentityAlreadyBlacklistedError, AuthzSignatureMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupDoesNotExistError, GroupIdNotMatchError, IdentityBlacklistedError, JWTInvalidTokenError, MaximumSessionReachedError, MaximumSessionReachedError, PrimarySessionNotValidatedError, ProvidedHashNotEquivalentError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError, SessionNotValidatedError, TokenDataMissingError, TokenExpiredError, TokenGenerationMismatchError
 from app.errors.twilio_error import TwilioCallBusyError, TwilioCallFailedError, TwilioCallNoAnswerError, TwilioPhoneNumberParseError
 from app.classes.profiles import ProfileModelRequestBodyError, ProfileDoesNotExistsError, ProfileHasNotCapabilitiesError, ProfileModelTypeDoesNotExistsError, ProfileNotAvailableError, ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
 from app.services.assets_service import AssetConfusionError, AssetNotFoundError, AssetTypeNotAllowedError, AssetTypeNotFoundError
@@ -426,15 +426,18 @@ class ClientSecurityHandler(Handler):
             })
 
         except ClientTokenHeaderNotProvidedError as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
-                'message': 'Client token header not provided',
-            })
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'message': 'Client token header not provided',})
 
         except AuthzSignatureMisMatchError as e:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={
-                'message': 'Authorization Signature mismatch',
-            })
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={'message': 'Authorization Signature mismatch',})
+        
         except (TokenExpiredError,TokenGenerationMismatchError) as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail=e.detail)
+
+        except MaximumSessionReachedError as e :
+            raise HTTPException(status_code =status.HTTP_403_FORBIDDEN,detail=e.detail)
+        
+        except PrimarySessionNotValidatedError as e:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail=e.detail)
 
         except SessionNotValidatedError as e:
@@ -499,6 +502,9 @@ class ClientHandler(Handler):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail={'message': 'Client is already logged in' if e.auth_flag_found else 'Client is already logged out'}
             )
+
+        except ClientNotAllowedToLoginError as e:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail = e.detail)
 
 class ValueErrorHandler(Handler):
 

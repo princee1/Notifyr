@@ -212,7 +212,7 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
         await RunInThreadPool(self.init_sync_connection)()
     
     @asynccontextmanager
-    async def transaction(self,name:CredentialName='default',retries=1,timeout=5,wait=1,lock:ServiceLockType='none'):
+    async def transaction(self,name:CredentialName='default',retries=1,timeout=5,wait=1,silent=False,lock:ServiceLockType='none'):
         if name not in CREDENTIALS_SET:
             raise VaultCredentialNameDoesNotExistError(name)
         connection = 'notifyr' if name == 'default' else 'security'
@@ -224,6 +224,8 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
                         break
                     except (OperationalError,IntegrityError) as e:
                         if attempts == retries:
+                            if silent:
+                                return
                             raise TortoiseTransactionFailureError(name,retries,error=e)
                         if wait:
                             asyncio.sleep(wait)

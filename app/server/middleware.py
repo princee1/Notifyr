@@ -136,7 +136,7 @@ class JWTAuthMiddleware(MiddleWare):
                         if clientService.group_id:
                             await BlacklistGroupCache.Get([clientService.group_id],redis=pipe) # group 
                         await BlacklistClientCache.Get([client_id,''],redis=pipe) # client
-                        await BlacklistClientCache.Get([client_id,clientInfo['session_id']],redis=pipe) # token
+                        await BlacklistClientCache.Get([client_id,clientInfo['session_id']],redis=pipe) # session
                         flags = await pipe.execute()
 
                     if any(flags):

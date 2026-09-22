@@ -1,8 +1,5 @@
-from random import randint
-import time
-from typing import Annotated, Callable, get_args
+from typing import Annotated, Callable, Optional, get_args
 from fastapi import Depends, HTTPException, Query, Request, Response, status
-from fastapi.responses import JSONResponse
 from tortoise.expressions import Q
 from app.decorators.guards import AdminModificationGuard,  BlacklistClientGuard, ClientAuthTypeGuard, PolicyGuard, TortoiseHardLimitGuard
 from app.decorators.interceptors import DataCostInterceptor, InvalidBlacklistTokenInterceptor
@@ -14,7 +11,8 @@ from app.depends.variables import SourceMode, _wrap_checker,source_mode_query
 from app.errors.depends_error import DataSourceNotSupportedError
 from app.manager.broker_manager import Broker
 from app.manager.merchant_manager import Merchant
-from app.models.orm.security_model import BlacklistModel, ClientModel, ClientORM, GroupClientORM, GroupModel, PolicyMappingORM, UnRevokeGenerationIDModel, UpdateClientModel
+from app.manager.session_manager import AuthSessionManager
+from app.models.orm.security_model import BlacklistModel, ClientModel, ClientORM, GroupClientORM, GroupModel, PolicyMappingORM, RevokeSessionModel, UnRevokeGenerationIDModel, UpdateClientModel
 from app.services.admin_service import AdminService, ClientMiniService
 from app.services.database.tortoise_service import TortoiseConnectionService,SECURITY_CREDS
 from app.services.profile_service import ProfileService
@@ -23,14 +21,14 @@ from app.services.setting_service import SettingService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.services.config_service import ConfigService
 from app.utils.constant import ConfigAppConstant, CostConstant
-from app.depends.dependencies import get_auth_permission, get_client_info, get_query_params, get_request_id
+from app.depends.dependencies import get_auth_permission, get_client_info, get_client_ip, get_query_params, get_request_id, get_user_agent
 from app.container import InjectInMethod, Get
 from app.definition._ressource import PingService, UseInterceptor, LockService, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter,HTTPStatusCode
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
 from app.classes.auth_permission import AccessModel, AuthPermission, AuthSignature, AuthType, ClientAccessInfo, ClientType, PoliciesNotMatchingError, PolicyModel, PolicyUpdateMode, Role, Scope
 from app.decorators.handlers import AsyncIOHandler, CostHandler, DataSourceHandler, MiniServiceHandler, ORMCacheHandler, PydanticHandler, RedisHandler, ClientHandler, ClientSecurityHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler, VaultHandler
 from app.decorators.pipes import  AccessTokenModelPipe, ForceClientPipe, ForceGroupPipe, FunctionInjectorPipe, MiniServiceInjectorPipe, ObjectRelationalFriendlyPipe
-from app.utils.helper import  generateId
+from app.utils.helper import  generateId, uuid_v1_mc
 from app.utils.toolbox import RunInThreadPool
 from app.errors.security_error import ClientAlreadyExistError, IdentityAlreadyBlacklistedError, AuthzSignatureMisMatchError, ClientDoesNotExistError, GroupIdNotMatchError, SecurityIdentityNotResolvedError, SessionNotValidatedError
 
@@ -280,8 +278,8 @@ class ClientRessource(BaseHTTPRessource):
         
 @UseHandler(ServiceAvailabilityHandler)
 @PingService([TortoiseConnectionService])
-@UseHandler(TortoiseHandler,AsyncIOHandler)
 @UsePermission(JWTRouteHTTPPermission,AdminPermission)
+@UseHandler(TortoiseHandler,AsyncIOHandler,RedisHandler)
 @LockService(TortoiseConnectionService,lockType='reader',infinite_wait=True,check_status=False)
 @HTTPRessource(ADMIN_PREFIX, routers=[ClientRessource,PolicyRessource])
 class AdminRessource(BaseHTTPRessource):
@@ -367,20 +365,28 @@ class AdminRessource(BaseHTTPRessource):
 
                 await BlacklistGroupCache.Invalid(blacklist.identity)
 
-    @UseHandler(ORMCacheHandler)
+    
     @UseLimiter(limit_value='10/day')
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
-    @UseGuard(AdminModificationGuard,ClientAuthTypeGuard())
+    @UseInterceptor(InvalidBlacklistTokenInterceptor)
+    @UseGuard(AdminModificationGuard,ClientAuthTypeGuard(),)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @PingService([VaultService,AdminService],is_manager=True)
-    @UseHandler(ClientHandler,ORMCacheHandler,MiniServiceHandler,ClientSecurityHandler)
+    @UseHandler(ClientHandler,ORMCacheHandler,VaultHandler,MiniServiceHandler,ClientSecurityHandler)
     @LockService(VaultService,SettingService,AdminService,JWTAuthService,lockType='reader',as_manager=True)
     @BaseHTTPRessource.HTTPRoute('/revoke/{client}/', methods=[HTTPMethod.DELETE])
-    async def revoke_tokens(self,broker:Annotated[Broker,Depends(Broker)], request: Request, client: Annotated[ClientMiniService, Depends(get_client)], authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def revoke_tokens(self,revoke:RevokeSessionModel,broker:Annotated[Broker,Depends(Broker)], request: Request,response:Response, client: Annotated[ClientMiniService, Depends(get_client)],profile:str=Depends(get_client), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
 
         async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:    
-            await client.revoke_itself(ctx)
-            await BlacklistClientCache.InvalidAll([client.client_id,WILDCARD])
+            if client.client.auth_type == AuthType.ACCESS_TOKEN:
+                await client.revoke_itself(ctx,revoke.session,revoke.can_login)
+                if not revoke.session:
+                    request.state.clear = True
+                else:
+                    await BlacklistClientCache.Invalid([client.client_id,revoke.session])
+            else:
+                await client.revoke_itself(ctx)
+                request.state.clear = True
 
         broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id ))
         return
@@ -393,11 +399,13 @@ class AdminRessource(BaseHTTPRessource):
     @LockService(VaultService,SettingService,AdminService,lockType='reader',as_manager=True)
     @UseGuard(AdminModificationGuard,BlacklistClientGuard,ClientAuthTypeGuard(accept_access=False, accept_api=True),)
     @BaseHTTPRessource.HTTPRoute('/issue-auth/{client}/', methods=[HTTPMethod.GET],response_model=AccessModel)
-    async def issue_auth_token(self,broker:Annotated[Broker,Depends(Broker)], client: Annotated[ClientMiniService, Depends(get_client)], request: Request, response:Response ,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def issue_auth_token(self,broker:Annotated[Broker,Depends(Broker)], client: Annotated[ClientMiniService, Depends(get_client)], request: Request, response:Response ,profile:str= Depends(get_client),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         
         async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:    
-            signature = await client.revoke_itself(ctx)
-            api_token,_ = await client.generate_access(signature)
+            await client.revoke_itself(ctx)
+            session_id = str(uuid_v1_mc())
+            authSignature:AuthSignature = await client.upsert_session(session_id,_check_=False)
+            api_token,_ = await client.generate_access(session_id,authSignature['signature'])
             
         broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))
         return api_token
@@ -409,49 +417,33 @@ class AdminRessource(BaseHTTPRessource):
     ###############                                                                                                     ###################
     ###############                                                                                                     ###################
     #######################################################################################################################################
-
-    @PingService([VaultService])
-    @UseLimiter(limit_value='1/day')
-    @UsePipe(AccessTokenModelPipe(accept_none=True),before=False)
-    @UseHandler(ClientHandler,ORMCacheHandler,VaultHandler,ClientSecurityHandler)
-    @LockService(VaultService,SettingService,JWTAuthService,lockType='reader',check_status=False)
-    @BaseHTTPRessource.HTTPRoute('/revoke-all/', methods=[HTTPMethod.DELETE],deprecated=True,mount=False,response_class=AccessModel)
-    async def revoke_all_tokens(self, request: Request, broker:Annotated[Broker,Depends(Broker)],clear:bool=Depends(clear_cache_query),admin:bool=Depends(admin_disconnect_query), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
-
-        async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
-            await self.adminService.disconnect_all(admin,ctx=ctx)
-            await self.adminService.revoke_all_tokens()
-
-        if clear: await BlacklistGroupCache.InvalidAll([WILDCARD])
-        broker.propagate(StateProtocol(service=self.jwtService.name,to_build=True,bypass_async_verify=True,force_sync_verify=True))
-
-        if admin: return
-        async with self.adminService.lock('reader',clientInfo['client_id']) as client:
-            authSignature:AuthSignature = client.signature.to_plain()
-            access_token,refresh_token = client.generate_access(authSignature['signature'])
-
-        return access_token
     
     @PingService([VaultService])
     @UseLimiter(limit_value='1/day')
     @UsePipe(AccessTokenModelPipe(accept_none=True),before=False)
     @UseHandler(ClientHandler,ORMCacheHandler,VaultHandler,ClientSecurityHandler)
-    @LockService(VaultService,SettingService,JWTAuthService,lockType='reader',check_status=False)
-    @BaseHTTPRessource.HTTPRoute('/unrevoke-all/', methods=[HTTPMethod.POST],deprecated=True,mount=False,response_class=AccessModel)
-    async def un_revoke_all_tokens(self, request: Request, unRevokeModel:UnRevokeGenerationIDModel, broker:Annotated[Broker,Depends(Broker)],admin:bool=Depends(admin_disconnect_query),clear:bool=Depends(clear_cache_query), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):   
-        unRevokeModel = unRevokeModel.model_dump()
-
+    @LockService(VaultService,SettingService,AdminService,JWTAuthService,lockType='reader',check_status=False)
+    @BaseHTTPRessource.HTTPRoute('/revoke/', methods=[HTTPMethod.POST],deprecated=True,mount=False,response_class=AccessModel)
+    async def revoke_all_tokens(self, request: Request,response:Response, session:Annotated[AuthSessionManager,Depends(AuthSessionManager)],broker:Annotated[Broker,Depends(Broker)],unRevokeModel:Optional[UnRevokeGenerationIDModel]=None,admin:bool=Depends(admin_disconnect_query),clear:bool=Depends(clear_cache_query), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):   
+        
         async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
             await self.adminService.disconnect_all(admin,ctx=ctx)
-            await self.adminService.unrevoke_all_tokens(**unRevokeModel)
+            if unRevokeModel:
+                await self.adminService.unrevoke_all_tokens(**unRevokeModel.model_dump())
+            else:
+                await self.adminService.revoke_all_tokens()
 
         if clear: await BlacklistGroupCache.InvalidAll([WILDCARD])
         broker.propagate(StateProtocol(service=self.jwtService.name,to_build=True,bypass_async_verify=True,force_sync_verify=True))
 
         if admin: return
         async with self.adminService.lock('reader',clientInfo['client_id']) as client:
-            authSignature:AuthSignature = client.signature.to_plain()
-            access_token,refresh_token = client.generate_access(authSignature['signature'])
+            origin = get_client_ip(request)
+            user_agent = get_user_agent(request)
+
+            authSignature:AuthSignature = await client.upsert_session(clientInfo['session_id'],origin,user_agent,_check_=False)
+            access_token,refresh_token = client.generate_access(clientInfo['session_id'],authSignature['signature'])
+            session.login(refresh_token)
 
         return access_token
     

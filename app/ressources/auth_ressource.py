@@ -2,20 +2,20 @@ from typing import Annotated, Any
 from fastapi import Depends, HTTPException, Request, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from starlette import status
-from app.classes.auth_permission import AccessModel, AuthPermission, AuthSignature, AuthState, AuthType, ClientAccessInfo, ClientRefresh, ClientType, Credentials, EncryptedRecoveryTokens, RecoveryTokenGenerator, RecoveryTokens
+from app.classes.auth_permission import AccessModel, AuthPermission, AuthSignature, AuthState, AuthType, ClientAccessInfo, ClientRefresh, ClientType, Credentials, EncryptedRecoveryTokens, RecoveryTokenGenerator, RecoveryTokens, Role
 from app.container import InjectInMethod
-from app.decorators.guards import BlacklistClientGuard, ClientAuthTypeGuard
+from app.decorators.guards import BlacklistClientGuard, ClientAuthTypeGuard, PrimarySessionGuard
 from app.decorators.handlers import ClientHandler, MiniServiceHandler, ORMCacheHandler, RedisHandler, ClientSecurityHandler, VaultHandler
 from app.decorators.interceptors import InvalidBlacklistTokenInterceptor
 from app.decorators.permissions import JWTRouteHTTPPermission, UserPermission
 from app.decorators.pipes import AccessTokenModelPipe, MiniServiceInjectorPipe, ObjectRelationalFriendlyPipe, SanitizePathParameterPipe, auth_state_pipe, refresh_logout_handler
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, LockService, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, LockService, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.definition._service import MiniStateProtocol
 from app.depends.dependencies import get_auth_permission, get_client_info, get_client_ip, get_user_agent
 from app.depends.funcs_dep import get_client_from_info
-from app.depends.variables import SourceMode, source_mode_query
+from app.depends.variables import ScopeMode, SourceMode, source_mode_query,scope_mode_query
 from app.errors.depends_error import DataSourceNotSupportedError
-from app.errors.security_error import ClientAuthenticationFlagError, ClientDoesNotExistError, SessionNotValidatedError, TokenExpiredError
+from app.errors.security_error import ClientAuthenticationFlagError, ClientDoesNotExistError, ClientNotAllowedToLoginError, PrimarySessionNotValidatedError, SessionNotValidatedError, TokenExpiredError
 from app.manager.broker_manager import Broker
 from app.manager.session_manager import AuthSessionManager
 from app.models.orm.security_model import ClientORM, UpdateClientModel
@@ -80,8 +80,8 @@ class AuthRessource(BaseHTTPRessource):
     async def recover(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)], credentials: Annotated[HTTPBasicCredentials, Depends(HTTPBasic())],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)]):
         
         clientORM = await ClientORM.filter(Q(client_username=credentials.username) | Q(client_email=credentials.username)).first()
-        self.verify_client(credentials.username, clientORM)
-
+        self.verify_client(credentials.username, clientORM, True)
+        
         origin = get_client_ip(request)
         user_agent = get_user_agent(request)
 
@@ -95,6 +95,8 @@ class AuthRessource(BaseHTTPRessource):
                 client.verify_client_origin(origin)
 
                 await client.verify_recovery_code(credentials.password)
+                await client.verify_login_count(session_id)
+
                 new_signature = await client.upsert_session(session_id,origin,user_agent)
                 auth_token,refresh_token = await client.generate_access(new_signature,ctx=ctx)
 
@@ -155,7 +157,7 @@ class AuthRessource(BaseHTTPRessource):
     async def login(self,broker:Annotated[Broker,Depends(Broker)],request:Request,response:Response, credentials: Annotated[HTTPBasicCredentials, Depends(HTTPBasic())],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)]):
 
         clientORM = await ClientORM.filter(Q(client_username=credentials.username) | Q(client_email=credentials.username)).first()
-        self.verify_client(credentials.username, clientORM)
+        self.verify_client(credentials.username, clientORM, True)
 
         origin = get_client_ip(request)
         user_agent = get_user_agent(request)
@@ -172,6 +174,7 @@ class AuthRessource(BaseHTTPRessource):
                 encryptedPassword = await client.fetch_password()
                 await client.compare_password(credentials.password,encryptedPassword)
 
+                await client.verify_login_count(session_id)
                 authSignature = await client.upsert_session(session_id,origin,user_agent)
                 auth_token,refresh_token = await client.generate_access(authSignature,ctx=ctx)
                 session.login(refresh_token)
@@ -191,10 +194,17 @@ class AuthRessource(BaseHTTPRessource):
     @LockService(VaultService,TortoiseConnectionService,AdminService,as_manager=True)
     @UseHandler(ORMCacheHandler,MiniServiceHandler,ClientSecurityHandler,RedisHandler)
     @BaseHTTPRessource.HTTPRoute('/logout/',methods=[HTTPMethod.DELETE])
-    async def logout(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],client:Annotated[ClientMiniService,Depends(get_client_from_info)],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)],profile:str=Depends(get_client_from_info),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def logout(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],client:Annotated[ClientMiniService,Depends(get_client_from_info)],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)],profile:str=Depends(get_client_from_info),scope:ScopeMode = Depends(scope_mode_query),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
 
         async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
-            await client.revoke_itself(ctx,clientInfo['session_id'])
+            if scope == 'single':
+                await client.revoke_itself(ctx,clientInfo['session_id'])
+            else:
+                if not client.is_primary_session(clientInfo['session_id']):
+                    raise PrimarySessionNotValidatedError(clientInfo['client_id'],clientInfo['session_id'])
+                
+                await client.revoke_itself(ctx)
+
             request.state.clear = True
             session.logout()
 
@@ -234,12 +244,13 @@ class AuthRessource(BaseHTTPRessource):
         updateClient.policies = None
         return await ClientRessource.update_client(request,response,updateClient,broker,client,None)
 
+    @UseRoles([Role.ADMIN])
     @UsePipe(SanitizePathParameterPipe({},session=True))
     @UsePermission(JWTRouteHTTPPermission,UserPermission)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @LockService(VaultService,SettingService,lockType='reader')
-    @UseHandler(MiniServiceHandler,ClientSecurityHandler,VaultHandler)
-    @UseGuard(ClientAuthTypeGuard(accept_access=True, accept_api=False),BlacklistClientGuard)
+    @UseHandler(MiniServiceHandler,ClientSecurityHandler,ClientHandler)
+    @UseGuard(ClientAuthTypeGuard(accept_access=True, accept_api=False),BlacklistClientGuard,PrimarySessionGuard)
     @BaseHTTPRessource.HTTPRoute('/session/{session_id:path}',methods=[HTTPMethod.GET])
     async def fetch_session(self,request:Request,response:Response,client:Annotated[ClientMiniService,Depends(get_client_info)],session_id:str='',source:SourceMode=Depends(source_mode_query),profile:str=Depends(get_client_from_info),clientInfo:ClientAccessInfo=Depends(get_client_info),authPermission:AuthPermission=Depends(get_auth_permission)):
         res = {}
@@ -270,24 +281,46 @@ class AuthRessource(BaseHTTPRessource):
 
         return res
 
+    @UseRoles([Role.ADMIN])
     @UseInterceptor(InvalidBlacklistTokenInterceptor)
     @UsePipe(SanitizePathParameterPipe({},session=True))
     @UsePermission(JWTRouteHTTPPermission,UserPermission)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
-    @UseHandler(MiniServiceHandler,ClientSecurityHandler,VaultHandler)
-    @UseGuard(ClientAuthTypeGuard(accept_access=True, accept_api=False),BlacklistClientGuard)
+    @UseHandler(MiniServiceHandler,ClientSecurityHandler,ClientHandler)
+    @UseGuard(ClientAuthTypeGuard(accept_access=True, accept_api=False),BlacklistClientGuard,PrimarySessionGuard(True))
     @LockService(VaultService,SettingService,AdminService,as_manager=True,lockType='reader',miniLockType='reader')
     @BaseHTTPRessource.HTTPRoute('/session/{session_id:path}',methods=[HTTPMethod.DELETE])
     async def delete_session(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)],client:Annotated[ClientMiniService,Depends(get_client_info)],session_id:str='',profile:str=Depends(get_client_from_info),clientInfo:ClientAccessInfo=Depends(get_client_info),authPermission:AuthPermission=Depends(get_auth_permission)):
-        ...
+        if session_id == '':
+            origin = get_client_ip(request)
+            user_agent = get_user_agent(request)
 
-    def verify_client(self,username:str, clientORM:ClientORM):
+            await client.revoke_itself()
+            session.update_auth_state(AuthState.SESSION_REVOKED)
+            authSignature:AuthSignature = await client.upsert_session(clientInfo['session_id'],origin,user_agent,False)
+            access_token,refresh_token = await client.generate_access(clientInfo['session_id'],authSignature['signature'])
+
+            session.update_auth_state(AuthState.SESSION_REFRESHED)
+            request.state.clear = True
+            
+            session.login(refresh_token)
+            return self.access_token_pipe.pipe(access_token,client)
+
+        else:
+            await client.revoke_itself(session_id=session_id)
+            response.status_code = status.HTTP_204_NO_CONTENT
+            return
+
+
+    def verify_client(self,username:str, clientORM:ClientORM,__check_can_login__=False):
         if clientORM == None:
             raise ClientDoesNotExistError(username,True)
         
         if clientORM.auth_type != AuthType.ACCESS_TOKEN:
             raise ClientDoesNotExistError(username)
 
+        if __check_can_login__ and not clientORM.can_login:
+            raise ClientNotAllowedToLoginError(username)
 
     ###############################################################################################################################
     #############################################                                              ####################################

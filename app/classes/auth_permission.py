@@ -62,6 +62,8 @@ class AuthType(Enum):
 class AuthState(Enum):
     LOGOUT_BY_REFRESH='logout-by-refresh'
     AUTH_BY_REFRESH='auth-by-refresh'
+    SESSION_REVOKED='session-revoked'
+    SESSION_REFRESHED='session-refreshed'
 
 class AuthSignature(TypedDict):
     signature:str

@@ -70,7 +70,7 @@ async def main():
     await tortoiseService.init_connection()
 
     admin_info = admin.model_dump(mode='python',exclude={'password',})
-    clientORM = security.ClientORM(client_type=ClientType.Admin,client_description='Admin Account',**admin_info)
+    clientORM = security.ClientORM(client_type=ClientType.Admin,can_login=True,client_description='Admin Account',**admin_info)
 
     client = ClientMiniService(vaultService,configService,jwtService,securityService,clientORM)
     encrypted_password,salt = await client.encrypt_password(admin.password.get_secret_value())

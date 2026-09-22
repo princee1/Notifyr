@@ -38,7 +38,8 @@ class ClientORM(models.Model):
     client_scope = fields.CharEnumField(enum_type=Scope, default=Scope.SoloDolo, max_length=25)
     client_type = fields.CharEnumField(enum_type=ClientType, default=ClientType.User, max_length=25)
     issued_for = fields.CharField(max_length=30, null=True, unique=False)
-    max_connection = fields.SmallIntField(False,null=True,default=None)
+    max_connection = fields.SmallIntField(False,null=False,default=1)
+    can_login = fields.BooleanField(default=True,null=False)
     group = fields.ForeignKeyField(GroupClientORM, related_name="group", on_delete=fields.SET_NULL, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
@@ -62,6 +63,8 @@ class ClientORM(models.Model):
             "client_scope": self.client_scope.value,
             "client_type": self.client_type.value,
             "max_connection":self.max_connection,
+            "can_login":self.can_login,
+            "auth_type":self.auth_type.value,
             "issued_for": self.issued_for,
             "group_id": str(self.group_id) if self.group else None,
             "created_at": self.created_at.isoformat(),
@@ -153,6 +156,7 @@ class ClientModel(ClientModelBase):
     password:Optional[str] = None
     client_scope:Scope = Field(Scope.SoloDolo)
     group:str | None = Field(None)
+    max_connection:int = Field(default=1,ge=1,le=15)
     client_username:str = Field(min_length=8,max_length=30)
     client_description:str = Field(default=None,max_length=500)
     policies:list[str] = Field(default_factory=list,max_length=30)
@@ -170,9 +174,16 @@ class ClientModel(ClientModelBase):
 
     @model_validator(mode='after')
     def check_password(self):
-        if self.client_type in API_TOKEN_CLIENT_TYPE_SET:
+        if self.client_type in API_TOKEN_CLIENT_TYPE_SET and self.password:
             raise ValueError(f'This client_type {self.client_type} is a passwordless type of authentication')
-        return client_password_validator(self.password)
+        client_password_validator(self.password)
+        return self
+
+    @model_validator(mode='after')
+    def check_max_conn(self):
+        if self.client_type in API_TOKEN_CLIENT_TYPE_SET and self.max_connection >1:
+            raise ValueError(f'This client_type {self.client_type} only allow one connection found {self.max_connection}')
+        return self
     
     @field_validator('client_type')
     def validate_client_type(cls,clientType:AuthType):
@@ -261,6 +272,19 @@ class BlacklistModel(BaseModel):
                 raise ValueError('format not available, try {client}@{session}')
 
         return self
+
+
+class RevokeSessionModel(BaseModel):
+
+    session:Optional[str]  = Field(default='',max_length=100)
+    can_login:Optional[bool] = Field(default=None)
+
+    @field_validator('session')
+    def normalize_session(cls,s):
+        if s == None:
+            s=''
+        return s
+
 
 
 class UnRevokeGenerationIDModel(BaseModel):

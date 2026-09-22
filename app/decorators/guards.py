@@ -532,3 +532,18 @@ class ServiceStatusGuard(Guard):
             raise ...
 
         return True
+
+class PrimarySessionGuard(Guard):
+
+    def __init__(self,verify_session_id=False):
+        super().__init__()
+        self.verify_session_id = verify_session_id
+
+    def guard(self,client:ClientMiniService,clientInfo:ClientAccessInfo,session_id:str=None):
+        if not client.is_primary_session(clientInfo['session_id']):
+            return False, 'The session is not the primary session'
+
+        if  self.verify_session_id and session_id == clientInfo['session_id']:
+            return False, 'You cannot delete your own session, you need to logout first'
+        
+        return True,''

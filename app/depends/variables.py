@@ -58,3 +58,8 @@ SourceMode = Literal['cache','memory','database']
 sources_choices = list(get_args(SourceMode))
 
 source_mode_query:Callable[[Request],SourceMode] = get_query_params('source','memory',False,raise_except=True,checker=_wrap_checker('source',lambda v: v in sources_choices,choices=sources_choices))
+
+# ----------------------------------------------                                    ---------------------------------- #
+ScopeMode = Literal['all','single']
+scope_choices = list(get_args(ScopeMode))
+scope_mode_query:Callable[[Request],ScopeMode] = get_query_params('scope','single',False,raise_except=True,checker=_wrap_checker('scope',lambda v: v in scope_choices,choices=scope_choices))

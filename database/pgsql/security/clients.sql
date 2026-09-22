@@ -36,11 +36,13 @@ CREATE TABLE IF NOT EXISTS Client (
     client_scope Scope DEFAULT 'SoloDolo',
     client_type ClientType DEFAULT 'User',
     group_id UUID DEFAULT NULL,
-    max_connection INT DEFAULT NULL,
+    max_connection INT DEFAULT 1,
+    can_login BOOLEAN DEFAULT TRUE,
     issued_for VARCHAR(30) DEFAULT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT cname CHECK (client_name IS NOT NULL),
+    CONSTRAINT max_conn CHECK (max_connection BETWEEN 1 AND 15),
     PRIMARY KEY (client_id),
     FOREIGN KEY (group_id) REFERENCES GroupClient (group_id) ON DELETE SET NULL ON UPDATE CASCADE
 );
@@ -139,6 +141,11 @@ CREATE OR REPLACE FUNCTION guard_admin_creation() RETURNS TRIGGER AS $guard_admi
 BEGIN
     SET search_path = clients;
     IF NEW.client_type = 'Admin' THEN
+        IF NEW.can_login IS FALSE THEN
+            RAISE EXCEPTION 'Admin clients must be able to login';
+            RETURN NULL;
+        END IF;
+
         IF (SELECT COUNT(*) FROM Client WHERE client_type = 'Admin') > 0 THEN
             RAISE EXCEPTION 'Admin already exists';
             RETURN NULL;
@@ -182,6 +189,10 @@ BEGIN
         RAISE EXCEPTION 'Client type cannot be modified';
     END IF;
 
+    IF OLD.max_connection IS DISTINCT FROM NEW.max_connection THEN
+        RAISE EXCEPTION 'Max connection cannot be modified';
+    END IF;
+
     RETURN NEW;
 END;
 $guard_client_identity_modification$ LANGUAGE plpgsql;
@@ -194,6 +205,11 @@ CREATE TRIGGER guard_client_identity_modification
 
 CREATE OR REPLACE FUNCTION guard_admin_group_modification() RETURNS TRIGGER AS $guard_admin_group_modification$
 BEGIN
+    IF NEW.client_type = 'Admin' AND NEW.can_login IS FALSE THEN
+        RAISE EXCEPTION 'Admin clients must be able to login';
+        RETURN NULL;
+    END IF;
+
     IF OLD.client_type = 'Admin' AND OLD.group_id IS DISTINCT FROM NEW.group_id THEN
         RAISE EXCEPTION 'The Admin client group cannot be modified';
     END IF;
