@@ -17,7 +17,7 @@ services:
     command: daemon --config=/etc/ofelia/config.toml
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./ofelia.toml:/etc/ofelia/config.toml:ro
+      - ./conf/ofelia/ofelia.toml:/etc/ofelia/config.toml:ro
     restart: unless-stopped
   # ==========================================
   # EDGE LAYER
@@ -602,7 +602,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./conf/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
 
   pgadmin:
     image: dpage/pgadmin4
