@@ -238,6 +238,10 @@ class ConfigService(_service.BaseService):
         # MCP CONFIG #
         self.MCP_ENABLED:bool = ConfigService.parseToBool(self.getenv('MCP_ENABLED','false'),False)
 
+        # SESSION CONFIG #
+        self.SESSION_MECHANISM:Literal['redis+sync','vault+sync','redis','none'] = self.getenv('SESSION_MECHANISM','redis')
+
+
     def verify(self):
         if self.S3_CRED_TYPE not in ['MINIO','AWS']:
             raise BuildAbortError(f"S3_CRED_TYPE {self.S3_CRED_TYPE} is not valid please use MINIO or AWS")
@@ -260,6 +264,17 @@ class ConfigService(_service.BaseService):
 
             if self.MODE == MODE.PROD_MODE:
                 raise BuildAbortError('AUTH_MECHANISM must be either userpass or token, but jwt is better')
+
+        if self.AUTH_MECHANISM != 'userpass':
+            self.SESSION_MECHANISM == 'none'
+        else:
+            if self.SESSION_MECHANISM not in ['redis+sync','vault+sync','redis','none']:
+                raise BuildAbortError('SESSION MECHANISM must be either "redis+sync" "vault+sync" "redis" or "none"' )
+            if self.MODE == MODE.DEV_MODE and self.SESSION_MECHANISM == 'none':
+                raise BuildWarningError(f"SESSION_MECHANISM {self.SESSION_MECHANISM} is set to None, this is not recommended for production environments")
+            
+            if self.MODE == MODE.DEV_MODE and self.SESSION_MECHANISM == 'none':
+                raise BuildAbortError('SESSION_MECHANISM must be either use with redis(with or without sync) or with vault(with sync), but redis is better')
 
     def __getitem__(self, key):
         try:

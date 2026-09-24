@@ -172,6 +172,9 @@ services:
       - INSTALL_DOCLING=${INSTALL_DOCLING:-false}
       - INSTALL_CRAWL4AI=${INSTALL_CRAWL4AI:-false}
 
+      - JOBSTORE_DB=${JOBSTORE_DB:-redis}
+      - SESSION_MECHANISM=${SESSION_MECHANISM:-redis}
+
       - MCP_ENABLED=${MCP_ENABLED:-false}
       - ALLOWED_TWO_LEVEL_AGENT=${ALLOWED_TWO_LEVEL_AGENT:-false}
     networks:

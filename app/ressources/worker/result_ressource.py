@@ -89,7 +89,7 @@ class BackgroundTaskRessource(BaseHTTPRessource):
     @BaseHTTPRessource.Get('/{task_id}')
     async def get_result(self,request:Request,task_id:str,authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         task_id = CeleryConstant.REDIS_BKG_TASK_ID_RESOLVER(task_id)
-        return await self.redisService.hash_get(RedisConstant.CELERY_DB,task_id)
+        return await self.redisService.hash_get_all(RedisConstant.CELERY_DB,task_id)
     
 
 @UseRoles([Role.RESULT])

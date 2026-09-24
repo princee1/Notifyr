@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import contextmanager
 import functools
 import json
 from random import randint
@@ -37,6 +38,33 @@ CREDIT_CREDS='credit'
 SECURITY_CREDS='security'
 
 AGENTIC_APP_MODE_CRED = {ApplicationMode.arq,ApplicationMode.agentic,ApplicationMode.server}
+
+
+def _serialize_redis_value(value:Any)->Any:
+    if isinstance(value,(dict,list,tuple,set)):
+        return json.dumps(value)
+    return value
+
+def _deserialize_redis_value(value:Any)->Any:
+    if value == None:
+        return None
+
+    if not isinstance(value,str):
+        return value
+    try:
+        return json.loads(value)
+    except (TypeError, ValueError):
+        return value
+
+
+REDIS_PREFIX_BUILDER:dict[int|str,Callable[[str],str]] ={
+    #RedisConstant.COST_DB: lambda c:f'notifyr/credit:{c}',
+    RedisConstant.SECURITY_DB: lambda s:f'notifyr/security/{s}',
+    RedisConstant.AGENTIC_DB: lambda a:f'notifyr/agentic/{a}',
+    'agentic':lambda a:f'notifyr/agentic/{a}',
+    #'cost':lambda c:f'notifyr/credit:{c}',
+    'security':lambda s: f'notifyr/security/{s}'
+}
 
 @Service()
 class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerService):
@@ -203,20 +231,38 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
             await self.db[i].close()
 
     @staticmethod
-    def check_db(func:Callable):
+    def check_db(use_prefix=True):
 
-        @functools.wraps(func)
-        async def wrapper(self:Self,database:int|str,*args,**kwargs):
-            if 'redis' in kwargs and kwargs['redis'] and isinstance(kwargs['redis'],Redis):
+        def decorator(func:Callable):
+            @functools.wraps(func)
+            async def wrapper(self:Self,database:int|str,*args,**kwargs):
+
+                if use_prefix and database and database in REDIS_PREFIX_BUILDER:
+                    prefix_builder = REDIS_PREFIX_BUILDER[database]
+                    args = tuple([prefix_builder(args[0]),*args[1:]])
+
+                if 'redis' in kwargs and kwargs['redis'] and isinstance(kwargs['redis'],Redis):
+                    return await func(self,database,*args,**kwargs)
+                
+                if database not in self.db:
+                    raise RedisDatabaseDoesNotExistsError(database)
+                kwargs['redis'] = self.db[database]
+                #return await None# ERROR
                 return await func(self,database,*args,**kwargs)
-            
-            if database not in self.db:
-                raise RedisDatabaseDoesNotExistsError(database)
-            kwargs['redis'] = self.db[database]
-            #return await None# ERROR
-            return await func(self,database,*args,**kwargs)
 
-        return wrapper
+            return wrapper
+        
+        return decorator
+
+    @contextmanager
+    def redis_synccontext(self,db:int,suffix:str,host:str=NOTIFYR_HOST,prefix:str='app'):
+
+        cred = self.vaultService.database_engine.generate_credentials(VaultConstant.REDIS_ROLE,prefix,suffix)
+        username = cred['data']['username']
+        password = cred['data']['password']
+        yield SyncRedis(host,db=db,username=username,password=password)
+        self.vaultService.revoke_lease(cred['lease_id'])
+
 
     def build(self,build_state=-1):
         self.generate_credentials()
@@ -320,7 +366,7 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         await RunInThreadPool(self.generate_credentials)()
         self.create_redis_instance()
 
-    @check_db
+    @check_db()
     async def store(self,database:int|str,key:str,value:Any,expiry,nx:bool= False,xx:bool=False,redis:Redis=None):
         if isinstance(value,(dict,list)):
             value = json.dumps(value)
@@ -328,7 +374,7 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
             expiry = None
         return await redis.set(key,value,ex=expiry,get=True,nx=nx,xx=xx)
     
-    @check_db
+    @check_db()
     async def retrieve(self,database:int|str,key:str,redis:Redis=None):
         value = await redis.get(key)
         if not isinstance(value,str):
@@ -336,11 +382,11 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         value = json.loads(value)
         return value
     
-    @check_db
+    @check_db()
     async def delete(self,database:int|str,key:str,redis:Redis=None):
         return await redis.delete(key)
 
-    @check_db
+    @check_db()
     async def exists(self,database:int|str,key:str,redis:Redis=None)->bool:
         if isinstance(key,(list,tuple)):
             result =  await redis.exists(*key)
@@ -351,7 +397,7 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         
         return result > 0
             
-    @check_db
+    @check_db(False)
     async def delete_all(self, database: int | str, prefix: str, simple_prefix=True,redis: Redis = None):
         if simple_prefix:
             prefix =f"{prefix}*"
@@ -360,8 +406,8 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
             return await redis.delete(*keys)
         return 0
     
-    @check_db
-    async def scan(self,database:int|str,match,redis:Redis=None):
+    @check_db(False)
+    async def scan(self,database:int|str,match:str,redis:Redis=None):
         cursor = 0
         keys = []
         while True:
@@ -375,44 +421,67 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
                 break
         return list(set(keys))
     
-    @check_db
+    @check_db()
     async def append(self,database:int|str,key:str,data:Any,redis:Redis=None):
         return await redis.append(key,data)
     
-    @check_db
+    @check_db()
     async def increment(self,database:int|str,name:str,amount:int,redis:Redis=None):
         return await redis.incrby(name,amount)
     
-    @check_db
+    @check_db()
     async def decrement(self,database:int|str,name:str,amount:int,redis:Redis=None):
         return await redis.decrby(name,amount)
-    
-    @check_db
-    async def hash_kdel(self,database:int|str,hash_name,*keys:str,redis:Redis=None):
-        return await redis.hdel(*keys)
-    
-    @check_db
-    async def hash_set(self,database:int|str,hash_name:str,key:str=None,value:Any=None,mapping:dict=None,redis:Redis=None):
-        return await redis.hset(hash_name,key,value,mapping)
-    
-    @check_db
+
+    @check_db()
     async def expire(self,database:int|str,hash_name:str,ttl:int,nx=False,redis:Redis=None):
         return await redis.expire(hash_name,ttl,nx=nx)
     
-    @check_db
-    async def hash_get(self,database:int|str,hash_name,redis:Redis=None):
-        return await redis.hgetall(hash_name)
+    @check_db()
+    async def hash_kdel(self,database:int|str,hash_name,*keys:str,redis:Redis=None):
+        count = await redis.hdel(hash_name,*keys)
+        if count <1:
+            raise 
+        return count
+    
+    @check_db()
+    async def hash_set(self,database:int|str,hash_name:str,key:str=None,value:Any=None,mapping:dict=None,redis:Redis=None):
+        if mapping is not None:
+            mapping = {k:_serialize_redis_value(v) for k,v in mapping.items()}
+            return await redis.hset(hash_name, mapping=mapping)
+
+        value = _serialize_redis_value(value)
+        count = await redis.hset(hash_name,key,value)
+        if count <1:
+            raise 
+        return count
+    
+    @check_db()
+    async def hash_get(self,database:int|str,hash_name:str,key:str,redis:Redis=None):
+        value = await redis.hget(hash_name,key)
+        return _deserialize_redis_value(value)
+
+    @check_db()
+    async def hash_exists(self,database:int|str,hash_name:str,key:str,redis:Redis=None):
+        return await redis.hexists(hash_name,key)
+
+    @check_db()
+    async def hash_get_all(self,database:int|str,hash_name,redis:Redis=None):
+        values = await redis.hgetall(hash_name)
+        if not values:
+            return {}
+        return {k:_deserialize_redis_value(v) for k,v in values.items()}
        
-    @check_db
+    @check_db()
     async def push(self,database:int|str,name:str,*element:dict,redis:Redis=None):
         element = [json.dumps(e) for e in list(element)]
         return await redis.lpush(name,*element)
 
-    @check_db
+    @check_db()
     async def range(self,database:int|str,name:str,start:int,stop:int,redis:Redis=None):
         return await redis.lrange(name,start,stop)
 
-    @check_db
+    @check_db()
     async def rem(self,database:int|str,name:str,*keys:str,redis:Redis=None):
         return await redis.zrem(name,*keys)
 

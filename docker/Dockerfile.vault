@@ -190,8 +190,12 @@ path "notifyr-security/policies/*" {
 }
 
 path "notifyr-security/clients/*" {
-  capabilities = ["create", "update", "read", "delete"]
+  capabilities = ["create", "update", "read", "delete","list"]
 }
+
+# path "notifyr-security/clients/*/sessions/" {
+#   capabilities = ["list"]
+# }
 
 # ---- GENERATION ID ENGINE ---- 
 

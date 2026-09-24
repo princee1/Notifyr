@@ -42,7 +42,7 @@ from app.classes.auth_permission import ClientType
 from app.services.admin_service import ClientMiniService
 from app.services.database.tortoise_service import SECURITY_CREDS
 
-from app.container import build_container, Get, BuildMiniService
+from app.container import build_container, Get, InjectInMiniService
 PrettyPrinter_.message(f'Building container for the admin creation')
 build_container()
 
@@ -55,6 +55,8 @@ async def main():
     configService:ConfigService = Get(ConfigService)
     jwtService:JWTAuthService = Get(JWTAuthService)
     securityService:SecurityService = Get(SecurityService)
+    redisService:RedisService = Get(RedisService)
+
     tortoiseService:TortoiseConnectionService = Get(TortoiseConnectionService)
 
     if configService.AUTH_MECHANISM != 'userpass':
@@ -72,12 +74,13 @@ async def main():
     admin_info = admin.model_dump(mode='python',exclude={'password',})
     clientORM = security.ClientORM(client_type=ClientType.Admin,can_login=True,client_description='Admin Account',**admin_info)
 
-    client = ClientMiniService(vaultService,configService,jwtService,securityService,clientORM)
+    client = InjectInMiniService(ClientMiniService,client=clientORM,policies=[])
     encrypted_password,salt = await client.encrypt_password(admin.password.get_secret_value())
 
     async with tortoiseService.transaction(SECURITY_CREDS) as ctx:
         await clientORM.save(ctx)
         await client.store_password(encrypted_password,salt)
+        # await client.compare_auth_signature()
 
     await redisService.store(RedisConstant.CONFIG_DB,ADMIN_INIT_KEY,1,0)
 

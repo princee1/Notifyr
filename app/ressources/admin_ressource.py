@@ -1,7 +1,7 @@
 from typing import Annotated, Callable, Optional, get_args
 from fastapi import Depends, HTTPException, Query, Request, Response, status
 from tortoise.expressions import Q
-from app.decorators.guards import AdminModificationGuard,  BlacklistClientGuard, ClientAuthTypeGuard, PolicyGuard, TortoiseHardLimitGuard
+from app.decorators.guards import AdminModificationGuard,  BlacklistClientGuard, ClientAuthTypeGuard, PolicyGuard, SessionMechanismGuard, TortoiseHardLimitGuard
 from app.decorators.interceptors import DataCostInterceptor, InvalidBlacklistTokenInterceptor
 from app.definition._cost import DataCost
 from app.definition._service import MiniStateProtocol, StateProtocol
@@ -13,7 +13,8 @@ from app.manager.broker_manager import Broker
 from app.manager.merchant_manager import Merchant
 from app.manager.session_manager import AuthSessionManager
 from app.models.orm.security_model import BlacklistModel, ClientModel, ClientORM, GroupClientORM, GroupModel, PolicyMappingORM, RevokeSessionModel, UnRevokeGenerationIDModel, UpdateClientModel
-from app.services.admin_service import AdminService, ClientMiniService
+from app.services.admin_service import VALID_SYNC_MECHANISM, AdminService, ClientMiniService
+from app.services.database.redis_service import RedisService
 from app.services.database.tortoise_service import TortoiseConnectionService,SECURITY_CREDS
 from app.services.profile_service import ProfileService
 from app.services.vault_service import VaultService
@@ -22,7 +23,7 @@ from app.services.security_service import JWTAuthService, SecurityService
 from app.services.config_service import ConfigService
 from app.utils.constant import ConfigAppConstant, CostConstant
 from app.depends.dependencies import get_auth_permission, get_client_info, get_client_ip, get_query_params, get_request_id, get_user_agent
-from app.container import InjectInMethod, Get
+from app.container import InjectInMethod, Get, InjectInMiniService
 from app.definition._ressource import PingService, UseInterceptor, LockService, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter,HTTPStatusCode
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
 from app.classes.auth_permission import AccessModel, AuthPermission, AuthSignature, AuthType, ClientAccessInfo, ClientType, PoliciesNotMatchingError, PolicyModel, PolicyUpdateMode, Role, Scope
@@ -30,7 +31,7 @@ from app.decorators.handlers import AsyncIOHandler, CostHandler, DataSourceHandl
 from app.decorators.pipes import  AccessTokenModelPipe, ForceClientPipe, ForceGroupPipe, FunctionInjectorPipe, MiniServiceInjectorPipe, ObjectRelationalFriendlyPipe
 from app.utils.helper import  generateId, uuid_v1_mc
 from app.utils.toolbox import RunInThreadPool
-from app.errors.security_error import ClientAlreadyExistError, IdentityAlreadyBlacklistedError, AuthzSignatureMisMatchError, ClientDoesNotExistError, GroupIdNotMatchError, SecurityIdentityNotResolvedError, SessionNotValidatedError
+from app.errors.security_error import ClientAlreadyExistError, IdentityAlreadyBlacklistedError, ClientDoesNotExistError, SessionNotValidatedError
 
 ADMIN_PREFIX = 'admin'
 CLIENT_PREFIX = 'client'
@@ -102,7 +103,7 @@ class PolicyRessource(BaseHTTPRessource):
 class ClientRessource(BaseHTTPRessource):
 
     @InjectInMethod()
-    def __init__(self, configService: ConfigService, securityService: SecurityService, jwtAuthService: JWTAuthService, adminService: AdminService,tortoiseService:TortoiseConnectionService):
+    def __init__(self, configService: ConfigService, securityService: SecurityService, jwtAuthService: JWTAuthService, adminService: AdminService,tortoiseService:TortoiseConnectionService,redisService:RedisService):
         super().__init__()
         self.configService = configService
         self.securityService = securityService
@@ -140,7 +141,7 @@ class ClientRessource(BaseHTTPRessource):
                 mapping = [PolicyMappingORM(policy_id=policy_id,client=client,group=None) for policy_id in clientModel.policies]
                 clientORM = await ClientORM.create(ctx,**client_data)
                 await PolicyMappingORM.bulk_create(mapping,using_db=ctx)
-                client = ClientMiniService(self.vaultService,self.configService,self.jwtAuthService,self.securityService,clientORM,[])
+                client = InjectInMiniService(ClientMiniService,client=clientORM,policies=[])
                 await client.store_password(clientModel.password)
 
         async def rollback():
@@ -179,7 +180,9 @@ class ClientRessource(BaseHTTPRessource):
             if password:
                 await client.store_password(password,salt)
 
-        broker.propagate(StateProtocol(service=AdminService,to_build=True,callback_state_function=AdminService.load_clients.__name__))
+        if is_revoked and self.configService.SESSION_MECHANISM in VALID_SYNC_MECHANISM:
+            broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))
+
         return client.client
 
     @PingService([VaultService])        
@@ -369,9 +372,9 @@ class AdminRessource(BaseHTTPRessource):
     @UseLimiter(limit_value='10/day')
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @UseInterceptor(InvalidBlacklistTokenInterceptor)
-    @UseGuard(AdminModificationGuard,ClientAuthTypeGuard(),)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @PingService([VaultService,AdminService],is_manager=True)
+    @UseGuard(AdminModificationGuard,SessionMechanismGuard,ClientAuthTypeGuard)
     @UseHandler(ClientHandler,ORMCacheHandler,VaultHandler,MiniServiceHandler,ClientSecurityHandler)
     @LockService(VaultService,SettingService,AdminService,JWTAuthService,lockType='reader',as_manager=True)
     @BaseHTTPRessource.HTTPRoute('/revoke/{client}/', methods=[HTTPMethod.DELETE])
@@ -388,7 +391,8 @@ class AdminRessource(BaseHTTPRessource):
                 await client.revoke_itself(ctx)
                 request.state.clear = True
 
-        broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id ))
+        if self.configService.SESSION_MECHANISM in VALID_SYNC_MECHANISM:
+            broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id ))
         return
         
     @UseLimiter(limit_value='4/day')
@@ -404,10 +408,11 @@ class AdminRessource(BaseHTTPRessource):
         async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:    
             await client.revoke_itself(ctx)
             session_id = str(uuid_v1_mc())
-            authSignature:AuthSignature = await client.upsert_session(session_id,_check_=False)
-            api_token,_ = await client.generate_access(session_id,authSignature['signature'])
-            
-        broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))
+            (authSignature,_)= await client.upsert_session(session_id,_check_=False)
+            api_token,_ = await client.generate_access(session_id,authSignature.get('signature',None))
+
+        if self.configService.SESSION_MECHANISM in VALID_SYNC_MECHANISM:
+            broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))
         return api_token
         
     #######################################################################################################################################
@@ -435,14 +440,16 @@ class AdminRessource(BaseHTTPRessource):
 
         if clear: await BlacklistGroupCache.InvalidAll([WILDCARD])
         broker.propagate(StateProtocol(service=self.jwtService.name,to_build=True,bypass_async_verify=True,force_sync_verify=True))
+        if self.configService.SESSION_MECHANISM in VALID_SYNC_MECHANISM:
+            broker.propagate(StateProtocol(service=AdminService,to_build=True))
 
         if admin: return
         async with self.adminService.lock('reader',clientInfo['client_id']) as client:
             origin = get_client_ip(request)
             user_agent = get_user_agent(request)
 
-            authSignature:AuthSignature = await client.upsert_session(clientInfo['session_id'],origin,user_agent,_check_=False)
-            access_token,refresh_token = client.generate_access(clientInfo['session_id'],authSignature['signature'])
+            (authSignature,_)  = await client.upsert_session(clientInfo['session_id'],origin,user_agent,_check_=False)
+            access_token,refresh_token = client.generate_access(clientInfo['session_id'],authSignature.get('signature',None))
             session.login(refresh_token)
 
         return access_token

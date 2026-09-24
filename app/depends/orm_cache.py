@@ -232,13 +232,13 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],cache_key:int=R
             else:
                 temp = obj
             
-            return await redisService.store(REDIS_CACHE_KEY,key,temp,exp,nx,redis=redis)
+            return await redisService.store(cache_key,key,temp,exp,nx,redis=redis)
         
         @kb
         @staticmethod
         async def Get(key:str|list[str],redis=None)->T|None:
             
-            obj = await redisService.retrieve(REDIS_CACHE_KEY,key,redis=redis)   
+            obj = await redisService.retrieve(cache_key,key,redis=redis)   
             if obj == None:
                 print(f'Cache MISS key: {key} | prefix: {prefix}')
                 return None
@@ -251,7 +251,7 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],cache_key:int=R
         @kb
         @staticmethod
         async def Invalid(key:str|list[str],redis=None):
-            return await redisService.delete(REDIS_CACHE_KEY,key,redis=redis)
+            return await redisService.delete(cache_key,key,redis=redis)
         
         @staticmethod
         async def InvalidAll(mask:list[str]=None,redis=None):
@@ -267,7 +267,7 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],cache_key:int=R
                 
                 p=key_builder(mask)
 
-            return await redisService.delete_all(REDIS_CACHE_KEY,p,is_s_p,redis=redis)
+            return await redisService.delete_all(cache_key,p,is_s_p,redis=redis)
 
         @Time
         @staticmethod
@@ -310,7 +310,7 @@ def generate_cache_type(type_:Type[T],db_get:Callable[[Any],Any],cache_key:int=R
         @kb
         @staticmethod
         async def Exists(key:str|list[str]):
-            return await redisService.exists(REDIS_CACHE_KEY,key)
+            return await redisService.exists(cache_key,key)
 
     return ORMCache
 

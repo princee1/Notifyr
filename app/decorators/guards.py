@@ -18,6 +18,7 @@ from app.models.odm.agents_model import AgentModel
 from app.models.orm.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, ContentSubscriptionORM, SubscriptionContactStatusORM
 from app.models.ingest_model import DataIngestModel, WebCrawlingDataIngestModel
 from app.models.orm.link_model import LinkORM
+from app.models.orm.security_model import RevokeSessionModel
 from app.models.otp_model import OTPModel
 from app.services.admin_service import AdminService, ClientMiniService
 from app.services.agent.remote_agent_service import RemoteAgentService
@@ -539,11 +540,25 @@ class PrimarySessionGuard(Guard):
         super().__init__()
         self.verify_session_id = verify_session_id
 
-    def guard(self,client:ClientMiniService,clientInfo:ClientAccessInfo,session_id:str=None):
-        if not client.is_primary_session(clientInfo['session_id']):
+    async def guard(self,client:ClientMiniService,clientInfo:ClientAccessInfo,session_id:str=None):
+        if not await client.is_primary_session(clientInfo['session_id']):
             return False, 'The session is not the primary session'
 
         if  self.verify_session_id and session_id == clientInfo['session_id']:
             return False, 'You cannot delete your own session, you need to logout first'
         
+        return True,''
+
+
+class SessionMechanismGuard(Guard):
+
+    @InjectInMethod
+    def __init__(self,configService:ConfigService):
+        super().__init__()
+        self.configService = configService
+
+    def revoke_session_guard(self,revoke:RevokeSessionModel):
+        if self.configService.SESSION_MECHANISM == 'none' and revoke.session:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail='Session mechanism is not implemented')
+
         return True,''

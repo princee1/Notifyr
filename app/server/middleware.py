@@ -129,7 +129,7 @@ class JWTAuthMiddleware(MiddleWare):
                 client_ip = get_client_ip(request) #TODO : check wether we must use the scope to verify the client
                 
                 clientService.verify_client_origin(client_ip)
-                clientService.compare_auth_signature(clientInfo['auth_signature'],clientInfo['session_id'])
+                await clientService.compare_auth_signature(clientInfo['auth_signature'],clientInfo['session_id'])
                 
                 if clientService.client.client_type != ClientType.Admin: 
                     async with self.redisService.redis_security.pipeline() as pipe:
