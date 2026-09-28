@@ -6,7 +6,7 @@ from tortoise.expressions import Q
 from app.classes.auth_permission import AuthPermission, AuthSignature, AuthType, ClientRefresh, ClientType, Credentials, EncryptedRecoveryTokens, PolicyModel, PolicyUpdateMode, RecoveryTokens, Scope, filter_asset_permission, get_combined_policies, parse_authPermission_enum
 from app.classes.secrets import ChaCha20SecretsWrapper
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BaseService, BuildFailureError, LinkDep, MiniService, Service, ServiceStatus
-from app.errors.security_error import AuthzSignatureMisMatchError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError,IdentityAlreadyBlacklistedError, MaximumSessionReachedError, PasswordLessAuthTypeStrategyError, ProvidedHashNotEquivalentError, SecurityIdentityNotResolvedError, SessionNotValidatedError
+from app.errors.security_error import AuthzSignatureMisMatchError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError,IdentityAlreadyBlacklistedError, MaximumSessionReachedError, PasswordLessAuthTypeStrategyError, ProvidedHashNotEquivalentError, RequestOriginIsNotValidError, SecurityIdentityNotResolvedError, SessionNotValidatedError
 from app.models.orm.security_model import ClientORM, GroupClientORM, PolicyMappingORM, UpdateClientModel
 from app.services.config_service import ConfigService
 from app.services.database.redis_service import REDIS_PREFIX_BUILDER, RedisService
@@ -21,8 +21,8 @@ class ClientVaultPath:
 
 
     @staticmethod
-    def SESSIONS_REDIS_PATH(client_id:str):
-        return f'sessions/{client_id}'
+    def SESSIONS_REDIS_PATH(client_id:str,session:str):
+        return f'sessions/{client_id}/{session}'
 
     @staticmethod
     def SESSIONS_VAULT_PATH(client_id:str,session:str=''):
@@ -149,8 +149,8 @@ class ClientMiniService(BaseMiniService):
                         except:
                             authSignature = None
                     case 'redis' | 'redis+sync':
-                        path = ClientVaultPath.SESSIONS_REDIS_PATH(self.client_id)
-                        authSignature:AuthSignature = await self.redisService.hash_get(RedisConstant.SECURITY_DB,path,session_id)
+                        path = ClientVaultPath.SESSIONS_REDIS_PATH(self.client_id,session_id)
+                        authSignature:AuthSignature = await self.redisService.retrieve(RedisConstant.SECURITY_DB,path)
             else:
                 authSignature = self.sessions.get(session_id)
             authSignature['signature'] = generateId(20)
@@ -170,10 +170,11 @@ class ClientMiniService(BaseMiniService):
             case 'vault+sync':
                 path = ClientVaultPath.SESSIONS_VAULT_PATH(self.miniService_id,session_id)
                 await RunInThreadPool(self.vaultService.security_engine.put)('clients',authSignature,path)
+                
             case 'redis' | 'redis+sync':
-                path = ClientVaultPath.SESSIONS_REDIS_PATH(self.client_id)
+                path = ClientVaultPath.SESSIONS_REDIS_PATH(self.client_id,session_id)
+                await self.redisService.store(RedisConstant.SECURITY_DB,path,authSignature,60*60*24*12)
 
-                await self.redisService.hash_set(RedisConstant.SECURITY_DB,path,session_id,authSignature)
         return authSignature,session_id
     
     async def verify_login_count(self,session_id:str|None):
@@ -189,9 +190,9 @@ class ClientMiniService(BaseMiniService):
                 sessions =  await RunInThreadPool(self.vaultService.security_engine.list)(path)
 
             case 'redis' | 'redis+sync':
-                path = ClientVaultPath.SESSIONS_REDIS_PATH(self.client_id)
+                path = ClientVaultPath.SESSIONS_REDIS_PATH(self.client_id,'*')
                 path = REDIS_PREFIX_BUILDER[RedisConstant.SECURITY_DB](path)
-                sessions = await self.redisService.redis_security.hlen(path) or 0
+                sessions = len(await self.redisService.scan(RedisConstant.SECURITY_DB,path)) or 0
             case _:
                 ...
 
@@ -203,7 +204,7 @@ class ClientMiniService(BaseMiniService):
         if session_id and session_id not in current_session_count:
             current_session_count+=1
 
-        if current_session_count > self.client.max_connection:
+        if current_session_count >= self.client.max_connection:
             raise MaximumSessionReachedError(self.client_id,session_id,self.client.max_connection)
         
     async def is_primary_session(self,session_id:str):
@@ -211,15 +212,17 @@ class ClientMiniService(BaseMiniService):
             case 'vault+sync' | 'redis+sync':
                 return self.sessions.keys()[0] == session_id
             case 'redis':
-                path = ClientVaultPath.SESSIONS_REDIS_PATH(self.client_id)
-                sessions = await self.redisService.hash_get_all(RedisConstant.SECURITY_DB,path) or dict()
-                return sessions.keys()[0] == session_id
+                path = ClientVaultPath.SESSIONS_REDIS_PATH(self.client_id,'*')
+                sessions = await self.redisService.scan(RedisConstant.SECURITY_DB,path) or []
+                if not sessions:
+                    raise SessionNotValidatedError(self.client_id,session_id)
+                return sessions[0] == session_id
             case 'none':
                 return True
 
     async def compare_auth_signature(self,signature:str,session:str=None,source:Literal['database','memory']='memory'):
         if source == 'memory' and self.configService.SESSION_MECHANISM not in VALID_SYNC_MECHANISM:
-            raise ValueError('source cant be memory if session_mechanism is not set with sync')
+            source = 'database'
         
         if source == 'memory':
             if session not in self.sessions:
@@ -239,20 +242,23 @@ class ClientMiniService(BaseMiniService):
                     authSignature = await RunInThreadPool(self.vaultService.security_engine.read)('clients',path)
 
                 case 'redis+sync'|'redis':
-                    path = ClientVaultPath.SESSIONS_REDIS_PATH(self.client_id)
-                    if not await self.redisService.hash_exists(RedisConstant.SECURITY_DB,path,session):
+                    path = ClientVaultPath.SESSIONS_REDIS_PATH(self.client_id,session)
+                    if not await self.redisService.exists(RedisConstant.SECURITY_DB,path):
                         raise SessionNotValidatedError(self.client_id,session)
 
-                    authSignature = self.redisService.hash_get(RedisConstant.SECURITY_DB,path,session)
+                    authSignature = await self.redisService.retrieve(RedisConstant.SECURITY_DB,path)
                 
                 case _:
                     raise ValueError('no backend is used')
+
+        if authSignature == None:
+            raise AuthzSignatureMisMatchError(self.client_id,'Could not find the authorization signature for this client')
                 
         if 'signature' not in authSignature:
-            raise AuthzSignatureMisMatchError(self.client_id)
+            raise AuthzSignatureMisMatchError(self.client_id,'Data is not valid, missing signature')
         
         if signature != authSignature['signature']:
-            raise AuthzSignatureMisMatchError(self.client_id)
+            raise AuthzSignatureMisMatchError(self.client_id,'signature does not match')
 
         return
 
@@ -261,17 +267,20 @@ class ClientMiniService(BaseMiniService):
     #######################################################################################################################
       
     def verify_client_origin(self,origin:str):
-        return
-        match self.client.scope:
+        match self.client.client_scope:
             case Scope.SoloDolo:
                 if origin != self.client.issued_for:
-                    raise HTTPException( status_code=status.HTTP_403_FORBIDDEN, detail="Token not issued for this user")
+                    raise RequestOriginIsNotValidError('Token not issued for this origin',self.client_id,self.client.client_type.value,
+                                                       self.client.client_scope.value,self.client.issued_for)
             case Scope.Organization:
-                # TODO verify subnet
-                    raise HTTPException( status_code=status.HTTP_403_FORBIDDEN, detail="Token not issued for this user")
+                #TODO:
+                return
+                raise RequestOriginIsNotValidError('Token not issued for this origin within a specified organization',self.client_id,self.client.client_type.value,
+                                                       self.client.client_scope.value,self.client.issued_for)
             case Scope.Domain:
                 if origin == None:
-                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Origin header missing")
+                    raise RequestOriginIsNotValidError('Origing header missigng',self.client_id,self.client.client_type.value,
+                                                       self.client.client_scope.value,self.client.issued_for)
             case Scope.Free:
                 ...
 
@@ -323,7 +332,7 @@ class ClientMiniService(BaseMiniService):
         if refreshPermission['client_id'] != self.client_id:
             raise SecurityIdentityNotResolvedError(refreshPermission['client_id'],'Refresh Token client id mismatch')
         
-        await self.compare_auth_signature(refreshPermission['auth_signature'],refreshPermission['session_id'],'vault')
+        await self.compare_auth_signature(refreshPermission['auth_signature'],refreshPermission['session_id'],'database')
 
     #######################################################################################################################
     ########################################                                           ####################################
@@ -341,11 +350,12 @@ class ClientMiniService(BaseMiniService):
                 path = ClientVaultPath.SESSIONS_VAULT_PATH(self.client_id,session_id)
                 await RunInThreadPool(self.vaultService.security_engine.delete('clients',path))
             case 'redis' | 'redis+sync':
-                path = ClientVaultPath.SESSIONS_REDIS_PATH(self.client_id)
                 if session_id == '':
-                    await self.redisService.delete(RedisConstant.SECURITY_DB,path)
+                    path = ClientVaultPath.SESSIONS_REDIS_PATH(self.client_id,'*')
+                    await self.redisService.delete_all(RedisConstant.SECURITY_DB,path)
                 else:
-                    await self.redisService.hash_kdel(RedisConstant.SECURITY_DB,path,session_id)
+                    path = ClientVaultPath.SESSIONS_REDIS_PATH(self.client_id,session_id)
+                    await self.redisService.delete(RedisConstant.SECURITY_DB,path)
             case 'none':
                 return
 
@@ -370,7 +380,7 @@ class ClientMiniService(BaseMiniService):
 
     async def delete_itself(self,ctx=None):
         await self.client.delete(ctx)
-        await RunInThreadPool(self.vaultService.security_engine.delete)('clients',self.miniService_id)
+        await self.revoke_itself(ctx,save=False)
 
     async def save(self,ctx):
         await self.client.save(ctx)

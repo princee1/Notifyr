@@ -552,7 +552,7 @@ class PrimarySessionGuard(Guard):
 
 class SessionMechanismGuard(Guard):
 
-    @InjectInMethod
+    @InjectInMethod()
     def __init__(self,configService:ConfigService):
         super().__init__()
         self.configService = configService

@@ -33,7 +33,7 @@ from app.errors.service_error import MiniServiceAlreadyExistsError,MiniServiceDo
 from app.errors.async_error import KeepAliveTimeoutError, LockNotFoundError, ReactiveSubjectNotFoundError
 from app.errors.contact_error import ContactAlreadyExistsError, ContactMissingInfoKeyError, ContactNotExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
 from app.errors.properties_error import GlobalKeyAlreadyExistsError, GlobalKeyDoesNotExistsError
-from app.errors.security_error import ClientAlreadyExistError, ClientAuthenticationFlagError, ClientNotAllowedToLoginError, IdentityAlreadyBlacklistedError, AuthzSignatureMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupDoesNotExistError, GroupIdNotMatchError, IdentityBlacklistedError, JWTInvalidTokenError, MaximumSessionReachedError, MaximumSessionReachedError, PrimarySessionNotValidatedError, ProvidedHashNotEquivalentError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError, SessionNotValidatedError, TokenDataMissingError, TokenExpiredError, TokenGenerationMismatchError
+from app.errors.security_error import ClientAlreadyExistError, ClientAuthenticationFlagError, ClientNotAllowedToLoginError, IdentityAlreadyBlacklistedError, AuthzSignatureMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupDoesNotExistError, GroupIdNotMatchError, IdentityBlacklistedError, JWTInvalidTokenError, MaximumSessionReachedError, MaximumSessionReachedError, PrimarySessionNotValidatedError, ProvidedHashNotEquivalentError, RequestOriginIsNotValidError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError, SessionNotValidatedError, TokenDataMissingError, TokenExpiredError, TokenGenerationMismatchError
 from app.errors.twilio_error import TwilioCallBusyError, TwilioCallFailedError, TwilioCallNoAnswerError, TwilioPhoneNumberParseError
 from app.classes.profiles import ProfileModelRequestBodyError, ProfileDoesNotExistsError, ProfileHasNotCapabilitiesError, ProfileModelTypeDoesNotExistsError, ProfileNotAvailableError, ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
 from app.services.assets_service import AssetConfusionError, AssetNotFoundError, AssetTypeNotAllowedError, AssetTypeNotFoundError
@@ -446,6 +446,9 @@ class ClientSecurityHandler(Handler):
         except TokenDataMissingError as e:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail={'message':'could not properly decode the token'})
 
+        except RequestOriginIsNotValidError as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail=e.detail)
+
         except JWTInvalidTokenError as e:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail=e.detail)
 
@@ -500,7 +503,7 @@ class ClientHandler(Handler):
         except ClientAuthenticationFlagError as e:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail={'message': 'Client is already logged in' if e.auth_flag_found else 'Client is already logged out'}
+                detail={'message': 'Client is already logged in' if e.auth_flag_found else 'Client is already logged out',**e.detail}
             )
 
         except ClientNotAllowedToLoginError as e:
@@ -748,11 +751,11 @@ class VaultHandler(Handler):
         try:
             return await function(*args,**kwargs)
 
-        except hvac.exceptions.InvalidPath:
-            raise HTTPException(status_code=500)
+        except hvac.exceptions.InvalidPath as e:
+            raise HTTPException(status_code=500,detail={'message':f'invalid path at vault {e}'})
         
         except hvac.exceptions.InvalidRequest as e:
-            raise HTTPException(500,)
+            raise HTTPException(500,detail={'message':f'invalid request at vault {e}'})
 
         except hvac.exceptions.Forbidden as e:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
@@ -935,6 +938,12 @@ class RedisHandler(Handler):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=str(e)
             )
+        
+        # except redis.exceptions.InvalidPasswordError as e:
+        #     raise HTTPException(
+        #         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        #         detail='could not connect to redis invalid credentials'
+        #                 )
 
         except redis.exceptions.LockError:
             raise HTTPException(

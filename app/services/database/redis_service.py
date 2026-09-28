@@ -407,19 +407,22 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         return 0
     
     @check_db(False)
-    async def scan(self,database:int|str,match:str,redis:Redis=None):
-        cursor = 0
-        keys = []
-        while True:
-            cursor, key = redis.scan(
-                cursor=cursor,
-                match=match,
-                count=500
-            )
-            keys.extend(key)
-            if cursor == 0:
-                break
-        return list(set(keys))
+    async def scan(self,database:int|str,match:str,mode:Literal['scan','keys']='keys',redis:Redis=None):
+        if mode == 'scan':
+            cursor = 0
+            keys = []
+            while True:
+                cursor, key = await redis.scan(
+                    cursor=cursor,
+                    match=match,
+                    count=500
+                )
+                keys.extend(key)
+                if cursor == 0:
+                    break
+            return list(set(keys))
+        else:
+            return await redis.keys(match)
     
     @check_db()
     async def append(self,database:int|str,key:str,data:Any,redis:Redis=None):
@@ -434,8 +437,8 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         return await redis.decrby(name,amount)
 
     @check_db()
-    async def expire(self,database:int|str,hash_name:str,ttl:int,nx=False,redis:Redis=None):
-        return await redis.expire(hash_name,ttl,nx=nx)
+    async def expire(self,database:int|str,hash_name:str,ttl:int,nx:int=False,xx:int=False,redis:Redis=None):
+        return await redis.expire(hash_name,ttl,nx=nx,xx=xx)
     
     @check_db()
     async def hash_kdel(self,database:int|str,hash_name,*keys:str,redis:Redis=None):
@@ -452,6 +455,7 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
 
         value = _serialize_redis_value(value)
         count = await redis.hset(hash_name,key,value)
+        return count
         if count <1:
             raise 
         return count

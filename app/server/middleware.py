@@ -111,6 +111,7 @@ class JWTAuthMiddleware(MiddleWare):
     @ExcludeOn(['/docs/*','/openapi.json'])
     @ExcludeOn(['/link/visits/*','/link/email-track/*'])
     @ExcludeOn(['/auth/login/','/auth/refresh/'])
+    @ExcludeOn(['/auth/recover/'],methods=['POST'])
     async def dispatch(self,  request: Request, call_next: Callable[..., Response]):
         try:  
             token = get_bearer_token_from_request(request)

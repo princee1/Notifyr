@@ -78,6 +78,7 @@ class AuthRessource(BaseHTTPRessource):
     @Throttle(normal=(300,30))
     @UseLimiter('5/day',key_func='ip')
     @UsePipe(auth_state_pipe,before=False)
+    @HTTPStatusCode(status.HTTP_201_CREATED)
     @PingService([TortoiseConnectionService])
     @LockService(TortoiseConnectionService,lockType='reader')
     @LockService(VaultService,SettingService,JWTAuthService,RedisService,lockType='reader')
@@ -102,11 +103,11 @@ class AuthRessource(BaseHTTPRessource):
 
                 await client.verify_recovery_code(credentials.password)
                 await client.verify_login_count(session_id)
-
+                
                 authSignature,session_id = await client.upsert_session(session_id,origin,user_agent)
                 auth_token,refresh_token = await client.generate_access(session_id,authSignature.get('signature',None),ctx=ctx)
 
-                await client.create_recovery_code({})
+                await client.create_recovery_code({'tokens':[],'recovery_id':None})
                 session.login(refresh_token)
 
         if self.configService.SESSION_MECHANISM in VALID_SYNC_MECHANISM:
@@ -158,6 +159,7 @@ class AuthRessource(BaseHTTPRessource):
     @Throttle(normal=(200,70))
     @UseLimiter('5/day',key_func='ip')
     @UsePipe(auth_state_pipe,before=False)
+    @HTTPStatusCode(status.HTTP_201_CREATED)
     @PingService([TortoiseConnectionService])
     @LockService(TortoiseConnectionService,lockType='reader')
     @LockService(VaultService,SettingService,JWTAuthService,RedisService,lockType='reader')

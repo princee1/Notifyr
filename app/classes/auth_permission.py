@@ -183,7 +183,7 @@ class RecoveryTokenGenerator:
             t = self.sep.join([generateId(self.count) for p in range(self.part)])
             yield t
             self.tokens.append(t)
-            asyncio.sleep(self.wait)
+            await asyncio.sleep(self.wait)
 
     def export(self):
         return RecoveryTokens(tokens=self.tokens,recovery_id=self.id)

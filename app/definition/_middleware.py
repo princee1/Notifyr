@@ -46,6 +46,12 @@ def get_url(request:Request):
     url = str(request.url).replace(base_url,"")
     return "/" + url
 
+def method_match(method:str,methods:list[str]):
+    if not methods:
+        return True
+
+    return method in methods
+
 def parse_urls(paths:list[str]):
     temp = []
     for path in paths:
@@ -59,22 +65,21 @@ def parse_urls(paths:list[str]):
             
 
 def ApplyOn(paths:list[str]=['/*'],methods:list[METHODS]=[],bypass:bool = False):
+    if not paths and not methods:
+        raise ValueError('Path and methods cant both be null')
+    
     paths = parse_urls(paths)
-
     def decorator(func:Callable):
 
         @functools.wraps(func)
         async def wrapper(self:MiddleWare,request:Request,call_next:Callable[..., Response]):
 
             if bypass:
-                return await call_next(request)
+                return await func(self,request,call_next)       
             
             url = get_url(request)
 
-            if not path_matcher(paths,url):
-                return await call_next(request)
-
-            if methods and request.method not in methods:
+            if not path_matcher(paths,url) and method_match(request.method,methods):
                 return await call_next(request)
                   
             return await func(self,request,call_next)
@@ -82,21 +87,20 @@ def ApplyOn(paths:list[str]=['/*'],methods:list[METHODS]=[],bypass:bool = False)
     return decorator
 
 def ExcludeOn(paths:list[str]=['/*'],methods:list[METHODS]=[],bypass:bool = False):
-    paths = parse_urls(paths)
+    if not paths and not methods:
+        raise ValueError('Path and methods cant both be null')
 
+    paths = parse_urls(paths)
     def decorator(func:Callable):
         @functools.wraps(func)
         async def wrapper(self:MiddleWare,request:Request,call_next:Callable[..., Response]):
 
             if bypass:
-                return await call_next(request)
+                return await func(self,request,call_next)       
 
             url = get_url(request)
 
-            if not exclude_path_matcher(paths,url):
-                return await call_next(request)
-            
-            if methods and request.method not in methods:
+            if not exclude_path_matcher(paths,url) and method_match(request.method,methods):
                 return await call_next(request)
             
             return await func(self,request,call_next)       
@@ -111,8 +115,7 @@ def OptionsRulesOn(options:list[Callable[[Request],bool]]=[],bypass:bool = False
         async def wrapper(self:MiddleWare,request:Request,call_next:Callable[..., Response]):
 
             if bypass:
-                return await call_next(request)
-
+                return await func(self,request,call_next)
 
             for option in options:
                 if asyncio.iscoroutinefunction(option):

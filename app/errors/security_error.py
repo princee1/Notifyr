@@ -75,9 +75,10 @@ class ClientTokenHeaderNotProvidedError(SecurityBaseError):
 
 
 class AuthzSignatureMisMatchError(SecurityBaseError):
-    def __init__(self, client_id: str):
+    def __init__(self, client_id: str,reason:str=''):
         self.client_id = client_id
-        super().__init__("Authorization signature mismatch", client_id=client_id)
+        self.reason = reason
+        super().__init__("Authorization signature mismatch", client_id=client_id,reason=reason)
 
 
 class PasswordLessAuthTypeStrategyError(SecurityBaseError):
@@ -145,11 +146,12 @@ class IdentityBlacklistedError(SecurityBaseError):
 
 
 class ClientAuthenticationFlagError(SecurityBaseError):
-    def __init__(self, client_id: str, auth_flag_found: bool):
+    def __init__(self, client_id: str, auth_flag_found: bool,source:Literal['refresh','access']):
         self.client_id = client_id
+        self.source = source
         self.auth_flag_found = auth_flag_found
         self.flag_auth_expected = not auth_flag_found
-        super().__init__("Client authentication flag mismatch", client_id=client_id, auth_flag_found=auth_flag_found, flag_auth_expected=self.flag_auth_expected)
+        super().__init__("Client authentication flag mismatch", client_id=client_id, auth_flag_found=auth_flag_found, flag_auth_expected=self.flag_auth_expected,source=source)
 
 class SessionNotValidatedError(SecurityBaseError):
 
@@ -158,6 +160,12 @@ class SessionNotValidatedError(SecurityBaseError):
         self.session = session
         super().__init__('Session Could not be validated',client_id=client_id,session_provided=session)
 
+
+class RequestOriginIsNotValidError(SecurityBaseError):
+
+    def __init__(self, message:str , client_id:str, client_type:str,client_scope:str,issued_for):
+
+        super().__init__('Request origin is not valid', message = message, client_id=client_id, client_type=client_type,client_scope=client_scope,issued_for=issued_for)
 
 class ClientNotAllowedToLoginError(SecurityBaseError):
 

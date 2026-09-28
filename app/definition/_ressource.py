@@ -1026,14 +1026,14 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
         return group_id
 
     def session_key_func(request:Request)->str:
-        return ...
+        clientInfo:ClientAccessInfo = get_client_info(request)
+        return clientInfo['session_id']
     
     def private_key_func(request:Request)->str:
         clientInfo:ClientAccessInfo = get_client_info(request)
         authPermission:AuthPermission = get_auth_permission(request)
         return 'private'
 
-    
     if isinstance(key_func,str):
         match key_func:
             case 'default':

@@ -7,16 +7,16 @@ from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService
 from app.services.setting_service import SettingService
 
-REFRESH_TOKEN_KEY='notifyr_refresh_token'
+REFRESH_TOKEN_KEY='refresh_token'
 REFRESH_PATH ='/auth/'
 
 class AuthSessionManager:
 
-    def __init__(self,request:Request,response:Response,notifyr_refresh_token: str | None = Cookie(default=None)):
+    def __init__(self,request:Request,response:Response,refresh_token: str | None = Cookie(default=None)):
         self.request = request
         self.response = response
 
-        self.notifyr_refresh_token = notifyr_refresh_token
+        self.refresh_token = refresh_token or None
 
         self.settingService = Get(SettingService)
         self.configService = Get(ConfigService)
@@ -43,15 +43,18 @@ class AuthSessionManager:
         
 
     def verify_refresh_token(self,raise_on_expired:bool=True):
-        if self.notifyr_refresh_token == None:
+        if self.refresh_token == None:
             raise SecurityIdentityNotResolvedError(None,'refresh_token not found')
         
-        return self.jwtService.verify_refresh_permission(self.notifyr_refresh_token,raise_on_expired)
+        return self.jwtService.verify_refresh_permission(self.refresh_token,raise_on_expired)
 
     def logout(self):
         self.response.delete_cookie(
             key=REFRESH_TOKEN_KEY,
             path=REFRESH_PATH,
+            httponly=True,
+            secure=self.configService.HTTP_MODE == 'HTTPS',
+            samesite='lax',
         )
 
     def login(self,refresh_token:str):
