@@ -410,10 +410,7 @@ class ClientSecurityHandler(Handler):
         try:
             return await super().handle(function, *args, **kwargs)
         except ProvidedHashNotEquivalentError as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={'message': 'Provided value does not match the expected hash'}
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail=e.detail)
 
         except SessionMechanismOperationError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail=e.detail)

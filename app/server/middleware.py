@@ -146,6 +146,10 @@ class JWTAuthMiddleware(MiddleWare):
                 request.state.clientInfo = clientInfo
                 request.state.authPermission = clientService.authPermission
 
+            response:Response = await call_next(request)
+            response.headers[HTTPHeaderConstant.X_SESSION_ID] = clientInfo['session_id']
+            return response
+
         except HTTPException as e:
             return JSONResponse(e.detail,e.status_code,e.headers)
 
@@ -170,7 +174,6 @@ class JWTAuthMiddleware(MiddleWare):
         except SessionNotValidatedError as e:
             return JSONResponse(e.detail,status_code=status.HTTP_403_FORBIDDEN)
 
-        return await call_next(request)
 class CustomSlowApiMiddleware(SlowAPIMiddleware):
     priority = MiddlewarePriority.LIMITER
 

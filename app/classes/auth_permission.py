@@ -1,4 +1,6 @@
 import asyncio
+import time
+from datetime import datetime
 from typing import Any, Callable, List, Literal,Dict,NotRequired, Optional, Self
 from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
 from typing_extensions import TypedDict
@@ -8,7 +10,7 @@ from app.classes.cost_definition import SimpleTaskCostDefinition
 from .template import Extension
 from app.definition._error import BaseError
 from app.utils.fileIO import is_file
-from app.utils.helper import filter_paths, generateId, subset_model
+from app.utils.helper import filter_paths, generateId, subset_model, uuid_v1_mc
 
 PermissionScope= Literal['custom','all']
 
@@ -167,6 +169,8 @@ class EncryptedRecoveryTokens(TypedDict):
 class RecoveryTokens(TypedDict):
     tokens:List[str]
     recovery_id:str
+    date:str
+    time:float
 
 class RecoveryTokenGenerator:
 
@@ -176,7 +180,7 @@ class RecoveryTokenGenerator:
         self.wait = wait
         self.sep = sep
         self.tokens = []
-        self.id = generateId(12)
+        self.id = uuid_v1_mc()
 
     async def generate(self,token_count=6):
         for _ in range(token_count):
@@ -186,7 +190,7 @@ class RecoveryTokenGenerator:
             await asyncio.sleep(self.wait)
 
     def export(self):
-        return RecoveryTokens(tokens=self.tokens,recovery_id=self.id)
+        return RecoveryTokens(tokens=self.tokens,recovery_id=self.id,time=time.time(),date=datetime.now().isoformat())
 
 class MCPPermissionModel(BaseModel):
     tags:List[str] = Field(default_factory=list, description="List of tags that the user is allowed to access",max_length=20)

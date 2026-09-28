@@ -57,6 +57,7 @@ class HTTPHeaderConstant:
     X_REQUEST_ID='X-Request-ID'
     X_BALANCER_EXCHANGE_TOKEN='X-Balancer-Exchange-Token'
     X_NOTIFYR_APP_INSTANCE_ID='X-NotifyrApp-Instance-ID'
+    X_SESSION_ID='X-Session-ID'
 
 
 class CookieConstant:

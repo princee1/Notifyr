@@ -1,7 +1,7 @@
 from fastapi import Cookie, Request, Response
 from app.classes.auth_permission import AuthState
 from app.container import Get
-from app.errors.security_error import ClientAuthenticationFlagError, SecurityIdentityNotResolvedError, TokenExpiredError
+from app.errors.security_error import ClientAuthenticationFlagError, RefreshTokenIdentityMismatch, SecurityIdentityNotResolvedError, TokenExpiredError
 from app.models.orm.security_model import ClientORM
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService
@@ -30,16 +30,15 @@ class AuthSessionManager:
     def is_client_authenticated(self,clientORM:ClientORM):
         try:
             refresh = self.verify_refresh_token(False)
-            if refresh['status'] != 'expired': # NOTE active or inactive
-                raise ClientAuthenticationFlagError(refresh['client_id'],True)
-            else:
-                if refresh['client_id'] != str(clientORM.client_id):
-                    raise ... 
-                return refresh['session_id']
-        except (ClientAuthenticationFlagError,) as e:
-            raise e
         except:
             return None
+        if refresh['status'] != 'expired': # NOTE active or inactive
+            raise ClientAuthenticationFlagError(refresh['client_id'],True,'refresh')
+        
+        client_id = str(clientORM.client_id)
+        if refresh['client_id'] != client_id:
+            raise RefreshTokenIdentityMismatch(client_id,refresh['client_id'],refresh['session_id'],)
+        return refresh['session_id']
         
 
     def verify_refresh_token(self,raise_on_expired:bool=True):

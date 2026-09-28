@@ -123,9 +123,9 @@ class ClientMiniService(BaseMiniService):
         path = ClientVaultPath.RECOVERY_PATH(self.client_id)
         recovery:EncryptedRecoveryTokens= await RunInThreadPool(self.vaultService.security_engine.read)('clients',path)
         tokens = recovery.get('tokens',[])
-
+        
         if not tokens:
-            raise ProvidedHashNotEquivalentError(code,'Recovery Code Setup')
+            raise ProvidedHashNotEquivalentError('****************','Recovery Code Setup')
 
         for token in tokens:
             try:
@@ -134,7 +134,7 @@ class ClientMiniService(BaseMiniService):
             except:
                 continue
         
-        raise ProvidedHashNotEquivalentError(code,'Recovery Code')
+        raise ProvidedHashNotEquivalentError('****************','Recovery Code')
 
     #######################################################################################################################
     ########################################                                           ####################################

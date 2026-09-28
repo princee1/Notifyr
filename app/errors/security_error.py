@@ -165,7 +165,6 @@ class SessionNotValidatedError(SecurityBaseError):
 class RequestOriginIsNotValidError(SecurityBaseError):
 
     def __init__(self, message:str , client_id:str, client_type:str,client_scope:str,issued_for):
-
         super().__init__('Request origin is not valid', message = message, client_id=client_id, client_type=client_type,client_scope=client_scope,issued_for=issued_for)
 
 class ClientNotAllowedToLoginError(SecurityBaseError):
@@ -199,3 +198,8 @@ class SessionMechanismOperationError(SecurityBaseError):
         self.reason = reason
         self.mechanism = mechanism
         super().__init__('Session Mechanism Operation Error',reason=reason,mechanism=mechanism)
+
+
+class RefreshTokenIdentityMismatch(SecurityBaseError):
+    def __init__(self,client_id:str,refresh_client_id:str,session_id:str):
+        super().__init__('Refresh Token Identity Mismatch',client_id=client_id,refresh_client_id=refresh_client_id,session_id=session_id)

@@ -74,10 +74,10 @@ class AuthRessource(BaseHTTPRessource):
             encrypted_code,salt = await client.encrypt_password(token)
             tokens.append(Credentials(password=encrypted_code,salt=salt))
 
-        encrypted_token = EncryptedRecoveryTokens(tokens=tokens,recovery_id=recovery.id)
+        encrypted_token = recovery.export()
         await client.create_recovery_code(encrypted_token)
 
-        return recovery.export()
+        return encrypted_token
 
     @Throttle(normal=(300,30))
     @UseLimiter('5/day',key_func='ip')
@@ -111,7 +111,7 @@ class AuthRessource(BaseHTTPRessource):
                 authSignature,session_id = await client.upsert_session(session_id,origin,user_agent)
                 auth_token,refresh_token = await client.generate_access(session_id,authSignature.get('signature',None),ctx=ctx)
 
-                await client.create_recovery_code({'tokens':[],'recovery_id':None})
+                await client.create_recovery_code(RecoveryTokenGenerator().export())
                 session.login(refresh_token)
 
         if self.configService.SESSION_MECHANISM in VALID_SYNC_MECHANISM:
@@ -121,7 +121,6 @@ class AuthRessource(BaseHTTPRessource):
 
     @Throttle(uniform=(100,250))
     @UseLimiter('5/day',key_func='ip')
-    @UseHandler(refresh_logout_handler)
     @UsePipe(auth_state_pipe,before=False)
     @PingService([TortoiseConnectionService])
     @UseHandler(ORMCacheHandler,MiniServiceHandler,ClientSecurityHandler,RedisHandler,ClientHandler)
