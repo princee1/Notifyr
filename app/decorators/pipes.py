@@ -866,21 +866,21 @@ class SanitizePathParameterPipe(Pipe):
             text = text.replace(' ','')
         return text
 
-    async def pipe(self,service:str=None,agent:str=None,profile:str=None,template:str=None,client:str=None,session:str=None):
+    async def pipe(self,service:str=None,agent:str=None,profile:str=None,template:str=None,client:str=None,session_id:str=None):
         data = {}
-        if service != None:
-            data['service'] = self.sanitize(service)
-        if agent != None:
-            data['agent'] = self.sanitize(agent)
-        if profile != None:
-            data['profile'] = self.sanitize(profile)
-        if template!=None:
-            data['template'] = self.sanitize(template)
-        if client != None:
-            data['client'] = self.sanitize(client)
         
-        if session != None:
-            data['session'] = self.sanitize(session)
+        if service != None and self.service:
+            data['service'] = self.sanitize(service)
+        if agent != None and self.agent:
+            data['agent'] = self.sanitize(agent)
+        if profile != None and self.profile:
+            data['profile'] = self.sanitize(profile)
+        if template!=None and self.template:
+            data['template'] = self.sanitize(template)
+        if client != None and self.client:
+            data['client'] = self.sanitize(client)
+        if session_id != None and self.session:
+            data['session_id'] = self.sanitize(session_id)
         
         return data
 

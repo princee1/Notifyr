@@ -16,7 +16,7 @@ from app.depends.dependencies import get_auth_permission, get_client_info, get_c
 from app.depends.funcs_dep import get_client_from_info
 from app.depends.variables import ScopeMode, SourceMode, _wrap_checker, source_mode_query,scope_mode_query
 from app.errors.depends_error import DataSourceNotSupportedError
-from app.errors.security_error import ClientAuthenticationFlagError, ClientDoesNotExistError, ClientNotAllowedToLoginError, PrimarySessionNotValidatedError, SessionNotValidatedError, TokenExpiredError
+from app.errors.security_error import ClientAuthenticationFlagError, ClientDoesNotExistError, ClientNotAllowedToLoginError, PrimarySessionNotValidatedError, SessionMechanismOperationError, SessionNotValidatedError, TokenExpiredError
 from app.manager.broker_manager import Broker
 from app.manager.session_manager import AuthSessionManager
 from app.models.orm.security_model import ClientORM, UpdateClientModel
@@ -30,6 +30,9 @@ from app.services.setting_service import SettingService
 from app.services.vault_service import VaultService
 from tortoise.expressions import Q
 
+from app.utils.constant import RedisConstant
+from app.utils.toolbox import RunInThreadPool
+
 SessionMode = Literal['public','private']
 session_choices = get_args(SessionMode)
 
@@ -41,13 +44,14 @@ class AuthRessource(BaseHTTPRessource):
     session_mode_query:Callable[[Request],SessionMode] = get_query_params('session','private',False,raise_except=True,checker=_wrap_checker('scope',lambda v: v in session_choices,choices=session_choices)) 
 
     @InjectInMethod()
-    def __init__(self,tortoiseService:TortoiseConnectionService,adminService:AdminService,settingService:SettingService,vaultService:VaultService,configService:ConfigService):
+    def __init__(self,tortoiseService:TortoiseConnectionService,adminService:AdminService,settingService:SettingService,vaultService:VaultService,configService:ConfigService,redisService:RedisService):
         super().__init__(None,None)
 
         self.tortoiseService = tortoiseService
         self.settingService = settingService
         self.adminService = adminService
         self.vaultService = vaultService
+        self.redisService = redisService
         self.configService = configService
 
         self.blacklist_guard = BlacklistClientGuard()
@@ -245,11 +249,11 @@ class AuthRessource(BaseHTTPRessource):
         return {'client':info,'policies':policies}
 
     @Throttle(normal=(300,30))
-    @UsePermission(UserPermission)
     @UseHandler(MiniServiceHandler)
     @UseLimiter('1/hour',key_func='client')
     @UseInterceptor(InvalidBlacklistTokenInterceptor)
     @UsePipe(ObjectRelationalFriendlyPipe,before=False)
+    @UsePermission(JWTRouteHTTPPermission,UserPermission)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @UseGuard(ClientAuthTypeGuard(accept_access=True, accept_api=False),BlacklistClientGuard)
     @LockService(VaultService,SettingService,AdminService,as_manager=True,lockType='reader',miniLockType='reader')
@@ -263,6 +267,7 @@ class AuthRessource(BaseHTTPRessource):
         updateClient.policies = None
         return await ClientRessource.update_client(request,response,updateClient,broker,client,None,authPermission,clientInfo)
 
+
     if Get(ConfigService).SESSION_MECHANISM != 'none':
 
         @UseRoles([Role.ADMIN])
@@ -271,32 +276,49 @@ class AuthRessource(BaseHTTPRessource):
         @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
         @LockService(VaultService,SettingService,lockType='reader')
         @UseHandler(MiniServiceHandler,ClientSecurityHandler,ClientHandler)
-        @UseGuard(ClientAuthTypeGuard(accept_access=True, accept_api=False),BlacklistClientGuard,PrimarySessionGuard)
+        @UseGuard(ClientAuthTypeGuard(True,False),BlacklistClientGuard,PrimarySessionGuard)
         @BaseHTTPRessource.HTTPRoute('/session/{session_id:path}',methods=[HTTPMethod.GET])
         async def fetch_session(self,request:Request,response:Response,client:Annotated[ClientMiniService,Depends(get_client_info)],session_id:str='',source:SourceMode=Depends(source_mode_query),profile:str=Depends(get_client_from_info),clientInfo:ClientAccessInfo=Depends(get_client_info),authPermission:AuthPermission=Depends(get_auth_permission)):
             res = {}
             match source:
                 case 'database':
                     if session_id == '':
-                        path = f"clients/{ClientVaultPath.SESSIONS_VAULT_PATH(client.client_id,'')}"
-                        sessions = self.vaultService.security_engine.list(path)
-                        for s in sessions:
-                            p =  ClientVaultPath.SESSIONS_VAULT_PATH(client.client_id,s)
-                            res[s] = self.vaultService.security_engine.read('clients',p)
-                        return res
+                        match self.configService.SESSION_MECHANISM:
+                            case 'vault+sync':
+                                path = f"clients/{ClientVaultPath.SESSIONS_VAULT_PATH(client.client_id,'')}"
+                                sessions = await RunInThreadPool(self.vaultService.security_engine.list)(path)
+                                for s in sessions:
+                                    p =  ClientVaultPath.SESSIONS_VAULT_PATH(client.client_id,s)
+                                    res[s] =await  RunInThreadPool(self.vaultService.security_engine.read)('clients',p)
+                                return res
+                            case 'redis' | 'redis+sync':
+                                path = ClientVaultPath.SESSIONS_REDIS_PATH(client.client_id,'*')
+                                sessions = await self.redisService.scan(RedisConstant.SECURITY_DB,path)
+                                for s in sessions:
+                                    sid = ClientVaultPath.SESSIONS_FROM_REDIS_PATH(s)
+                                    s = ClientVaultPath.SESSIONS_REDIS_PATH(client.client_id,sid)
+                                    authSignature:AuthSignature =await self.redisService.retrieve(RedisConstant.SECURITY_DB,s)
+                                    res[sid] = authSignature
                     else:
                         p =  ClientVaultPath.SESSIONS_VAULT_PATH(client.client_id,s)
                         res[s] = self.vaultService.security_engine.read('clients',p)
                 case 'memory':
                     async with client.lock('reader'):
                         if session_id == '':
-                            for s in client.sessions.keys():
-                                res[s] = client.sessions[s].to_plain()
+                            match self.configService.SESSION_MECHANISM:
+                                case 'redis+sync' | 'vault+sync':
+                                    for s in client.sessions.keys():
+                                        res[s] = client.sessions[s].to_plain()
+                                case 'redis':
+                                    raise SessionMechanismOperationError('Sessions are not stored in the memor','no-sync')
                         else:
-                            if session_id not in client.sessions:
-                                raise SessionNotValidatedError(client.client_id,session_id)
-
-                            res[session_id] = client.sessions[session_id].to_plain()
+                            match self.configService.SESSION_MECHANISM:
+                                case 'redis+sync' | 'vault+sync':
+                                    if session_id not in client.sessions:
+                                        raise SessionNotValidatedError(client.client_id,session_id)
+                                    res[session_id] = client.sessions[session_id].to_plain()
+                                case 'redis':
+                                    raise SessionMechanismOperationError('Sessions are not stored in the memory','no-sync')
                 case _:
                     raise DataSourceNotSupportedError(source,['database','memory'])
 
@@ -308,7 +330,7 @@ class AuthRessource(BaseHTTPRessource):
         @UsePermission(JWTRouteHTTPPermission,UserPermission)
         @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
         @UseHandler(MiniServiceHandler,ClientSecurityHandler,ClientHandler)
-        @UseGuard(ClientAuthTypeGuard(accept_access=True, accept_api=False),BlacklistClientGuard,PrimarySessionGuard(True))
+        @UseGuard(ClientAuthTypeGuard(True, False),BlacklistClientGuard,PrimarySessionGuard(True))
         @LockService(VaultService,SettingService,AdminService,as_manager=True,lockType='reader',miniLockType='reader')
         @BaseHTTPRessource.HTTPRoute('/session/{session_id:path}',methods=[HTTPMethod.DELETE])
         async def delete_session(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)],client:Annotated[ClientMiniService,Depends(get_client_info)],session_id:str='',profile:str=Depends(get_client_from_info),clientInfo:ClientAccessInfo=Depends(get_client_info),authPermission:AuthPermission=Depends(get_auth_permission)):
@@ -319,7 +341,7 @@ class AuthRessource(BaseHTTPRessource):
 
                 await client.revoke_itself()
                 session.update_auth_state(AuthState.SESSION_REVOKED)
-                authSignature:AuthSignature = await client.upsert_session(clientInfo['session_id'],origin,user_agent,False)
+                authSignature,_ = await client.upsert_session(clientInfo['session_id'],origin,user_agent,False)
                 access_token,refresh_token = await client.generate_access(clientInfo['session_id'],authSignature.get('signature',None))
 
                 session.update_auth_state(AuthState.SESSION_REFRESHED)

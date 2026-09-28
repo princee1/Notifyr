@@ -155,10 +155,11 @@ class ClientAuthenticationFlagError(SecurityBaseError):
 
 class SessionNotValidatedError(SecurityBaseError):
 
-    def __init__(self,client_id:str,session:str):
+    def __init__(self,client_id:str,session:str,reason:str=None):
         self.client_id = client_id 
         self.session = session
-        super().__init__('Session Could not be validated',client_id=client_id,session_provided=session)
+        self.reason = reason
+        super().__init__('Session Could not be validated',client_id=client_id,session_provided=session,reason=reason)
 
 
 class RequestOriginIsNotValidError(SecurityBaseError):
@@ -190,3 +191,11 @@ class MaximumSessionReachedError(SecurityBaseError):
         self.session_id = session_id 
         self.max_session_allowed = max_session_allowed
         super().__init__('Maximum session reached', client_id=client_id,session_id =session_id,max_session_allowed=max_session_allowed)
+
+
+class SessionMechanismOperationError(SecurityBaseError):
+
+    def __init__(self,reason:str,mechanism:str):
+        self.reason = reason
+        self.mechanism = mechanism
+        super().__init__('Session Mechanism Operation Error',reason=reason,mechanism=mechanism)

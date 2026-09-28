@@ -406,7 +406,7 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
             return await redis.delete(*keys)
         return 0
     
-    @check_db(False)
+    @check_db()
     async def scan(self,database:int|str,match:str,mode:Literal['scan','keys']='keys',redis:Redis=None):
         if mode == 'scan':
             cursor = 0

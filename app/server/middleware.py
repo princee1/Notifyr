@@ -109,9 +109,9 @@ class JWTAuthMiddleware(MiddleWare):
     @BypassOn(configService.AUTH_MECHANISM != 'userpass')
     @ExcludeOn(['/','/contacts/manage/*'])
     @ExcludeOn(['/docs/*','/openapi.json'])
-    @ExcludeOn(['/link/visits/*','/link/email-track/*'])
     @ExcludeOn(['/auth/login/','/auth/refresh/'])
     @ExcludeOn(['/auth/recover/'],methods=['POST'])
+    @ExcludeOn(['/link/visits/*','/link/email-track/*'])
     async def dispatch(self,  request: Request, call_next: Callable[..., Response]):
         try:  
             token = get_bearer_token_from_request(request)

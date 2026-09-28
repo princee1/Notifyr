@@ -1,6 +1,7 @@
 from typing import Self, Type, List, Dict, Any, Optional, TypedDict
-from app.classes.auth_permission import AuthPermission, FuncMetaData
+from app.classes.auth_permission import AuthPermission, ClientAccessInfo, FuncMetaData
 from app.classes.cost_definition import Bill, BillItem, SimpleTaskCostDefinition, TaskCostDefinition
+from app.depends.dependencies import get_client_info
 from app.services.cost_service import CostService
 from app.container import Get
 from app.utils.helper import PointerIterator
@@ -23,11 +24,13 @@ class Cost:
     
     if APP_MODE == ApplicationMode.server:
         
-        def __init__(self,request_id: str=Depends(get_request_id),authPermission:AuthPermission|None=Depends(get_auth_permission)):
-            if authPermission == None:
+        def __init__(self,request_id: str=Depends(get_request_id),clientInfo:ClientAccessInfo|None=Depends(get_client_info)):
+            if clientInfo == None:
                 username='default'
             else:
-                username = authPermission['client_username']
+                #username = authPermission['client_username']
+                username = clientInfo["client_id"]
+
             self.__inner__init__(request_id,username)
 
         @staticmethod

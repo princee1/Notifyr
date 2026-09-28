@@ -33,7 +33,7 @@ from app.errors.service_error import MiniServiceAlreadyExistsError,MiniServiceDo
 from app.errors.async_error import KeepAliveTimeoutError, LockNotFoundError, ReactiveSubjectNotFoundError
 from app.errors.contact_error import ContactAlreadyExistsError, ContactMissingInfoKeyError, ContactNotExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
 from app.errors.properties_error import GlobalKeyAlreadyExistsError, GlobalKeyDoesNotExistsError
-from app.errors.security_error import ClientAlreadyExistError, ClientAuthenticationFlagError, ClientNotAllowedToLoginError, IdentityAlreadyBlacklistedError, AuthzSignatureMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupDoesNotExistError, GroupIdNotMatchError, IdentityBlacklistedError, JWTInvalidTokenError, MaximumSessionReachedError, MaximumSessionReachedError, PrimarySessionNotValidatedError, ProvidedHashNotEquivalentError, RequestOriginIsNotValidError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError, SessionNotValidatedError, TokenDataMissingError, TokenExpiredError, TokenGenerationMismatchError
+from app.errors.security_error import ClientAlreadyExistError, ClientAuthenticationFlagError, ClientNotAllowedToLoginError, IdentityAlreadyBlacklistedError, AuthzSignatureMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupDoesNotExistError, GroupIdNotMatchError, IdentityBlacklistedError, JWTInvalidTokenError, MaximumSessionReachedError, MaximumSessionReachedError, PrimarySessionNotValidatedError, ProvidedHashNotEquivalentError, RequestOriginIsNotValidError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError, SessionMechanismOperationError, SessionNotValidatedError, TokenDataMissingError, TokenExpiredError, TokenGenerationMismatchError
 from app.errors.twilio_error import TwilioCallBusyError, TwilioCallFailedError, TwilioCallNoAnswerError, TwilioPhoneNumberParseError
 from app.classes.profiles import ProfileModelRequestBodyError, ProfileDoesNotExistsError, ProfileHasNotCapabilitiesError, ProfileModelTypeDoesNotExistsError, ProfileNotAvailableError, ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
 from app.services.assets_service import AssetConfusionError, AssetNotFoundError, AssetTypeNotAllowedError, AssetTypeNotFoundError
@@ -415,6 +415,9 @@ class ClientSecurityHandler(Handler):
                 detail={'message': 'Provided value does not match the expected hash'}
             )
 
+        except SessionMechanismOperationError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail=e.detail)
+        
         except CouldNotCreateRefreshTokenError as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
                 'message': 'Could not create refresh token'
@@ -758,10 +761,10 @@ class VaultHandler(Handler):
             raise HTTPException(500,detail={'message':f'invalid request at vault {e}'})
 
         except hvac.exceptions.Forbidden as e:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':str(e)})
 
         except hvac.exceptions.Unauthorized as e:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail={'message':str(e)})
 
         except requests.exceptions.ReadTimeout:
             raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT,detail="Vault server did not respond in time")

@@ -72,7 +72,7 @@ async def main():
     await tortoiseService.init_connection()
 
     admin_info = admin.model_dump(mode='python',exclude={'password',})
-    clientORM = security.ClientORM(client_type=ClientType.Admin,max_connection=2,can_login=True,client_description='Admin Account',**admin_info)
+    clientORM = security.ClientORM(client_type=ClientType.Admin,max_connection=1,can_login=True,client_description='Admin Account',**admin_info)
 
     client = InjectInMiniService(ClientMiniService,client=clientORM,policies=[])
     encrypted_password,salt = await client.encrypt_password(admin.password.get_secret_value())
