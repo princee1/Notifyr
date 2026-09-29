@@ -36,7 +36,7 @@ from app.services.security_service import JWTAuthService
 from app.definition._utils_decorator import Pipe
 from app.ntfr_tasks import TASK_REGISTRY, task_name
 from app.services.worker.arq_service import ArqIngestTaskService
-from app.utils.constant import GraphitiConstant, SpecialKeyAttributesConstant
+from app.utils.constant import GraphitiConstant, HTTPHeaderConstant, SpecialKeyAttributesConstant
 from app.utils.helper import DICT_SEP, AsyncAPIFilterInject, PointerIterator, SliceMode, copy_response, issubclass_of, parseToBool, slice_dict
 from app.utils.validation import email_validator, phone_number_validator
 from app.depends.orm_cache import ContactSummaryORMCache
@@ -918,5 +918,6 @@ async def refresh_logout_handler(func,*args,**kwargs):
             session.logout()
         raise e
 
-async def auth_state_pipe(result:Any,session:AuthSessionManager,request:Request,response:Response):
+async def auth_state_pipe(result:Any,session:AuthSessionManager,request:Request):
+    request.headers[HTTPHeaderConstant.X_AUTH_STATE] = session.authState.value
     return result

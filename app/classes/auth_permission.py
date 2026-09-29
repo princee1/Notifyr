@@ -62,10 +62,14 @@ class AuthType(Enum):
     API_TOKEN = 'API_TOKEN'
 
 class AuthState(Enum):
-    LOGOUT_BY_REFRESH='logout-by-refresh'
-    AUTH_BY_REFRESH='auth-by-refresh'
-    SESSION_REVOKED='session-revoked'
-    SESSION_REFRESHED='session-refreshed'
+    LOGOUT_BY_REFRESH = 'logout-by-refresh'
+    AUTH_BY_REFRESH = 'auth-by-refresh'
+    LOGIN_BY_RECOVERY = 'login-by-recovery'
+    SESSION_REVOKED = 'session-revoked'
+    SESSION_REFRESHED = 'session-refreshed'
+    PUBLIC_LOGIN = 'public-login'
+    LOGOUT ='logout'
+    LOGIN = 'login'
 
 class AuthSignature(TypedDict):
     signature:str
@@ -165,12 +169,11 @@ class Credentials(TypedDict):
 class EncryptedRecoveryTokens(TypedDict):
     tokens:List[Credentials]
     recovery_id:str
-
-class RecoveryTokens(TypedDict):
-    tokens:List[str]
-    recovery_id:str
     date:str
     time:float
+
+class RecoveryTokens(EncryptedRecoveryTokens):
+    tokens:List[str]
 
 class RecoveryTokenGenerator:
 
@@ -180,7 +183,7 @@ class RecoveryTokenGenerator:
         self.wait = wait
         self.sep = sep
         self.tokens = []
-        self.id = uuid_v1_mc()
+        self.id = str(uuid_v1_mc())
 
     async def generate(self,token_count=6):
         for _ in range(token_count):
@@ -189,8 +192,8 @@ class RecoveryTokenGenerator:
             self.tokens.append(t)
             await asyncio.sleep(self.wait)
 
-    def export(self):
-        return RecoveryTokens(tokens=self.tokens,recovery_id=self.id,time=time.time(),date=datetime.now().isoformat())
+    def export(self,tokens=[])->EncryptedRecoveryTokens | RecoveryTokens:
+        return RecoveryTokens(tokens=tokens or self.tokens,recovery_id=self.id,time=time.time(),date=datetime.now().isoformat())
 
 class MCPPermissionModel(BaseModel):
     tags:List[str] = Field(default_factory=list, description="List of tags that the user is allowed to access",max_length=20)

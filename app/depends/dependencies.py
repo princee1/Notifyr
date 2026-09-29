@@ -52,22 +52,6 @@ def get_client_ip(request: Request) -> str:
 def get_balancer_ip(request: Request) -> str:
     return request.client.host
 
-
-def get_response_id(r:Response = None)-> str | None:
-
-    try:
-        if r:
-            return r.headers[HTTPHeaderConstant.REQUEST_ID]
-        return APIKeyHeader(name=HTTPHeaderConstant.REQUEST_ID)
-    except KeyError as e:
-        return None
-
-
-def get_api_key(request: Request=None) -> str:
-    if request:
-        return request.headers.get(HTTPHeaderConstant.API_KEY_HEADER)
-    return APIKeyHeader(name=HTTPHeaderConstant.API_KEY_HEADER)
-
 def get_bearer_token(credentials: Annotated[HTTPAuthorizationCredentials, Depends(HTTPBearer())]) -> str:
     # if isinstance(credentials,Request):
     #     return credentials.headers['Authorization'].replace('Bearer ','')
@@ -78,7 +62,6 @@ def get_bearer_token_from_request(request: Request):
         return request.headers['Authorization'].replace('Bearer ', '')
     except KeyError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization header missing")
-
 
 def get_auth_permission(request: Request):
     if configService.AUTH_MECHANISM != 'userpass':
@@ -92,13 +75,6 @@ def wrapper_auth_permission(request:Request):
         return get_auth_permission(request)
     except:
         return None
-
-async def get_client_from_request(request:Request):
-    if configService.AUTH_MECHANISM != 'userpass':
-        return None
-    if not hasattr(request.state, "client") or request.state.client is None:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    return request.state.client
 
 def is_mcp_request(request:Request):
     return getattr(request.state,'from_mcp_user',False)
@@ -130,6 +106,9 @@ def get_contact_token():
     return APIKeyHeader(name=HTTPHeaderConstant.CONTACT_TOKEN)
 
 def get_client_info(request:Request):
+    if configService.AUTH_MECHANISM != 'userpass':
+        return None
+
     if not hasattr(request.state, "clientInfo") or request.state.clientInfo is None:
         raise HTTPException(status_code=401, detail="Unauthorized")
     return request.state.clientInfo

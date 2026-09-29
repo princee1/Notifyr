@@ -74,10 +74,9 @@ class AuthRessource(BaseHTTPRessource):
             encrypted_code,salt = await client.encrypt_password(token)
             tokens.append(Credentials(password=encrypted_code,salt=salt))
 
-        encrypted_token = recovery.export()
-        await client.create_recovery_code(encrypted_token)
+        await client.create_recovery_code(recovery.export(tokens))
 
-        return encrypted_token
+        return recovery.export()
 
     @Throttle(normal=(300,30))
     @UseLimiter('5/day',key_func='ip')
@@ -113,6 +112,7 @@ class AuthRessource(BaseHTTPRessource):
 
                 await client.create_recovery_code(RecoveryTokenGenerator().export())
                 session.login(refresh_token)
+                session.update_auth_state(AuthState.LOGIN_BY_RECOVERY)
 
         if self.configService.SESSION_MECHANISM in VALID_SYNC_MECHANISM:
             broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))
@@ -194,6 +194,10 @@ class AuthRessource(BaseHTTPRessource):
                 
                 if mode == 'private':
                     session.login(refresh_token)
+                    session.update_auth_state(AuthState.LOGIN)
+
+                else:
+                    session.update_auth_state(AuthState.PUBLIC_LOGIN)
         
         if self.configService.SESSION_MECHANISM in VALID_SYNC_MECHANISM:
             broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))
@@ -217,6 +221,7 @@ class AuthRessource(BaseHTTPRessource):
         async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
             if scope == 'single':
                 await client.revoke_itself(ctx,clientInfo['session_id'])
+
             else:
                 session.verify_refresh_token(False)
                 if not await client.is_primary_session(clientInfo['session_id']):
@@ -225,6 +230,7 @@ class AuthRessource(BaseHTTPRessource):
                 await client.revoke_itself(ctx)
 
             request.state.clear = True
+            session.update_auth_state(AuthState.LOGOUT)
             session.logout()
 
         if self.configService.SESSION_MECHANISM in VALID_SYNC_MECHANISM:
@@ -353,6 +359,7 @@ class AuthRessource(BaseHTTPRessource):
             else:
                 await client.revoke_itself(session_id=session_id)
                 response.status_code = status.HTTP_204_NO_CONTENT
+                session.update_auth_state(AuthState.SESSION_REVOKED)
 
             if self.configService.SESSION_MECHANISM in VALID_SYNC_MECHANISM:
                 broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))

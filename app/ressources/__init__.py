@@ -36,11 +36,10 @@ SERVER_RESSOURCES:list[Type[BaseHTTPRessource]] = [
                                                  ProfilRessource,
                                                  CostRessource,
                                                  CeleryRessource]
-if configService.AUTH_MECHANISM != 'none':
-    SERVER_RESSOURCES.append(AdminRessource)
-
 if configService.AUTH_MECHANISM == 'userpass':
+    SERVER_RESSOURCES.append(AdminRessource)
     SERVER_RESSOURCES.append(AuthRessource)
+
 
 if CAPABILITIES['object']:
     from .object_s3_ressource import S3ObjectRessource
