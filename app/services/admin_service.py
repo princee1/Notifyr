@@ -180,7 +180,8 @@ class ClientMiniService(BaseMiniService):
                 
             case 'redis' | 'redis+sync':
                 path = ClientVaultPath.SESSIONS_REDIS_PATH(self.client_id,session_id)
-                await self.redisService.store(RedisConstant.SECURITY_DB,path,authSignature,60*60*24*12)
+                expire = 0 if self.client.auth_type == AuthType.API_TOKEN else 60*60
+                await self.redisService.store(RedisConstant.SECURITY_DB,path,authSignature,expire)
 
         return authSignature,session_id
     

@@ -30,6 +30,9 @@ import os
 import hmac
 import hashlib
 from app.services.vault_service import VaultService
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM, ChaCha20Poly1305
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 
 SEPARATOR = "|"
@@ -69,6 +72,8 @@ class EncryptDecryptInterface(Interface):
     def salt(self):
         return generate_salt()
 
+DEFAULT_JWT_ALGORITHM = 'HS256'
+
 
 @Service()
 class JWTAuthService(BaseService, EncryptDecryptInterface):
@@ -83,6 +88,8 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
         self.fileService = fileService
         self.settingService = settingService
         self.vaultService = vaultService
+        self._jwt_algorithm = self.configService.getenv("JWT_ALGORITHM",DEFAULT_JWT_ALGORITHM)
+
 
     def encode_auth_token(self,signature:str,session_id:str, client_id:str,auth_type:AuthType,)->str:
         try:
@@ -153,9 +160,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
             if lookup:
                 secret_key = self.vaultService.tokens.get(secret_key,self.vaultService.JWT_SECRET_KEY)
 
-        encoded = jwt.encode(obj, secret_key, algorithm=self.vaultService.JWT_ALGORITHM)
-        token = self._encode_value(encoded, self.vaultService.ON_TOP_SECRET_KEY,wrapper=wrapper)
-        return token
+        return jwt.encode(obj, secret_key, algorithm=self._jwt_algorithm)
 
     #@cached(TTLCache(50,60*60*3))
     def _decode_token(self, token: str, secret_key: str = None,wrapper=False) -> dict:
@@ -165,8 +170,7 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
             else:
                 secret_key = self.vaultService.tokens.get(secret_key, self.vaultService.JWT_SECRET_KEY)
 
-            token = self._decode_value(token, self.vaultService.ON_TOP_SECRET_KEY,wrapper=wrapper)
-            decoded = jwt.decode(token, secret_key,algorithms=self.vaultService.JWT_ALGORITHM)
+            decoded = jwt.decode(token, secret_key,algorithms=self._jwt_algorithm)
             return decoded
 
         except jwt.InvalidSignatureError as e:
@@ -252,6 +256,9 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
     def GENERATION_METADATA(self)->dict:
         return self.generation_id_data.get('metadata',{})
 
+
+EncryptionAlgorithm = Literal['']
+
 @Service()
 class SecurityService(BaseService, EncryptDecryptInterface):
     NONCE="1234567891234578"
@@ -289,7 +296,7 @@ class SecurityService(BaseService, EncryptDecryptInterface):
             print(e)
             raise BuildWarningError()
 
-    def hash(self, value:str, key:str, salt:bytes|str=None,algorithm=None):
+    def hash(self, value:str, key:str=None, salt:bytes|str=None,algorithm=None):
         if salt == None:
             salt = generateId(8)
             salt = salt.encode()
@@ -307,9 +314,19 @@ class SecurityService(BaseService, EncryptDecryptInterface):
             raise ProvidedHashNotEquivalentError(provided_hash,'hashed value')
         return True
 
-    def simple_hash(self,value:str):
-        return
-    
-    def verify_admin_signature(self,):
-        ...
-    
+    def encrypt(self,value:str,key:str,algorithm:EncryptionAlgorithm=''):
+        if (key:= self.vaultService.tokens.get(key,None)) == None:
+            raise KeyError('Key does not exist')
+
+        salt = ...
+        encrypted_value = ...
+
+        return f"notifyr:v1:{salt}:{encrypted_value}"
+
+    def decrypt(self,value:str,key:str,algorithm:EncryptionAlgorithm='')->str:
+        if (key:= self.vaultService.tokens.get(key,None)) == None:
+            raise KeyError('Key does not exist')
+        
+        scheme,version,salt,encrypted_value = value
+        decrypted_value = ...
+        return decrypted_value

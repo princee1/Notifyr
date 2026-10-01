@@ -410,9 +410,11 @@ class AdminRessource(BaseHTTPRessource):
             session_id = str(uuid_v1_mc())
             (authSignature,_)= await client.upsert_session(session_id,_check_=False)
             api_token,_ = await client.generate_access(session_id,authSignature.get('signature',None))
+            api_token = self.securityService.encrypt(api_token,'ON_TOP_SECRET_KEY')
 
         if self.configService.SESSION_MECHANISM in VALID_SYNC_MECHANISM:
-            broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))
+            broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id))
+        
         return api_token
         
     #######################################################################################################################################

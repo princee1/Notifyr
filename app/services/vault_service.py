@@ -16,7 +16,6 @@ from datetime import datetime
 
 from app.utils.helper import cron_interval, time_until_next_tick
 
-DEFAULT_JWT_ALGORITHM = 'HS256'
 
 class VaultTokenMeta(TypedDict):
     renewable: bool
@@ -55,7 +54,6 @@ class VaultService(BaseService,SchedulerInterface):
         self.workerService = workerService
         self.fileService = fileService
         SchedulerInterface.__init__(self,replace_existing=True,thread_pool_count=1)
-        self._jwt_algorithm = self.configService.getenv("JWT_ALGORITHM",DEFAULT_JWT_ALGORITHM)
         self.delay = IntervalParams(
             seconds=VaultTTLSyncConstant.SECRET_ID_ROTATION*.75
         )
@@ -214,7 +212,7 @@ class VaultService(BaseService,SchedulerInterface):
             ...
 
     def renew_lease(self,lease_id,increment):
-        ...
+        return self.client.sys.renew_lease(lease_id,increment)
 
     def revoke_lease(self,lease_id:str):
         try:
@@ -231,10 +229,6 @@ class VaultService(BaseService,SchedulerInterface):
     def JWT_SECRET_KEY(self):
         return self.tokens.get('JWT_SECRET_KEY',None)
    
-    @property
-    def JWT_ALGORITHM(self):
-        return self._jwt_algorithm
-
     @property
     def ON_TOP_SECRET_KEY(self):
         token = self.tokens.get('ON_TOP_SECRET_KEY',None)

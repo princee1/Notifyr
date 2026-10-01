@@ -279,7 +279,7 @@ def generate_profil_model_ressource(model:Type[BaseProfileModel],path:str):
 @LockService(MongooseService,lockType='reader')
 @UseHandler(ServiceAvailabilityHandler,AsyncIOHandler,ProfileHandler)
 @HTTPRessource(PROFILE_PREFIX,[generate_profil_model_ressource(model,name) for name,model  in ProfilModelValues.items()])
-class ProfilRessource(BaseHTTPRessource):
+class ProfileRessource(BaseHTTPRessource):
     
     @InjectInMethod()
     def __init__(self,mongooseService:MongooseService):

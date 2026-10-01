@@ -59,6 +59,7 @@ class HTTPHeaderConstant:
     X_NOTIFYR_APP_INSTANCE_ID='X-NotifyrApp-Instance-ID'
     X_SESSION_ID='X-Session-ID'
     X_AUTH_STATE = 'X-Auth-State'
+    X_AUTH_TYPE= 'X-Auth-Type'
 
 
 class CookieConstant:

@@ -48,33 +48,6 @@ RUN apk add --no-cache \
 # Create Vault config directories
 RUN mkdir -p /vault/config /vault/data /vault/logs /vault/shared /vault/api-key /vault/secrets /home/vaultuser /vault/cron/
 
-# Vault config
-RUN cat <<EOF > /vault/config/vault.hcl
-ui = true
-disable_mlock = true
-
-storage "raft" {
-  path    = "/vault/data"
-  node_id = "vault-node-1"
-}
-
-listener "tcp" {
-  address     = "0.0.0.0:8200"
-  cluster_address = "127.0.0.1:8201"
-  tls_disable = "true"
-}
-
-api_addr     = "http://127.0.0.1:8200"
-cluster_addr = "http://127.0.0.1:8201"
-
-audit "file" {
-  path   = "/vault/logs/audit.log"
-  format = "json"
-}
-
-plugin_directory = "/etc/vault/plugins"
-EOF
-
 ##############################################################################################################
 ##############################################################################################################
 
@@ -119,7 +92,8 @@ RUN chmod 770 /usr/local/bin/*-rotator.sh
 
 COPY --chown=vaultuser:vaultuser ./.notifyr/settings_db.json ./vault/config/settings_db.json
 
-COPY --chown=vaultuser:vaultuser ./conf/vault/ /vault/policies/
+COPY --chown=vaultuser:vaultuser ./conf/vault/policies/ /vault/policies/
+COPY --chown=vaultuser:vaultuser ./conf/vault/vault-config.hcl  /vault/config/vault.hcl
 
 # Copy scripts with correct permissions
 COPY --chmod=700 ./scripts/db-init/vault-init.sh /usr/local/bin/vault-init.sh

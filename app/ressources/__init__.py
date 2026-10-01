@@ -19,7 +19,7 @@ from .link_ressource import LinkRessource
 from .ping_pong_ressource import PingPongRessource
 from .properties_ressource import PropertiesRessource
 from .analytics_ressource import AnalyticsRessource
-from .profile_ressource import ProfilRessource
+from .profile_ressource import ProfileRessource
 from .cost_ressource import CostRessource
 from .worker.celery_ressource import CeleryRessource
 from app.definition._ressource import BaseHTTPRessource
@@ -33,7 +33,7 @@ SERVER_RESSOURCES:list[Type[BaseHTTPRessource]] = [
                                                  PingPongRessource,
                                                  PropertiesRessource,
                                                  AnalyticsRessource,
-                                                 ProfilRessource,
+                                                 ProfileRessource,
                                                  CostRessource,
                                                  CeleryRessource]
 if configService.AUTH_MECHANISM == 'userpass':

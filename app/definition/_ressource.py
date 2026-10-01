@@ -563,6 +563,11 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
         def decorator(func:Callable):
             return func
         return decorator
+    
+    if Get(ConfigService).AUTH_MECHANISM != 'userpass':
+        def decorator(func:Callable):
+            return func
+        return decorator
 
     empty_decorator = len(permission_function) == 0
     if empty_decorator:

@@ -1,6 +1,6 @@
 from uuid import uuid4
 from fastapi.responses import JSONResponse
-from app.classes.auth_permission import AuthPermission, ClientAccessInfo, ClientType, filter_asset_permission, parse_authPermission_enum
+from app.classes.auth_permission import AuthPermission, AuthType, ClientAccessInfo, ClientType, filter_asset_permission, parse_authPermission_enum
 from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE
 from app.definition._ressource import HTTPMethod
 from app.depends.orm_cache import BlacklistClientCache, BlacklistGroupCache
@@ -16,6 +16,7 @@ from fastapi import HTTPException, Request, Response,status
 from slowapi.middleware import SlowAPIMiddleware
 from typing import Callable
 import time
+from app.services.vault_service import VaultService
 from app.utils.constant import HTTPHeaderConstant, MonitorConstant
 from app.depends.dependencies import get_client_ip,get_bearer_token_from_request
     
@@ -105,6 +106,8 @@ class JWTAuthMiddleware(MiddleWare):
         self.configService: ConfigService = Get(ConfigService)
         self.adminService: AdminService = Get(AdminService)
         self.redisService: RedisService = Get(RedisService)
+        self.securityService:SecurityService = Get(SecurityService)
+        self.vaultService:VaultService = Get(VaultService)
 
     @BypassOn(configService.AUTH_MECHANISM != 'userpass')
     @ExcludeOn(['/','/contacts/manage/*'])
@@ -115,6 +118,9 @@ class JWTAuthMiddleware(MiddleWare):
     async def dispatch(self,  request: Request, call_next: Callable[..., Response]):
         try:  
             token = get_bearer_token_from_request(request)
+            if request.headers.get(HTTPHeaderConstant.X_AUTH_TYPE,None) == AuthType.API_TOKEN:
+                token = self.securityService.decrypt(token,'ON_TOP_SECRET_KEY')
+
             async with self.jwtService.lock('reader'):
                 clientInfo: ClientAccessInfo = self.jwtService.verify_client_token_permission(token)
 
