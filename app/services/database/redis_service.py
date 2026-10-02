@@ -16,6 +16,7 @@ from app.services.config_service import ConfigService, WorkerService
 from app.services.database.base_db_service import BrokerService, CredentialName, ResultBackendService, TempCredentialsDatabaseService
 from app.services.file.file_service import FileService
 from app.services.reactive_service import ReactiveService
+from app.services.timer_service import TimerService
 from app.services.vault_service import VaultService
 from app.utils.constant import HostConstant, RedisConstant, SubConstant, VaultConstant
 from app.utils.globals import APP_MODE, CAPABILITIES, ApplicationMode
@@ -71,8 +72,8 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
 
     GROUP = 'NOTIFYR-GROUP'
     
-    def __init__(self,configService:ConfigService,reactiveService:ReactiveService,vaultService:VaultService,workerService:WorkerService,fileService:FileService):
-        super().__init__(configService,fileService,vaultService,60*60*24*29,)
+    def __init__(self,configService:ConfigService,reactiveService:ReactiveService,vaultService:VaultService,workerService:WorkerService,fileService:FileService,timerService:TimerService):
+        super().__init__(configService,fileService,vaultService,timerService,60*60*24*29,)
         self.configService = configService
         self.reactiveService = reactiveService
         self.workerService = workerService

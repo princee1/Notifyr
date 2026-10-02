@@ -3,6 +3,7 @@ from app.errors.service_error import BuildFailureError, BuildWarningError
 from app.services.config_service import ConfigService
 from app.services.database.base_db_service import BrokerService, TempCredentialsDatabaseService
 from app.services.file.file_service import FileService
+from app.services.timer_service import TimerService
 from app.services.vault_service import VaultService
 from app.utils.constant import RabbitMQConstant
 from app.utils.toolbox import RunInThreadPool
@@ -11,8 +12,8 @@ from app.utils.toolbox import RunInThreadPool
 @Service(links=[LinkDep(VaultService,to_build=True,to_destroy=True)]) 
 class RabbitMQService(TempCredentialsDatabaseService,BrokerService):
     
-    def __init__(self, configService:ConfigService, fileService:FileService, vaultService:VaultService):
-        super().__init__(configService, fileService, vaultService,60*60*24*29)
+    def __init__(self, configService:ConfigService, fileService:FileService, vaultService:VaultService,timerService:TimerService):
+        super().__init__(configService, fileService, vaultService,timerService,60*60*24*29)
     
     def verify_dependency(self):
         if self.configService.CELERY_BROKER_PROVIDER == 'redis':

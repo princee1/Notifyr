@@ -9,9 +9,10 @@ from app.classes.vault_engine import VaultDatabaseCredentials
 from app.definition._service import AbstractServiceClass, BaseService, ServiceStatus
 from app.errors.db_error import VaultCredentialAlreadyExistError, VaultCredentialNameDoesNotExistError
 from app.errors.service_error import BuildFailureError, ServiceTemporaryNotAvailableError
-from app.interface.timers import IntervalParams, SchedulerInterface
+from app.interface.timers import IntervalParams
 from app.services.config_service import ConfigService
 from app.services.file.file_service import FileService
+from app.services.timer_service import TimerService
 from app.services.vault_service import VaultService
 from app.utils.constant import VaultConstant
 from app.utils.globals import APP_MODE
@@ -31,12 +32,12 @@ class DatabaseService(BaseService):
         self.fileService = fileService
 
 @AbstractServiceClass()
-class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
+class TempCredentialsDatabaseService(DatabaseService):
 
-    def __init__(self,configService:ConfigService,fileService:FileService,vaultService:VaultService,ttl,max_retry=2,wait_time=2,t:Literal['constant','linear']='constant',b=0):
+    def __init__(self,configService:ConfigService,fileService:FileService,vaultService:VaultService,timerService:TimerService,ttl,max_retry=2,wait_time=2,t:Literal['constant','linear']='constant',b=0):
         DatabaseService.__init__(self,configService,fileService)
-        SchedulerInterface.__init__(self,replace_existing=True,thread_pool_count=1)
         self.vaultService = vaultService
+        self.timerService = timerService
         self.creds:MultiCredentialsStore = {}
         self.max_retry = max_retry
         self.wait_time = wait_time
@@ -49,7 +50,7 @@ class TempCredentialsDatabaseService(DatabaseService,SchedulerInterface):
     def build(self, build_state = ...):
         if not self.interval_built:
             delay = IntervalParams( seconds=self.random_buffer_interval(self.auth_ttl) )
-            self.interval_schedule(delay, self.creds_rotation,tuple(),{},f"{self.name}-[{APP_MODE}]-creds_rotation")
+            self.timerService.interval_schedule(delay, self.creds_rotation,tuple(),{},f"{self.name}-[{APP_MODE}]-creds_rotation")
             self.interval_built = True
         
 

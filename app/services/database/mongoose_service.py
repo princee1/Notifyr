@@ -11,6 +11,7 @@ from beanie import Document, PydanticObjectId, init_beanie
 from app.services.config_service import ConfigService
 from app.services.database.base_db_service import CredentialName, TempCredentialsDatabaseService
 from app.services.file.file_service import FileService
+from app.services.timer_service import TimerService
 from app.services.vault_service import VaultService
 from app.utils.constant import AgenticConstant, HostConstant, MongooseDBConstant, VaultConstant, VaultTTLSyncConstant
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -86,8 +87,9 @@ class MongooseService(TempCredentialsDatabaseService):
         configService: ConfigService,
         fileService: FileService,
         vaultService: VaultService,
+        timerService:TimerService
     ):
-        super().__init__(configService, fileService,vaultService,VaultTTLSyncConstant.MONGODB_AUTH_TTL)
+        super().__init__(configService, fileService,vaultService,timerService,VaultTTLSyncConstant.MONGODB_AUTH_TTL)
 
         self.client_store = MongoClientStore()
         self._documents = []

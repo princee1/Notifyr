@@ -14,6 +14,7 @@ from app.errors.service_error import BuildFailureError
 from app.services.config_service import ConfigService
 from app.services.database.base_db_service import CredentialName, TempCredentialsDatabaseService
 from app.services.file.file_service import FileService
+from app.services.timer_service import TimerService
 from app.services.vault_service import VaultService
 from app.utils.constant import HostConstant, PostgresConstant, VaultConstant, VaultTTLSyncConstant
 from app.utils.toolbox import RunInThreadPool
@@ -75,8 +76,8 @@ class TortoiseContextStore:
 @Service(links=[LinkDep(VaultService,to_build=True,to_destroy=True)])
 class TortoiseConnectionService(TempCredentialsDatabaseService):
 
-    def __init__(self, configService: ConfigService,vaultService:VaultService,fileService:FileService):
-        super().__init__(configService,fileService,vaultService,VaultTTLSyncConstant.POSTGRES_AUTH_TTL)
+    def __init__(self, configService: ConfigService,vaultService:VaultService,fileService:FileService,timerService:TimerService):
+        super().__init__(configService,fileService,vaultService,timerService,VaultTTLSyncConstant.POSTGRES_AUTH_TTL)
         self.contextStore = TortoiseContextStore()
 
     def build(self,build_state=-1):

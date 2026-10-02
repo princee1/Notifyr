@@ -9,7 +9,6 @@ from app.container import Get, CONTAINER
 from app.definition._error import ServerFileError
 from app.callback import Callbacks_Stream,Callbacks_Sub
 from app.definition._service import ACCEPTABLE_STATES, DEFAULT_BUILD_STATE, BaseService, ServiceStatus
-from app.interface.timers import  SchedulerInterface
 from app.models.odm.agents_model import AgentModel
 from app.models.odm.custom_model import CustomModel
 from app.models.odm.tools_model import ToolModel
@@ -22,6 +21,7 @@ from app.services.database.mongoose_service import MongooseService
 from app.services.database.rabbitmq_service import RabbitMQService
 from app.services.database.redis_service import RedisService
 from app.services.database.tortoise_service import TortoiseConnectionService
+from app.services.timer_service import TimerService
 from app.services.vault_service import VaultService
 from app.services.worker.task_service import TaskService
 from app.services.config_service import ConfigService, WorkerService
@@ -268,39 +268,19 @@ class AppServer(EventInterface):
 
     @register_hook('startup',)
     def start_tickers(self):
-        vaultService: VaultService = Get(VaultService) 
-        vaultService.start()
+        timerService:TimerService  = Get(TimerService)
+        timerService.start()
 
         celery_service: CeleryService = Get(CeleryService)
         celery_service.start_interval(10)
-
-        tortoiseConnService = Get(TortoiseConnectionService)
-        tortoiseConnService.start()
-
-        mongooseService = Get(MongooseService)
-        mongooseService.start()
-
-        if CAPABILITIES['object']:
-            objectS3Service = Get(ObjectS3Service)
-            objectS3Service.start()
     
     @register_hook('shutdown')
     def stop_tickers(self):
-        tortoiseConnService = Get(TortoiseConnectionService)
-        celery_service: CeleryService = Get(CeleryService)
-        mongooseService = Get(MongooseService)
-        vaultService = Get(VaultService)
+        timerService:TimerService  = Get(TimerService)
+        timerService.shutdown()
 
-        services: list[SchedulerInterface] = [tortoiseConnService,mongooseService,vaultService]
-
-        for s in services:
-            s.shutdown()
-        
+        celery_service: CeleryService = Get(CeleryService)        
         celery_service.stop_interval()
-
-        if CAPABILITIES['object']:
-            objectS3Service = Get(ObjectS3Service)
-            objectS3Service.shutdown()
 
     @register_hook('startup')
     async def register_tortoise(self):

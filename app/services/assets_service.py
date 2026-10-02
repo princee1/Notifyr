@@ -4,10 +4,11 @@ from minio.datatypes import Object
 from fastapi import HTTPException,status
 from app.classes.auth_permission import AssetsPermission, AuthPermission
 from app.definition._error import BaseError
-from app.interface.timers import IntervalParams, SchedulerInterface
+from app.interface.timers import IntervalParams
 from app.services.database.object_service import ObjectS3Service
 import app.services.database.object_service as object_service
 from app.services.database.redis_service import RedisService
+from app.services.timer_service import TimerService
 from app.services.vault_service import VaultService
 from app.services.setting_service import SettingService
 from app.utils.constant import MinioConstant, RedisConstant
@@ -222,21 +223,21 @@ class S3ObjectReader(Reader):
 @_service.Service(
     links=[_service.LinkDep(ObjectS3Service,to_destroy=True, to_build=True)]
 )
-class AssetService(_service.BaseService,SchedulerInterface):
+class AssetService(_service.BaseService):
     
     non_obj_template = {'globals.json','README.MD'}
 
-    def __init__(self,hcVaultService:VaultService,redisService :RedisService, fileService: FileService, configService: ConfigService,objectS3Service:ObjectS3Service,settingService:SettingService,processWorkerPeer:WorkerService) -> None:
+    def __init__(self,hcVaultService:VaultService,redisService :RedisService, fileService: FileService, configService: ConfigService,objectS3Service:ObjectS3Service,settingService:SettingService,workerService:WorkerService,timerService:TimerService) -> None:
         super().__init__()
-        SchedulerInterface.__init__(self,)
 
         self.fileService:FileService = fileService
         self.configService = configService
-        self.processWorkerPeer = processWorkerPeer
+        self.workerService = workerService
         self.objectS3Service = objectS3Service
         self.settingService = settingService
         self.hcVaultService = hcVaultService
         self.redisService = redisService
+        self.timerService = timerService
 
         self.ASSETS_GLOBALS_VARIABLES =f"{self.configService.ASSETS_DIR}globals.json"
         self.objects:list[Object] = []
@@ -251,7 +252,7 @@ class AssetService(_service.BaseService,SchedulerInterface):
         self.phone:dict[str,Asset] = {}
         self.sms:dict[str,Asset] = {}
 
-        self.interval_schedule(IntervalParams(hours=1,minutes=randint(0,60)),self.clear_object_events,tuple(),{})
+        self.timerService.interval_schedule(IntervalParams(hours=1,minutes=randint(0,60)),self.clear_object_events,tuple(),{},'asset-service-clear-objects-events')
 
     async def clear_object_events(self,):
         await self.redisService.delete(RedisConstant.EVENT_DB,MinioConstant.MINIO_EVENT)

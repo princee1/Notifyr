@@ -6,7 +6,7 @@ from app.classes.secrets import ChaCha20SecretsWrapper
 from app.classes.vault_engine import DatabaseVaultEngine, KV1VaultEngine, KV2VaultEngine, MinioS3VaultEngine, RabbitMQVaultEngine, TransitVaultEngine
 from app.definition._service import DEFAULT_BUILD_STATE, DEFAULT_DESTROY_STATE, GUNICORN_BUILD_STATE, BaseService, BuildAbortError, Service, ServiceNotAvailableError, ServiceStatus, ServiceTemporaryNotAvailableError
 from app.errors.service_error import BuildOkError
-from app.interface.timers import IntervalInterface, IntervalParams, SchedulerInterface
+from app.interface.timers import IntervalParams
 from app.services.config_service import MODE, ConfigService, WorkerService
 import hvac
 from app.services.file.file_service import FileService
