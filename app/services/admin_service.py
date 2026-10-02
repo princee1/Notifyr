@@ -140,7 +140,38 @@ class ClientMiniService(BaseMiniService):
     ########################################                                           ####################################
     #######################################################################################################################
 
-    async def upsert_session(self,session_id:str=None,ip:str=None,user_agent:str=None,_check_=True):
+    async def read_sessions(self,session_id:str=''):
+        res = {}
+        if session_id == '':
+            match self.configService.SESSION_MECHANISM:
+                case 'vault+sync':
+                    path = f"clients/{ClientVaultPath.SESSIONS_VAULT_PATH(self.client_id,'')}"
+                    sessions = await RunInThreadPool(self.vaultService.security_engine.list)(path)
+                    for s in sessions:
+                        p =  ClientVaultPath.SESSIONS_VAULT_PATH(self.client_id,s)
+                        res[s] =await  RunInThreadPool(self.vaultService.security_engine.read)('clients',p)
+                    return res
+                case 'redis' | 'redis+sync':
+                    path = ClientVaultPath.SESSIONS_REDIS_PATH(self.client_id,'*')
+                    sessions = await self.redisService.scan(RedisConstant.SECURITY_DB,path)
+                    for s in sessions:
+                        sid = ClientVaultPath.SESSIONS_FROM_REDIS_PATH(s)
+                        s = ClientVaultPath.SESSIONS_REDIS_PATH(self.client_id,sid)
+                        authSignature:AuthSignature =await self.redisService.retrieve(RedisConstant.SECURITY_DB,s)
+                        res[sid] = authSignature
+        else:
+            match self.configService.SESSION_MECHANISM:
+                case 'vault+sync':
+                    p =  ClientVaultPath.SESSIONS_VAULT_PATH(self.client_id,session_id)
+                    res[session_id] = self.vaultService.security_engine.read('clients',p)
+                case 'redis' | 'redis+sync':
+                    path = ClientVaultPath.SESSIONS_REDIS_PATH(self.client_id,session_id)
+                    authSignature:AuthSignature =await self.redisService.retrieve(RedisConstant.SECURITY_DB,session_id)
+                    res[session_id] = authSignature
+
+        return res
+
+    async def upsert_session(self,session_id:str=None,ip:str=None,user_agent:str=None,device_name:str=None,_check_=True):
         if self.configService.SESSION_MECHANISM == 'none':
             return {},None
 

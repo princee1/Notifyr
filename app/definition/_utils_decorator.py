@@ -10,11 +10,12 @@ from enum import Enum
 
 class DecoratorPriority(Enum):
     LIMITER = 0
-    PERMISSION = 1
-    HANDLER = 2
-    PIPE = 3
-    GUARD = 4
-    INTERCEPTOR = 5
+    META=1
+    PERMISSION = 2
+    HANDLER = 3
+    PIPE = 4
+    GUARD = 5
+    INTERCEPTOR = 6
 
 class DecoratorException(Exception):
 

@@ -42,48 +42,17 @@ ID_LENGTH = 25
 def generate_salt(length=64):
     return os.urandom(length)
 
-
-@IsInterface
-class EncryptDecryptInterface(Interface):
-
-    def __init__(self,nonce:str):
-        self.nonce = nonce.encode()
-
-    def _encode_value(self, value: str, key: bytes | str,wrapper=False) -> str:
-        if not wrapper:
-            return value
-        key = key.encode()
-        value = base64.b64encode(value.encode()).decode()
-        cipher = ChaCha20SecretsWrapper(value,key,self.nonce)
-        return cipher.cipher_data.decode()
-
-    @Time
-    def _decode_value(self, value: str, key: bytes | str,wrapper=False) -> str:
-        if not wrapper:
-            return value
-        key = key.encode()
-        cipher = ChaCha20SecretsWrapper(value,key,self.nonce)
-        cipher.cipher_data = value
-        value = cipher.to_plain()
-        return base64.b64decode(value).decode()
-    
-
-    @property
-    def salt(self):
-        return generate_salt()
-
 DEFAULT_JWT_ALGORITHM = 'HS256'
 
 
 @Service()
-class JWTAuthService(BaseService, EncryptDecryptInterface):
+class JWTAuthService(BaseService):
     GENERATION_ID_LEN = 32
     gen_id_path='generation-id'
     NONCE="1234567891234578"
 
     def __init__(self, configService: ConfigService, fileService: FileService,settingService:SettingService,vaultService:VaultService) -> None:
         super().__init__()
-        EncryptDecryptInterface.__init__(self,self.NONCE)
         self.configService = configService
         self.fileService = fileService
         self.settingService = settingService
@@ -260,12 +229,11 @@ class JWTAuthService(BaseService, EncryptDecryptInterface):
 EncryptionAlgorithm = Literal['']
 
 @Service()
-class SecurityService(BaseService, EncryptDecryptInterface):
+class SecurityService(BaseService):
     NONCE="1234567891234578"
 
     def __init__(self, configService: ConfigService, fileService: FileService,settingService:SettingService,vaultService:VaultService) -> None:
         super().__init__()
-        EncryptDecryptInterface.__init__(self,self.NONCE)
         self.configService = configService
         self.fileService = fileService
         self.settingService= settingService

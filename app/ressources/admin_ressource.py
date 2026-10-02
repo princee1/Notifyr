@@ -7,11 +7,12 @@ from app.definition._cost import DataCost
 from app.definition._service import MiniStateProtocol, StateProtocol
 from app.depends.funcs_dep import fetch_group, fetch_policy, get_blacklist, get_group, get_client, get_policy
 from app.depends.orm_cache import WILDCARD, BlacklistClientCache, BlacklistGroupCache
-from app.depends.variables import SourceMode, _wrap_checker,source_mode_query
+from app.depends.variables import SourceMode, _wrap_checker, bool_query_creator,source_mode_query
 from app.errors.depends_error import DataSourceNotSupportedError
 from app.manager.broker_manager import Broker
 from app.manager.merchant_manager import Merchant
 from app.manager.session_manager import AuthSessionManager
+from app.manager.state_manager import StateManager
 from app.models.orm.security_model import BlacklistModel, ClientModel, ClientORM, GroupClientORM, GroupModel, PolicyMappingORM, RevokeSessionModel, UnRevokeGenerationIDModel, UpdateClientModel
 from app.services.admin_service import VALID_SYNC_MECHANISM, AdminService, ClientMiniService
 from app.services.database.redis_service import RedisService
@@ -28,7 +29,7 @@ from app.definition._ressource import PingService, UseInterceptor, LockService, 
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
 from app.classes.auth_permission import AccessModel, AuthPermission, AuthSignature, AuthType, ClientAccessInfo, ClientType, PoliciesNotMatchingError, PolicyModel, PolicyUpdateMode, Role, Scope
 from app.decorators.handlers import AsyncIOHandler, CostHandler, DataSourceHandler, MiniServiceHandler, ORMCacheHandler, PydanticHandler, RedisHandler, ClientHandler, ClientSecurityHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler, VaultHandler
-from app.decorators.pipes import  AccessTokenModelPipe, ForceClientPipe, ForceGroupPipe, FunctionInjectorPipe, MiniServiceInjectorPipe, ObjectRelationalFriendlyPipe
+from app.decorators.pipes import  AccessTokenModelPipe, ClientMiniServiceResponsePipe, ForceClientPipe, ForceGroupPipe, FunctionInjectorPipe, MiniServiceInjectorPipe, ObjectRelationalFriendlyPipe, StateResponseInjectionPipe
 from app.utils.helper import  generateId, uuid_v1_mc
 from app.utils.toolbox import RunInThreadPool
 from app.errors.security_error import ClientAlreadyExistError, IdentityAlreadyBlacklistedError, ClientDoesNotExistError, SessionNotValidatedError
@@ -102,6 +103,15 @@ class PolicyRessource(BaseHTTPRessource):
 @HTTPRessource(CLIENT_PREFIX)
 class ClientRessource(BaseHTTPRessource):
 
+    inject_session_query = bool_query_creator('session','false')
+
+    @staticmethod
+    def session_guard(session:bool,source:SourceMode):
+        if session and source != 'memory':
+            raise HTTPException(400,detail='Cant fetch the session if the source is not "memory"')
+
+        return True,''
+
     @InjectInMethod()
     def __init__(self, configService: ConfigService, securityService: SecurityService, jwtAuthService: JWTAuthService, adminService: AdminService,tortoiseService:TortoiseConnectionService,redisService:RedisService):
         super().__init__()
@@ -155,8 +165,8 @@ class ClientRessource(BaseHTTPRessource):
     @UsePermission(AdminPermission)
     @UseGuard(AdminModificationGuard)
     @UseInterceptor(InvalidBlacklistTokenInterceptor)
-    @UsePipe(ObjectRelationalFriendlyPipe,before=False)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
+    @UsePipe(ClientMiniServiceResponsePipe('client',True,False),before=False)
     @UseHandler(ValueErrorHandler,ORMCacheHandler,VaultHandler,ClientHandler,ClientSecurityHandler,MiniServiceHandler)
     @LockService(VaultService,SettingService,AdminService,as_manager=True,lockType='reader',miniLockType='reader')
     @BaseHTTPRessource.HTTPRoute('/{client}/', methods=[HTTPMethod.PUT])
@@ -183,13 +193,13 @@ class ClientRessource(BaseHTTPRessource):
         if is_revoked and self.configService.SESSION_MECHANISM in VALID_SYNC_MECHANISM:
             broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))
 
-        return client.client
-
+        return 
+    
     @PingService([VaultService])        
     @UsePermission(AdminPermission)
     @UseGuard(AdminModificationGuard)
     @HTTPStatusCode(status.HTTP_200_OK,)
-    @UsePipe(ObjectRelationalFriendlyPipe,before=False)
+    @UsePipe(ClientMiniServiceResponsePipe,before=False)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @LockService(SettingService,VaultService,AdminService,as_manager=True,miniLockType='reader')
     @UseInterceptor(DataCostInterceptor(CostConstant.CLIENT_CREDIT,'refund'))
@@ -208,28 +218,42 @@ class ClientRessource(BaseHTTPRessource):
             transaction
         )
         broker.propagate(StateProtocol(service=AdminService,to_build=True,callback_state_function=AdminService.load_clients.__name__))
-        return client.client
-    
+        return 
+
+    @UseGuard(session_guard)
     @UsePermission(AdminPermission)
     @LockService(AdminService,lockType='reader')
     @UseHandler(MiniServiceHandler,DataSourceHandler)
-    @UsePipe(ObjectRelationalFriendlyPipe,before=False)
+    @UsePipe(ObjectRelationalFriendlyPipe(when=lambda source: source == 'database'),before=False)
+    @UsePipe(ClientMiniServiceResponsePipe('result',when=lambda source: source == 'memory'),before=False)
+    @UsePipe(StateResponseInjectionPipe('sessions',merge=True),before=False)
     @BaseHTTPRessource.Get('/{client:path}')
-    async def read_client(self,request:Request,response:Response,client:str='',source:SourceMode=Depends(source_mode_query),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def read_client(self,request:Request,response:Response,state:Annotated[StateManager,Depends(StateManager)],client:str='',session:bool = Depends(inject_session_query),source:SourceMode=Depends(source_mode_query),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         match source:
             case 'database':
+                state.deactivate()
                 if client == '':
                     return [ c for c in await ClientORM.all() if c.client_type!=ClientType.Admin]
                 else:
                     return await ClientORM.filter(client_id=client)
             case 'memory':
+                if not session:
+                    state.deactivate()
+
                 if client != '':
                     async with self.adminService.MiniServiceStore.lock(client) as service:
-                        return service.client
+                        if session:
+                            sessions = await service.read_sessions()
+                            state.store('sessions',sessions)
+                        return service
                 else:
                     clients = []
-                    async for c in self.adminService.MiniServiceStore.aiter(predicate=lambda c:c.client.client_type!=ClientType.Admin):
-                        clients.append(c.client)
+                    ref:list = state.store('sessions',[])
+                    async for service in self.adminService.MiniServiceStore.aiter(predicate=lambda c:c.client.client_type!=ClientType.Admin):
+                        if session:
+                            sessions = await service.read_sessions()
+                            ref.append(sessions)
+                        clients.append(service)
                     return clients
             case _:
                 raise DataSourceNotSupportedError(source,['database','memory'])
@@ -372,13 +396,14 @@ class AdminRessource(BaseHTTPRessource):
     @UseLimiter(limit_value='10/day')
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @UseInterceptor(InvalidBlacklistTokenInterceptor)
+    @UsePipe(StateResponseInjectionPipe,before=False)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @PingService([VaultService,AdminService],is_manager=True)
     @UseGuard(AdminModificationGuard,SessionMechanismGuard,ClientAuthTypeGuard)
     @UseHandler(ClientHandler,ORMCacheHandler,VaultHandler,MiniServiceHandler,ClientSecurityHandler)
     @LockService(VaultService,SettingService,AdminService,JWTAuthService,lockType='reader',as_manager=True)
     @BaseHTTPRessource.HTTPRoute('/revoke/{client}/', methods=[HTTPMethod.DELETE])
-    async def revoke_tokens(self,revoke:RevokeSessionModel,broker:Annotated[Broker,Depends(Broker)], request: Request,response:Response, client: Annotated[ClientMiniService, Depends(get_client)],profile:str=Depends(get_client), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def revoke_tokens(self,revoke:RevokeSessionModel,broker:Annotated[Broker,Depends(Broker)], request: Request,response:Response, client: Annotated[ClientMiniService, Depends(get_client)],state:Annotated[StateManager,Depends(StateManager)],profile:str=Depends(get_client), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
 
         async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:    
             if client.client.auth_type == AuthType.ACCESS_TOKEN:
@@ -396,14 +421,14 @@ class AdminRessource(BaseHTTPRessource):
         return
         
     @UseLimiter(limit_value='4/day')
-    @UsePipe(AccessTokenModelPipe,before=False)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @PingService([VaultService,AdminService],is_manager=True)
     @UseHandler(ClientHandler,ORMCacheHandler,MiniServiceHandler)
+    @UsePipe(AccessTokenModelPipe,StateResponseInjectionPipe,before=False)
     @LockService(VaultService,SettingService,AdminService,lockType='reader',as_manager=True)
     @UseGuard(AdminModificationGuard,BlacklistClientGuard,ClientAuthTypeGuard(accept_access=False, accept_api=True),)
     @BaseHTTPRessource.HTTPRoute('/issue-auth/{client}/', methods=[HTTPMethod.GET],response_model=AccessModel)
-    async def issue_auth_token(self,broker:Annotated[Broker,Depends(Broker)], client: Annotated[ClientMiniService, Depends(get_client)], request: Request, response:Response ,profile:str= Depends(get_client),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def issue_auth_token(self,broker:Annotated[Broker,Depends(Broker)], client: Annotated[ClientMiniService, Depends(get_client)], request: Request, response:Response,state:Annotated[StateManager,Depends(StateManager)] ,profile:str= Depends(get_client),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         
         async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:    
             await client.revoke_itself(ctx)

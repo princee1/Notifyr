@@ -9,7 +9,7 @@ from app.decorators.guards import BlacklistClientGuard, ClientAuthTypeGuard, Pri
 from app.decorators.handlers import ClientHandler, MiniServiceHandler, ORMCacheHandler, RedisHandler, ClientSecurityHandler, VaultHandler
 from app.decorators.interceptors import InvalidBlacklistTokenInterceptor
 from app.decorators.permissions import JWTRouteHTTPPermission, UserPermission
-from app.decorators.pipes import AccessTokenModelPipe, MiniServiceInjectorPipe, ObjectRelationalFriendlyPipe, SanitizePathParameterPipe, auth_state_pipe, refresh_logout_handler
+from app.decorators.pipes import AccessTokenModelPipe, ClientMiniServiceResponsePipe, MiniServiceInjectorPipe, ObjectRelationalFriendlyPipe, SanitizePathParameterPipe, auth_state_pipe, refresh_logout_handler
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, LockService, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.definition._service import MiniStateProtocol
 from app.depends.dependencies import get_auth_permission, get_client_info, get_client_ip, get_query_params, get_user_agent
@@ -94,6 +94,7 @@ class AuthRessource(BaseHTTPRessource):
         
         origin = get_client_ip(request)
         user_agent = get_user_agent(request)
+        device_name=None
 
         session_id = session.is_client_authenticated(clientORM)
         session.logout()
@@ -107,7 +108,7 @@ class AuthRessource(BaseHTTPRessource):
                 await client.verify_recovery_code(credentials.password)
                 await client.verify_login_count(session_id)
                 
-                authSignature,session_id = await client.upsert_session(session_id,origin,user_agent)
+                authSignature,session_id = await client.upsert_session(session_id,origin,user_agent,device_name)
                 auth_token,refresh_token = await client.generate_access(session_id,authSignature.get('signature',None),ctx=ctx)
 
                 await client.create_recovery_code(RecoveryTokenGenerator().export())
@@ -175,6 +176,7 @@ class AuthRessource(BaseHTTPRessource):
 
         origin = get_client_ip(request)
         user_agent = get_user_agent(request)
+        device_name=None
 
         session_id = session.is_client_authenticated(clientORM)
         session.logout()
@@ -189,7 +191,7 @@ class AuthRessource(BaseHTTPRessource):
                 await client.compare_password(credentials.password,encryptedPassword)
 
                 await client.verify_login_count(session_id)
-                authSignature,session_id = await client.upsert_session(session_id,origin,user_agent)
+                authSignature,session_id = await client.upsert_session(session_id,origin,user_agent,device_name)
                 auth_token,refresh_token = await client.generate_access(session_id,authSignature.get('signature',None),ctx=ctx)
                 
                 if mode == 'private':
@@ -241,17 +243,15 @@ class AuthRessource(BaseHTTPRessource):
     @Throttle(normal=(250,50))
     @UseHandler(MiniServiceHandler)
     @UseLimiter('20/day',key_func='client')
+    @UsePipe(ClientMiniServiceResponsePipe,before=False)
     @UsePermission(JWTRouteHTTPPermission,UserPermission)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @LockService(AdminService,as_manager=True,lockType='reader',miniLockType='reader')
     @UseGuard(ClientAuthTypeGuard(accept_access=True, accept_api=False),BlacklistClientGuard)
     @BaseHTTPRessource.HTTPRoute('/me/',methods=[HTTPMethod.GET])
     async def me(self,request:Request,response:Response,client:Annotated[ClientMiniService,Depends(get_client_from_info)],profile:str=Depends(get_client_from_info),authPermission:AuthPermission=Depends(get_auth_permission),clientInfo:ClientAccessInfo=Depends(get_client_info)):
-
-        info = client.client.to_json
-        policies = client.authPermission
-
-        return {'client':info,'policies':policies}
+        return
+        
 
     @Throttle(normal=(300,30))
     @UseHandler(MiniServiceHandler)
@@ -286,27 +286,12 @@ class AuthRessource(BaseHTTPRessource):
         async def fetch_session(self,request:Request,response:Response,client:Annotated[ClientMiniService,Depends(get_client_info)],session_id:str='',source:SourceMode=Depends(source_mode_query),profile:str=Depends(get_client_from_info),clientInfo:ClientAccessInfo=Depends(get_client_info),authPermission:AuthPermission=Depends(get_auth_permission)):
             res = {}
             match source:
+                
                 case 'database':
-                    if session_id == '':
-                        match self.configService.SESSION_MECHANISM:
-                            case 'vault+sync':
-                                path = f"clients/{ClientVaultPath.SESSIONS_VAULT_PATH(client.client_id,'')}"
-                                sessions = await RunInThreadPool(self.vaultService.security_engine.list)(path)
-                                for s in sessions:
-                                    p =  ClientVaultPath.SESSIONS_VAULT_PATH(client.client_id,s)
-                                    res[s] =await  RunInThreadPool(self.vaultService.security_engine.read)('clients',p)
-                                return res
-                            case 'redis' | 'redis+sync':
-                                path = ClientVaultPath.SESSIONS_REDIS_PATH(client.client_id,'*')
-                                sessions = await self.redisService.scan(RedisConstant.SECURITY_DB,path)
-                                for s in sessions:
-                                    sid = ClientVaultPath.SESSIONS_FROM_REDIS_PATH(s)
-                                    s = ClientVaultPath.SESSIONS_REDIS_PATH(client.client_id,sid)
-                                    authSignature:AuthSignature =await self.redisService.retrieve(RedisConstant.SECURITY_DB,s)
-                                    res[sid] = authSignature
-                    else:
-                        p =  ClientVaultPath.SESSIONS_VAULT_PATH(client.client_id,s)
-                        res[s] = self.vaultService.security_engine.read('clients',p)
+                    async with client.lock('reader'):
+                       res = await client.read_sessions(session_id)
+                    return res
+                
                 case 'memory':
                     async with client.lock('reader'):
                         if session_id == '':

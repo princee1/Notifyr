@@ -888,7 +888,8 @@ def Headers(header:Header|Callable[...,Header]):
             else:
                 return func(*args, **kwargs)
 
-        return wrapper
+        Helper.appends_funcs_callback(func,wrapper, DecoratorPriority.META)
+        return func
     
     return decorator
 
@@ -929,8 +930,8 @@ def HTTPStatusCode(code: int | str):
                 return await func(*args, **kwargs)
             else:
                 return func(*args, **kwargs)
-
-        return wrapper
+        Helper.appends_funcs_callback(func,wrapper, DecoratorPriority.META)
+        return func
 
     return decorator
 

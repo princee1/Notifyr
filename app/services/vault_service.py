@@ -10,6 +10,7 @@ from app.interface.timers import IntervalInterface, IntervalParams, SchedulerInt
 from app.services.config_service import MODE, ConfigService, WorkerService
 import hvac
 from app.services.file.file_service import FileService
+from app.services.timer_service import TimerService
 from app.utils.constant import VaultConstant, VaultTTLSyncConstant
 from app.utils.fileIO import FDFlag
 from datetime import datetime
@@ -42,18 +43,18 @@ def parse_vault_token_meta(vault_lookup: dict) -> VaultTokenMeta:
 
 
 @Service()
-class VaultService(BaseService,SchedulerInterface):
+class VaultService(BaseService):
 
     _valid_role= {VaultConstant.MONGO_ROLE,VaultConstant.POSTGRES_ROLE}
     _secret_id_crontab='0 0 * * *'
     _ping_available_state = {ServiceStatus.AVAILABLE,ServiceStatus.PARTIALLY_AVAILABLE}
     
-    def __init__(self,configService:ConfigService,fileService:FileService,workerService:WorkerService):
+    def __init__(self,configService:ConfigService,fileService:FileService,workerService:WorkerService,timerService:TimerService):
         super().__init__()
         self.configService = configService
         self.workerService = workerService
         self.fileService = fileService
-        SchedulerInterface.__init__(self,replace_existing=True,thread_pool_count=1)
+        self.timerService = timerService
         self.delay = IntervalParams(
             seconds=VaultTTLSyncConstant.SECRET_ID_ROTATION*.75
         )
@@ -79,7 +80,7 @@ class VaultService(BaseService,SchedulerInterface):
 
             self.vault_approle_login(build_state)
             self.read_tokens()
-            self.interval_schedule(self.delay,self.refresh_token,tuple(),{},f'{self.name}-refresh_token')
+            self.timerService.interval_schedule(self.delay,self.refresh_token,tuple(),{},f'{self.name}-refresh_token')
 
     def compute_next_tick_time(self):
         tick_delay = time_until_next_tick(self._secret_id_crontab)

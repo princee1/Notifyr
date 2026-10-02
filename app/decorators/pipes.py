@@ -17,6 +17,7 @@ from app.errors.contact_error import ContactMissingInfoKeyError, ContactNotExist
 from app.errors.service_error import MiniServiceStrictValueNotValidError, ServiceNotAvailableError
 from app.manager.merchant_manager import Merchant
 from app.manager.session_manager import AuthSessionManager
+from app.manager.state_manager import StateManager
 from app.manager.task_manager import TaskManager
 from app.models.call_model import CallCustomSchedulerModel
 from app.models.orm.contacts_model import Status, SubscriptionORM
@@ -37,7 +38,7 @@ from app.definition._utils_decorator import Pipe
 from app.ntfr_tasks import TASK_REGISTRY, task_name
 from app.services.worker.arq_service import ArqIngestTaskService
 from app.utils.constant import GraphitiConstant, HTTPHeaderConstant, SpecialKeyAttributesConstant
-from app.utils.helper import DICT_SEP, AsyncAPIFilterInject, PointerIterator, SliceMode, copy_response, issubclass_of, parseToBool, slice_dict
+from app.utils.helper import DICT_SEP, APIFilterInject, AsyncAPIFilterInject, PointerIterator, SliceMode, copy_response, issubclass_of, parseToBool, slice_dict
 from app.utils.validation import email_validator, phone_number_validator
 from app.depends.orm_cache import ContactSummaryORMCache
 from app.models.orm.contacts_model import ContactSummary
@@ -670,12 +671,17 @@ class DocumentFriendlyPipe(Pipe):
 
 class ObjectRelationalFriendlyPipe(Pipe):
 
-    def __init__(self,mode:Literal['list','dict']='list',key:str=None):
+    def __init__(self,mode:Literal['list','dict']='list',key:str=None,when:Callable[...,bool]=None):
         self.mode = mode
         self.key = key
+        self.when = when
         super().__init__(False)
-    
-    def pipe(self,result:list|Any):
+        self.filter = False
+
+    def pipe(self,result:list|Any,**kwargs):
+        if self.when != None and not APIFilterInject(self.when)(**kwargs):
+            return result
+
         if self.mode == 'list':
             res = []
         else:
@@ -921,3 +927,74 @@ async def refresh_logout_handler(func,*args,**kwargs):
 async def auth_state_pipe(result:Any,session:AuthSessionManager,request:Request):
     request.headers[HTTPHeaderConstant.X_AUTH_STATE] = session.authState.value
     return result
+
+class StateResponseInjectionPipe(Pipe):
+
+    def __init__(self,*keys:str,merge:bool,result:str=None):
+        """
+        result str : The key name of the result
+        """
+        super().__init__(False)
+        self.keys = keys
+        self.result = result
+        self.merge = merge
+
+    def pipe(self,result:Any,state:StateManager):
+        if not state._activated:
+            return result
+        
+        if isinstance(self.merge,bool):
+            if isinstance(result,dict):
+                for k in self.keys:
+                    result.update(state.get(k))
+            elif isinstance(result,list):
+                for k in self.keys:
+                    for r,s in zip(result,state[k]):
+                        r.update(s)
+            else:
+                result = {self.result:result}
+                for k in self.keys:
+                    result.update(state[k])
+        else:
+            if isinstance(result,dict):
+                for k in self.keys:
+                    result.update(state[k])
+            else:
+                result = {self.result:result}
+                for k in self.keys:
+                    result.update(state[k])
+                
+        return result
+
+class ClientMiniServiceResponsePipe(Pipe):
+    def __init__(self,source:Literal['result','client'],include_info=True,include_policies=True,when:Callable[...,bool]=None):
+        super().__init__(False)
+        self.source = source
+        self.when = when
+        self.include_info = include_info
+        self.include_policies = include_policies
+
+    def extract(self,client:ClientMiniService):
+        res = {}
+        if self.include_info:
+            info = client.client.to_json
+            res['client'] = info
+
+        if self.include_policies:
+            policies = client.authPermission
+            res['policies'] = policies
+
+        return res
+
+    def pipe(self,result:list[ClientMiniService]|ClientMiniService,client:ClientMiniService=None):
+        match self.source:
+            case 'client':
+                return self.extract(client)
+            case 'result':
+                if isinstance(result,list):
+                    return [self.extract(c) for c in result]
+
+                return self.extract(result)
+
+            case _:
+                return result

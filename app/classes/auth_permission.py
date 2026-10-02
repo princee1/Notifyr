@@ -77,6 +77,7 @@ class AuthSignature(TypedDict):
     ip:str
     user_agent:str
     last_login:float
+    device_name:str
 
     
 API_TOKEN_CLIENT_TYPE_SET = {ClientType.Twilio,ClientType.App,ClientType.Service}
