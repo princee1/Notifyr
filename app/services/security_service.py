@@ -1,11 +1,13 @@
 
 from cachetools import cached,TTLCache
 from typing import Any, Dict, Literal
-from app.classes.secrets import ChaCha20SecretsWrapper
+from app.classes.secrets import ChaCha20SecretsWrapper, StringCipher
 from app.definition._interface import Interface, IsInterface
 from app.errors.security_error import (
     APIKeyMismatchError,
     APIKeyMissingError,
+    CipherDoesNotExistError,
+    CipherSchemeNotValidError,
     JWTInvalidTokenError,
     ProvidedHashNotEquivalentError,
     TokenDataMissingError,
@@ -30,9 +32,6 @@ import os
 import hmac
 import hashlib
 from app.services.vault_service import VaultService
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM, ChaCha20Poly1305
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 
 SEPARATOR = "|"
@@ -225,8 +224,7 @@ class JWTAuthService(BaseService):
     def GENERATION_METADATA(self)->dict:
         return self.generation_id_data.get('metadata',{})
 
-
-EncryptionAlgorithm = Literal['']
+CipherMode = Literal['api-token']
 
 @Service()
 class SecurityService(BaseService):
@@ -238,6 +236,8 @@ class SecurityService(BaseService):
         self.fileService = fileService
         self.settingService= settingService
         self.vaultService = vaultService
+
+        self.ciphers:dict[CipherMode,StringCipher] = {}
 
         self.API_KEY:str = ...
 
@@ -263,6 +263,12 @@ class SecurityService(BaseService):
         except Exception as e:
             print(e)
             raise BuildWarningError()
+        
+        self.build_cipher()
+    
+    def build_cipher(self):
+        self.ciphers.clear()
+        self.ciphers['api-token'] = StringCipher(self.vaultService.ON_TOP_SECRET_KEY)
 
     def hash(self, value:str, key:str=None, salt:bytes|str=None,algorithm=None):
         if salt == None:
@@ -282,19 +288,22 @@ class SecurityService(BaseService):
             raise ProvidedHashNotEquivalentError(provided_hash,'hashed value')
         return True
 
-    def encrypt(self,value:str,key:str,algorithm:EncryptionAlgorithm=''):
-        if (key:= self.vaultService.tokens.get(key,None)) == None:
-            raise KeyError('Key does not exist')
-
-        salt = ...
-        encrypted_value = ...
+    def encrypt(self,value:str,mode:CipherMode):
+        if (cipher:= self.ciphers.get(mode,None))==None:
+            raise CipherDoesNotExistError(mode)
+        
+        salt = generate_salt(16).decode()
+        encrypted_value = cipher.encrypt(value)
 
         return f"notifyr:v1:{salt}:{encrypted_value}"
 
-    def decrypt(self,value:str,key:str,algorithm:EncryptionAlgorithm='')->str:
-        if (key:= self.vaultService.tokens.get(key,None)) == None:
-            raise KeyError('Key does not exist')
+    def decrypt(self,value:str,mode:CipherMode)->str:
+        if (cipher:= self.ciphers.get(mode,None))==None:
+            raise CipherDoesNotExistError(mode)
         
-        scheme,version,salt,encrypted_value = value
-        decrypted_value = ...
+        scheme,version,salt,encrypted_value = value.split(':')
+        if scheme != 'notifyr':
+            raise CipherSchemeNotValidError(scheme)
+        
+        decrypted_value = cipher.decrypt(encrypted_value)
         return decrypted_value

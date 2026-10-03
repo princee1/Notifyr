@@ -203,3 +203,13 @@ class SessionMechanismOperationError(SecurityBaseError):
 class RefreshTokenIdentityMismatch(SecurityBaseError):
     def __init__(self,client_id:str,refresh_client_id:str,session_id:str):
         super().__init__('Refresh Token Identity Mismatch',client_id=client_id,refresh_client_id=refresh_client_id,session_id=session_id)
+
+
+class CipherDoesNotExistError(SecurityBaseError):
+    def __init__(self,mode):
+        super().__init__('Cipher specified does not exists', cipher_mode=mode)
+
+
+class CipherSchemeNotValidError(SecurityBaseError):
+    def __init__(self,scheme):
+        super().__init__('Cipher scheme not valid', scheme =scheme)

@@ -1,11 +1,27 @@
+import base64
+import hashlib
 from os import urandom
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
-from typing import Union
+from typing import Literal, Union
 from app.utils.helper import DICT_SEP, flatten_dict, unflattened_dict
 from app.utils.toolbox import Time
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM, ChaCha20Poly1305
+EncryptionAlgorithm = Literal['fernet']
+from cryptography.fernet import Fernet
 
+class StringCipher:
+    def __init__(self, secret: str,algorithm:EncryptionAlgorithm):
+        self.algorithm = algorithm
+        key = hashlib.sha256(secret.encode("utf-8")).digest()
+        self._fernet = Fernet(base64.urlsafe_b64encode(key))
+
+    def encrypt(self, data: str) -> str:
+        return self._fernet.encrypt(data.encode("utf-8")).decode("ascii")
+
+    def decrypt(self, token: str) -> str:
+        return self._fernet.decrypt(token.encode("ascii")).decode("utf-8")
 
 class SecretsWrapper:
     
@@ -23,7 +39,6 @@ class SecretsWrapper:
     
     def _decrypt(self):
         ...
-    
     
     def to_plain(self,sep='/') -> Union[str, dict]:
         """Access decrypted plaintext."""

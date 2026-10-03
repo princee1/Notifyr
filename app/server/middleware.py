@@ -4,7 +4,7 @@ from app.classes.auth_permission import AuthPermission, AuthType, ClientAccessIn
 from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE
 from app.definition._ressource import HTTPMethod
 from app.depends.orm_cache import BlacklistClientCache, BlacklistGroupCache
-from app.errors.security_error import APIKeyMismatchError, APIKeyMissingError, AuthzSignatureMisMatchError, JWTInvalidTokenError, SecurityIdentityNotResolvedError, SessionNotValidatedError, TokenDataMissingError, TokenExpiredError, TokenGenerationMismatchError
+from app.errors.security_error import APIKeyMismatchError, APIKeyMissingError, AuthzSignatureMisMatchError, CipherDoesNotExistError, CipherSchemeNotValidError, JWTInvalidTokenError, SecurityIdentityNotResolvedError, SessionNotValidatedError, TokenDataMissingError, TokenExpiredError, TokenGenerationMismatchError
 from app.errors.service_error import MiniServiceDoesNotExistsError
 from app.services.admin_service import AdminService
 from app.services.database.redis_service import RedisService
@@ -85,15 +85,16 @@ class APITokenAuthMiddleware(MiddleWare):
     async def dispatch(self, request:Request, call_next:Callable[...,Response]):
 
         token = get_bearer_token_from_request(request)
-        async with self.securityService.lock('reader'):
-            try:
+        try:
+            async with self.securityService.lock('reader'):
                 self.securityService.verify_server_access(token)
-            except APIKeyMissingError as e:
-                return JSONResponse({'message':'AUTH_MECHANISM set as "token" but not token was found, contact the server administrator'},
-                                    status.HTTP_503_SERVICE_UNAVAILABLE)
-            except APIKeyMismatchError as e:
-                return JSONResponse({'message':'Token provided does not match'},
-                                    status_code=status.HTTP_401_UNAUTHORIZED)
+                
+        except APIKeyMissingError as e:
+            return JSONResponse({'message':'AUTH_MECHANISM set as "token" but not token was found, contact the server administrator'},
+                                status.HTTP_503_SERVICE_UNAVAILABLE)
+        except APIKeyMismatchError as e:
+            return JSONResponse({'message':'Token provided does not match'},
+                                status_code=status.HTTP_401_UNAUTHORIZED)
 
         return await call_next(request)
 
@@ -119,7 +120,8 @@ class JWTAuthMiddleware(MiddleWare):
         try:  
             token = get_bearer_token_from_request(request)
             if request.headers.get(HTTPHeaderConstant.X_AUTH_TYPE,None) == AuthType.API_TOKEN:
-                token = self.securityService.decrypt(token,'ON_TOP_SECRET_KEY')
+                async with self.securityService.lock('reader'):
+                    token = self.securityService.decrypt(token,'ON_TOP_SECRET_KEY')
 
             async with self.jwtService.lock('reader'):
                 clientInfo: ClientAccessInfo = self.jwtService.verify_client_token_permission(token)
@@ -176,6 +178,12 @@ class JWTAuthMiddleware(MiddleWare):
 
         except AuthzSignatureMisMatchError as e:
             return JSONResponse(e.detail,status_code=status.HTTP_403_FORBIDDEN)
+
+        except CipherDoesNotExistError as e:
+            return JSONResponse(e.detail,status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        except CipherSchemeNotValidError as e:
+            return JSONResponse(e.detail,status.HTTP_400_BAD_REQUEST)
 
         except SessionNotValidatedError as e:
             return JSONResponse(e.detail,status_code=status.HTTP_403_FORBIDDEN)
