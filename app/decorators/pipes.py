@@ -3,7 +3,7 @@ import json
 from typing import Any, Callable, Coroutine, Iterable, Literal, Optional, Type, TypedDict, get_args
 from beanie import Document
 from fastapi import HTTPException, Request, Response,status
-from app.classes.auth_permission import AuthPermission, ClientAccessInfo, TokensModel
+from app.classes.auth_permission import AccessTypeAPIModel, AuthPermission, ClientAccessInfo, TokensModel
 from app.classes.broker import exception_to_json
 from app.classes.celery import AlgorithmType, SchedulerModel,TaskType
 from app.classes.email import EmailInvalidFormatError
@@ -29,6 +29,7 @@ from app.models.orm.security_model import ClientORM, GroupClientORM
 from app.models.sms_model import SMSCustomSchedulerModel
 from app.services.admin_service import ClientMiniService
 from app.services.custom_service import CustomService, NoEdgesCustomSchemaError, NoEntitiesCustomSchemaError
+from app.services.vault_service import VaultService
 from app.services.worker.celery_service import CeleryService, ChannelMiniService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
@@ -37,8 +38,9 @@ from app.services.security_service import JWTAuthService
 from app.definition._utils_decorator import Pipe
 from app.ntfr_tasks import TASK_REGISTRY, task_name
 from app.services.worker.arq_service import ArqIngestTaskService
-from app.utils.constant import GraphitiConstant, HTTPHeaderConstant, SpecialKeyAttributesConstant
+from app.utils.constant import GraphitiConstant, HTTPHeaderConstant, SpecialKeyAttributesConstant, VaultConstant
 from app.utils.helper import DICT_SEP, APIFilterInject, AsyncAPIFilterInject, PointerIterator, SliceMode, copy_response, issubclass_of, parseToBool, slice_dict
+from app.utils.toolbox import RunInThreadPool
 from app.utils.validation import email_validator, phone_number_validator
 from app.depends.orm_cache import ContactSummaryORMCache
 from app.models.orm.contacts_model import ContactSummary
@@ -853,7 +855,7 @@ class SParams(TypedDict):
     space:bool
 class SanitizePathParameterPipe(Pipe):
 
-    def __init__(self,params:SParams, service:bool = False,agent:bool=False,profile:bool=False,template:bool=False,client:bool=False,session:bool=True):
+    def __init__(self,params:SParams, service:bool = False,agent:bool=False,profile:bool=False,template:bool=False,client:bool=False,session:bool=True,access:bool=True):
         super().__init__(True)
         self.service = service
         self.agent = agent
@@ -861,6 +863,7 @@ class SanitizePathParameterPipe(Pipe):
         self.template = template
         self.client = client
         self.session = session
+        self.access = access
         self.params = params
 
     def sanitize(self,text:str):
@@ -872,7 +875,7 @@ class SanitizePathParameterPipe(Pipe):
             text = text.replace(' ','')
         return text
 
-    async def pipe(self,service:str=None,agent:str=None,profile:str=None,template:str=None,client:str=None,session_id:str=None):
+    async def pipe(self,service:str=None,agent:str=None,profile:str=None,template:str=None,client:str=None,session_id:str=None,access:str=None):
         data = {}
         
         if service != None and self.service:
@@ -887,6 +890,8 @@ class SanitizePathParameterPipe(Pipe):
             data['client'] = self.sanitize(client)
         if session_id != None and self.session:
             data['session_id'] = self.sanitize(session_id)
+        if access != None and self.access:
+            data['access'] = self.sanitize(access)
         
         return data
 
@@ -998,3 +1003,26 @@ class ClientMiniServiceResponsePipe(Pipe):
 
             case _:
                 return result
+
+class AccessPathPipe(Pipe):
+
+    def __init__(self,parse:bool=False,parse_empty=True):
+        super().__init__(True)
+        self.vaultService = Get(VaultService)
+        self.parse = parse
+        self.parse_empty = parse_empty
+
+
+    async def pipe(self,access:str):                
+        path = f'ACCESS/{access}'
+        if self.parse:
+            accessRes = await RunInThreadPool(self.vaultService.secrets_engine.read)(VaultConstant.INTERNAL_API_SECRETS,path)
+            accessRes = AccessTypeAPIModel(**accessRes)
+            accessRes._input =access
+            accessRes._path = path
+            return {'access':access}
+        else:
+            if not self.parse_empty and access =='':
+                return {'access',access}
+            else:
+                return {'access':path}

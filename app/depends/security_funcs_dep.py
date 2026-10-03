@@ -8,7 +8,12 @@ from app.utils.globals import CAPABILITIES
 
 def verify_dashboard_token(x_dashboard_token:Annotated[str,Header()]):
     configService:ConfigService = Get(ConfigService)
+    if configService.AUTH_MECHANISM != 'userpass':
+        return
     securityService:SecurityService = Get(SecurityService)
+    if securityService.DASHBOARD_KEY != x_dashboard_token:
+        raise HTTPException(401,{'message':'This request should only come from the dashboard'})
+    
 
 def verify_dmz_token(x_dmz_token:Annotated[str,Header()]):
     configService:ConfigService = Get(ConfigService)

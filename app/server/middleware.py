@@ -87,7 +87,9 @@ class APITokenAuthMiddleware(MiddleWare):
         token = get_bearer_token_from_request(request)
         try:
             async with self.securityService.lock('reader'):
-                self.securityService.verify_server_access(token)
+                access = self.securityService.verify_server_access(token)
+            
+            request.state.access = access
                 
         except APIKeyMissingError as e:
             return JSONResponse({'message':'AUTH_MECHANISM set as "token" but not token was found, contact the server administrator'},

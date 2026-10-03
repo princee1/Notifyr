@@ -29,7 +29,7 @@ from app.definition._ressource import PingService, UseInterceptor, LockService, 
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
 from app.classes.auth_permission import AccessModel, AuthPermission, AuthSignature, AuthType, ClientAccessInfo, ClientType, PoliciesNotMatchingError, PolicyModel, PolicyUpdateMode, Role, Scope
 from app.decorators.handlers import AsyncIOHandler, CostHandler, DataSourceHandler, MiniServiceHandler, ORMCacheHandler, PydanticHandler, RedisHandler, ClientHandler, ClientSecurityHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler, VaultHandler
-from app.decorators.pipes import  AccessTokenModelPipe, ClientMiniServiceResponsePipe, ForceClientPipe, ForceGroupPipe, FunctionInjectorPipe, MiniServiceInjectorPipe, ObjectRelationalFriendlyPipe, StateResponseInjectionPipe
+from app.decorators.pipes import  AccessTokenModelPipe, ClientMiniServiceResponsePipe, ForceClientPipe, ForceGroupPipe, FunctionInjectorPipe, MiniServiceInjectorPipe, ObjectRelationalFriendlyPipe, SanitizePathParameterPipe, StateResponseInjectionPipe
 from app.utils.helper import  generateId, uuid_v1_mc
 from app.utils.toolbox import RunInThreadPool
 from app.errors.security_error import ClientAlreadyExistError, IdentityAlreadyBlacklistedError, ClientDoesNotExistError, SessionNotValidatedError
@@ -223,6 +223,7 @@ class ClientRessource(BaseHTTPRessource):
     @UseGuard(session_guard)
     @UsePermission(AdminPermission)
     @LockService(AdminService,lockType='reader')
+    @UsePipe(SanitizePathParameterPipe(client=True))
     @UseHandler(MiniServiceHandler,DataSourceHandler)
     @UsePipe(ObjectRelationalFriendlyPipe(when=lambda source: source == 'database'),before=False)
     @UsePipe(ClientMiniServiceResponsePipe('result',when=lambda source: source == 'memory'),before=False)

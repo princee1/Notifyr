@@ -40,6 +40,9 @@ if configService.AUTH_MECHANISM == 'userpass':
     SERVER_RESSOURCES.append(AdminRessource)
     SERVER_RESSOURCES.append(AuthRessource)
 
+if configService.AUTH_MECHANISM == 'token':
+    ...
+
 
 if CAPABILITIES['object']:
     from .object_s3_ressource import S3ObjectRessource

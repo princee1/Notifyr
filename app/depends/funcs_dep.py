@@ -200,3 +200,6 @@ def get_blacklist(blacklist:BlacklistModel):
 
 def get_credentials(credentials: Annotated[HTTPBasicCredentials, Depends(HTTPBasic())]):
     return credentials
+
+def get_access(access:str):
+    return access

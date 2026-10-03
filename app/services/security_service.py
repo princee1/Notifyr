@@ -14,18 +14,18 @@ from app.errors.security_error import (
     TokenExpiredError,
     TokenGenerationMismatchError,
 )
-from app.errors.service_error import BuildWarningError
+from app.errors.service_error import BuildAbortError, BuildWarningError
 from app.services.setting_service import SettingService
 from app.utils.constant import VaultConstant
 from app.utils.fileIO import FDFlag
 from app.utils.toolbox import Cache, RunInThreadPool, Time
 from .config_service import ConfigService
 from .file.file_service import FileService
-from app.definition._service import AbstractServiceClass, BaseService, BuildFailureError, Service, ServiceStatus
+from app.definition._service import DEFAULT_BUILD_STATE, AbstractServiceClass, BaseService, BuildFailureError, Service, ServiceStatus
 import jwt
 import base64
 import time
-from app.classes.auth_permission import AuthPermission, AuthType, ClientAccessInfo, ClientType, ContactPermission, ContactPermissionScope, ClientRefresh, Role, RoutePermission, Scope, WSPermission
+from app.classes.auth_permission import AccessAPI, ClientTypeLiteral, AuthPermission, AuthType, ClientAccessInfo, ClientType, ContactPermission, ContactPermissionScope, ClientRefresh, Role, RoutePermission, Scope, WSPermission
 from random import randint, random
 from app.utils.helper import generateId, b64_encode, b64_decode
 import os
@@ -226,6 +226,7 @@ class JWTAuthService(BaseService):
 
 CipherMode = Literal['api-token']
 
+ACCESS_BUILD_STATE = 49043
 @Service()
 class SecurityService(BaseService):
     NONCE="1234567891234578"
@@ -239,30 +240,33 @@ class SecurityService(BaseService):
 
         self.ciphers:dict[CipherMode,StringCipher] = {}
 
-        self.API_KEY:str = ...
+        self.API_KEY:dict[str,AccessAPI] = {}
 
     def verify_server_access(self, token: str) -> bool:
         if not self.API_KEY:
             raise APIKeyMissingError(source='server_api_key')
 
-        if token != self.API_KEY:
+        if token not in self.API_KEY:
             raise APIKeyMismatchError(source='server_api_key', provided=token)
 
-        return True
+        return self.API_KEY[token]
 
     def build(self,build_state=-1):
-        api_key = self.fileService.readFile('/run/secrets/api_key.txt',flag=FDFlag.READ)
-        if api_key == None:
-            raise BuildWarningError()
-        
-        self.API_KEY = api_key
-        try:
-            self.DMZ_KEY=self.vaultService.secrets_engine.read(VaultConstant.INTERNAL_API_SECRETS,'DMZ')['API_KEY']
-            self.BALANCER_EXCHANGE_TOKEN=self.vaultService.secrets_engine.read(VaultConstant.INTERNAL_API_SECRETS,'BALANCER')['API_KEY']
-            self.DASHBOARD_KEY=self.vaultService.secrets_engine.read(VaultConstant.INTERNAL_API_SECRETS,'DASHBOARD')['API_KEY']
-        except Exception as e:
-            print(e)
-            raise BuildWarningError()
+
+        if build_state == DEFAULT_BUILD_STATE or build_state == ACCESS_BUILD_STATE:
+            if self.configService.AUTH_MECHANISM == 'token':
+                self.API_KEY.clear()
+                for access_id in self.vaultService.secrets_engine.list(f'{VaultConstant.INTERNAL_API_SECRETS}/ACCESS'):
+                    self.API_KEY[access_id] = self.vaultService.secrets_engine.read(VaultConstant.INTERNAL_API_SECRETS,f'ACCESS/{access_id}')['TOKEN']
+
+        if build_state == DEFAULT_BUILD_STATE:
+            try:
+                self.DMZ_KEY=self.vaultService.secrets_engine.read(VaultConstant.INTERNAL_API_SECRETS,'DMZ')['API_KEY']
+                self.BALANCER_EXCHANGE_TOKEN=self.vaultService.secrets_engine.read(VaultConstant.INTERNAL_API_SECRETS,'BALANCER')['API_KEY']
+                self.DASHBOARD_KEY=self.vaultService.secrets_engine.read(VaultConstant.INTERNAL_API_SECRETS,'DASHBOARD')['API_KEY']
+            except Exception as e:
+                print(e)
+                raise BuildWarningError()
         
         self.build_cipher()
     

@@ -311,6 +311,8 @@ create_default_token(){
   local balancer_exchange_token="balancer_exchange:$(pwgen -s 80 1)"
   local agentic_api_key="agentic:$(pwgen -s 70 1)"
   local mcp_api_key="mcp:$(pwgen -s 60 1)"
+  local admin_api_key="mcp:$(pwgen -s 75 1)"
+
   local webhook_api_key="mcp:$(pwgen -s 60 1)"
 
   vault kv put notifyr-secrets/internal/DMZ API_KEY="$dmz_api_key"
@@ -318,9 +320,12 @@ create_default_token(){
   vault kv put notifyr-secrets/internal/DASHBOARD API_KEY="$dashboard_api_key"
   vault kv put notifyr-secrets/internal/AGENTIC API_KEY="$agentic_api_key"
   vault kv put notifyr-secrets/internal/MCP API_KEY="$mcp_api_key"
+
   vault kv put notifyr-secrets/internal/INCOMING_WEBHOOK API_KEY="$webhook_api_key"
+  vault kv put notifyr-secrets/internal/ACCESS/admin '{"type":"Admin","allowed_ip":null,"time":,"token","$admin_api_key"}'
 
   echo -n "$dmz_api_key" > "$VAULT_SECRETS_DIR/dmz-api-key.txt"
+  echo -n "$admin_api_key" > "$VAULT_SECRETS_DIR/admin-api-key.txt"
   echo -n "$dashboard_api_key" > "$VAULT_SECRETS_DIR/dashboard-api-key.txt"
   echo -n "$balancer_exchange_token" > "$VAULT_SECRETS_DIR/balancer-exchange-token.txt"
 

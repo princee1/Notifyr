@@ -1,5 +1,5 @@
 from typing import Any, Callable, List, Literal, Type
-from app.classes.auth_permission import AuthPermission, AuthType, ClientAccessInfo, ClientType, PolicyModel, ClientRefresh
+from app.classes.auth_permission import AccessTypeAPIModel, AuthPermission, AuthType, ClientAccessInfo, ClientType, PolicyModel, ClientRefresh
 from app.classes.cost_definition import CreditNotInPlanError
 from app.classes.mongo import BaseDocument
 from app.definition._error import ServerFileError
@@ -560,5 +560,24 @@ class SessionMechanismGuard(Guard):
     def revoke_session_guard(self,revoke:RevokeSessionModel):
         if self.configService.SESSION_MECHANISM == 'none' and revoke.session:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail='Session mechanism is not implemented')
+
+        return True,''
+
+
+class AccessTypeGuard(Guard):
+
+    def __init__(self,admin=False):
+        super().__init__()
+        self.admin = admin
+
+    def guard(self,access:str|AccessTypeAPIModel):
+        if isinstance(access,str):
+            if access == 'admin' and not self.admin:
+                return False,'Cannot use the admin in this route'
+        elif isinstance(access,AccessTypeAPIModel):
+            if access._input == 'admin' and not self.admin:
+                return False,'Cannot use the admin in this route'
+        else:
+            raise ValidationError()
 
         return True,''

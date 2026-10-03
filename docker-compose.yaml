@@ -132,8 +132,6 @@ services:
       # PRESERVED: Custom target paths
       - source: app_role_id
         target: /run/secrets/app-role_id.txt
-      - source: api_key
-        target: /run/secrets/api_key.txt
       - source: costs
         target: /run/secrets/costs.json
       - source: deploy
@@ -673,8 +671,6 @@ secrets:
     file: ./.secrets/unseal_key.json
   costs:
     file: ./.notifyr/costs.json
-  api_key:
-    file: ./.secrets/api_key.txt
   credit_token:
     file: ./.secrets/credit_token.txt
   deploy:

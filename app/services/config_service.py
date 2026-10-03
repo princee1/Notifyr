@@ -1,8 +1,9 @@
 import os
-from typing import Any, Callable, TypedDict
+from typing import Any, Callable, TypedDict, get_args
 from typing_extensions import Literal
 from dotenv import load_dotenv, find_dotenv
 from enum import Enum
+from app.classes.auth_permission import AuthMechanism, SessionMechanism
 from app.errors.service_error import BuildAbortError, BuildFailureError, BuildOkError, BuildWarningError
 from app.utils.constant import RabbitMQConstant, RedisConstant
 from app.definition import _service
@@ -154,8 +155,6 @@ class ConfigService(_service.BaseService):
         # GRAPHITI CONFIG #
         self.GRAPHITI_MAX_COROUTINES:int = ConfigService.parseToInt(self.getenv('GRAPHITI_MAX_COROUTINES'))
 
-        # SECURITY CONFIG #
-        self.AUTH_MECHANISM: Literal['userpass','token','none'] = self.getenv('AUTH_MECHANISM','userpass').lower()
         self.COST_FLAG:bool = ConfigService.parseToBool(self.getenv('COST_FLAG','true'),True)
         self.ADMIN_KEY:str = self.getenv("ADMIN_KEY")
         
@@ -239,7 +238,9 @@ class ConfigService(_service.BaseService):
         self.MCP_ENABLED:bool = ConfigService.parseToBool(self.getenv('MCP_ENABLED','false'),False)
 
         # SESSION CONFIG #
-        self.SESSION_MECHANISM:Literal['redis+sync','vault+sync','redis','none'] = self.getenv('SESSION_MECHANISM','redis')
+        self.SESSION_MECHANISM:SessionMechanism = self.getenv('SESSION_MECHANISM','redis')
+        # SECURITY CONFIG #
+        self.AUTH_MECHANISM:AuthMechanism  = self.getenv('AUTH_MECHANISM','userpass').lower()
 
 
     def verify(self):
@@ -268,7 +269,7 @@ class ConfigService(_service.BaseService):
         if self.AUTH_MECHANISM != 'userpass':
             self.SESSION_MECHANISM == 'none'
         else:
-            if self.SESSION_MECHANISM not in ['redis+sync','vault+sync','redis','none']:
+            if self.SESSION_MECHANISM not in get_args(SessionMechanism):
                 raise BuildAbortError('SESSION MECHANISM must be either "redis+sync" "vault+sync" "redis" or "none"' )
             if self.MODE == MODE.DEV_MODE and self.SESSION_MECHANISM == 'none':
                 raise BuildWarningError(f"SESSION_MECHANISM {self.SESSION_MECHANISM} is set to None, this is not recommended for production environments")

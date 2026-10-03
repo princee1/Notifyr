@@ -19,8 +19,22 @@ PermissionStatus= Literal['active','inactive','expired']
 ClientTypeLiteral = Literal['User','Admin','Twilio','App','Service']
 
 PolicyUpdateMode = Literal['set','merge','delete']
+AuthMechanism = Literal['userpass','token','none']
+SessionMechanism =Literal['redis+sync','vault+sync','redis','none']
 
 EXTENSION = [f".{ext}" for ext in Extension._value2member_map_.keys()]
+
+
+class AccessTypeModel(BaseModel):
+    type:ClientTypeLiteral
+    allowed_ip:str|None
+    time:float
+
+class AccessTypeAPIModel(AccessTypeModel):
+    token:str
+
+    _path:str|None=PrivateAttr(default=None)
+    _input:str|None=PrivateAttr(default=None)
 
 class Role(Enum):
     PUBLIC = 'PUBLIC'
