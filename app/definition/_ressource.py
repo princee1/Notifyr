@@ -1010,7 +1010,7 @@ def Throttle(fixed: float | None = None,fn: Callable[[], float] | None = None,un
 
     return decorator    
 
-def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]|None|Dict[ClientTypeLiteral,int]=None,key_func:Callable[[Request],str]|Literal['group','client','public','private','default','worker','none','session','ip','subnet']='client'):
+def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]|None|Dict[ClientTypeLiteral,int]=None,key_func:Callable[[Request],str]|Literal['group','client','public','private','default','worker','none','session','ip','subnet','access']='client'):
     """
     *Description copied from the slowapi library*
 
@@ -1056,7 +1056,7 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
     cost_callback = cost_decorator()
 
     def access_type_token_func(request:Request):
-        return ''
+        return request.state.access['access']
 
     def client_private_key_func(request:Request):
         if configService.AUTH_MECHANISM != 'userpass':
@@ -1083,6 +1083,9 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
         authPermission:AuthPermission = get_auth_permission(request)
         return 'private'
 
+    if configService.AUTH_MECHANISM == 'token':
+        key_func = access_type_token_func
+
     if isinstance(key_func,str):
         match key_func:
             case 'default':
@@ -1105,6 +1108,8 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
                 key_func = client_private_key_func
             case 'group':
                 key_func = group_private_key_func
+            case 'access':
+                key_func = access_type_token_func
             case _:
                 key_func = client_private_key_func
     elif callable(key_func):

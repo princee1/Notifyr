@@ -4,7 +4,7 @@ from app.classes.auth_permission import AuthPermission, AuthType, ClientAccessIn
 from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE
 from app.definition._ressource import HTTPMethod
 from app.depends.orm_cache import BlacklistClientCache, BlacklistGroupCache
-from app.errors.security_error import APIKeyMismatchError, APIKeyMissingError, AuthzSignatureMisMatchError, CipherDoesNotExistError, CipherSchemeNotValidError, JWTInvalidTokenError, SecurityIdentityNotResolvedError, SessionNotValidatedError, TokenDataMissingError, TokenExpiredError, TokenGenerationMismatchError
+from app.errors.security_error import APIKeyMismatchError, APIKeyMissingError, AuthzSignatureMisMatchError, CipherDoesNotExistError, CipherSchemeNotValidError, JWTInvalidTokenError, RequestOriginIsNotValidError, SecurityIdentityNotResolvedError, SessionNotValidatedError, TokenDataMissingError, TokenExpiredError, TokenGenerationMismatchError
 from app.errors.service_error import MiniServiceDoesNotExistsError
 from app.services.admin_service import AdminService
 from app.services.database.redis_service import RedisService
@@ -88,6 +88,9 @@ class APITokenAuthMiddleware(MiddleWare):
         try:
             async with self.securityService.lock('reader'):
                 access = self.securityService.verify_server_access(token)
+
+            origin = get_client_ip(request)
+            self.securityService.verify_token_origin(origin,access)
             
             request.state.access = access
                 
@@ -97,6 +100,9 @@ class APITokenAuthMiddleware(MiddleWare):
         except APIKeyMismatchError as e:
             return JSONResponse({'message':'Token provided does not match'},
                                 status_code=status.HTTP_401_UNAUTHORIZED)
+        
+        except RequestOriginIsNotValidError as e:
+            return JSONResponse(e.detail,status.HTTP_401_UNAUTHORIZED)
 
         return await call_next(request)
 
@@ -162,6 +168,9 @@ class JWTAuthMiddleware(MiddleWare):
 
         except HTTPException as e:
             return JSONResponse(e.detail,e.status_code,e.headers)
+
+        except RequestOriginIsNotValidError as e:
+            return JSONResponse(e.detail,status.HTTP_401_UNAUTHORIZED)
 
         except TokenDataMissingError as e:
             return JSONResponse({'message':'could not properly decode the token'},status.HTTP_401_UNAUTHORIZED)

@@ -45,6 +45,8 @@ services:
   dashboard:
     image: notifyr/dashboard:community
     container_name: dashboard
+    environment:
+      - AUTH_MECHANISM=${AUTH_MECHANISM}
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.dashboard.rule=Host(`dashboard.notifyr.io`)"

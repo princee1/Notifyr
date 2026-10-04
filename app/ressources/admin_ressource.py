@@ -344,8 +344,8 @@ class AdminRessource(BaseHTTPRessource):
                 if await BlacklistClientCache.Get([client.client_id,session]) and not blacklist.force:
                     raise IdentityAlreadyBlacklistedError(blacklist.identity,'session')
 
-                path = f"/clients/{client.client_id}/auth-signature"
-                sessions:list[str] = await RunInThreadPool(self.vaultService.security_engine.list)(path)
+                path = f"{client.client_id}/auth-signature"
+                sessions:list[str] = await RunInThreadPool(self.vaultService.security_engine.list)('clients',path)
 
                 if session not in sessions:
                     raise SessionNotValidatedError(client_id,session)

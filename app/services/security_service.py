@@ -2,7 +2,6 @@
 from cachetools import cached,TTLCache
 from typing import Any, Dict, Literal
 from app.classes.secrets import ChaCha20SecretsWrapper, StringCipher
-from app.definition._interface import Interface, IsInterface
 from app.errors.security_error import (
     APIKeyMismatchError,
     APIKeyMissingError,
@@ -10,6 +9,7 @@ from app.errors.security_error import (
     CipherSchemeNotValidError,
     JWTInvalidTokenError,
     ProvidedHashNotEquivalentError,
+    RequestOriginIsNotValidError,
     TokenDataMissingError,
     TokenExpiredError,
     TokenGenerationMismatchError,
@@ -21,12 +21,10 @@ from app.utils.fileIO import FDFlag
 from app.utils.toolbox import Cache, RunInThreadPool, Time
 from .config_service import ConfigService
 from .file.file_service import FileService
-from app.definition._service import DEFAULT_BUILD_STATE, AbstractServiceClass, BaseService, BuildFailureError, Service, ServiceStatus
+from app.definition._service import DEFAULT_BUILD_STATE, BaseService, BuildFailureError, Service, ServiceStatus
 import jwt
-import base64
 import time
-from app.classes.auth_permission import AccessAPI, ClientTypeLiteral, AuthPermission, AuthType, ClientAccessInfo, ClientType, ContactPermission, ContactPermissionScope, ClientRefresh, Role, RoutePermission, Scope, WSPermission
-from random import randint, random
+from app.classes.auth_permission import AccessTypeAPIModel, ClientTypeLiteral, AuthPermission, AuthType, ClientAccessInfo, ClientType, ContactPermission, ContactPermissionScope, ClientRefresh, Role, RoutePermission, Scope, WSPermission
 from app.utils.helper import generateId, b64_encode, b64_decode
 import os
 import hmac
@@ -240,7 +238,7 @@ class SecurityService(BaseService):
 
         self.ciphers:dict[CipherMode,StringCipher] = {}
 
-        self.API_KEY:dict[str,AccessAPI] = {}
+        self.API_KEY:dict[str,dict] = {}
 
     def verify_server_access(self, token: str) -> bool:
         if not self.API_KEY:
@@ -251,13 +249,18 @@ class SecurityService(BaseService):
 
         return self.API_KEY[token]
 
+    def verify_token_origin(self,origin:str,access:AccessTypeAPIModel):
+        return
+        raise RequestOriginIsNotValidError
+
     def build(self,build_state=-1):
 
         if build_state == DEFAULT_BUILD_STATE or build_state == ACCESS_BUILD_STATE:
             if self.configService.AUTH_MECHANISM == 'token':
                 self.API_KEY.clear()
-                for access_id in self.vaultService.secrets_engine.list(f'{VaultConstant.INTERNAL_API_SECRETS}/ACCESS'):
-                    self.API_KEY[access_id] = self.vaultService.secrets_engine.read(VaultConstant.INTERNAL_API_SECRETS,f'ACCESS/{access_id}')['TOKEN']
+                for access_id,access in self.vaultService.secrets_engine.view(VaultConstant.INTERNAL_API_SECRETS,'ACCESS'):
+                    access['access'] = access_id
+                    self.API_KEY[access['token']] = access
 
         if build_state == DEFAULT_BUILD_STATE:
             try:

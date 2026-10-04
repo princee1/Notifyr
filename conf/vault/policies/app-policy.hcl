@@ -53,6 +53,14 @@ path "notifyr-secrets/internal/*" {
   capabilities = ["read"]
 }
 
+path "notifyr-secrets/internal/ACCESS" {
+  capabilities = ["list"]
+}
+
+path "notifyr-secrets/internal/ACCESS/*" {
+  capabilities = ["read","delete","create","update"]
+}
+
 path "notifyr-secrets/communication" {
   capabilities = ["read","list"]
 }

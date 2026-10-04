@@ -67,12 +67,9 @@ class ClientMiniService(BaseMiniService):
     def build(self, build_state = DEFAULT_BUILD_STATE):
         match self.configService.SESSION_MECHANISM:
             case 'vault+sync': 
-                path = f"clients/{ClientVaultPath.SESSIONS_VAULT_PATH(self.miniService_id,'')}"
-                sessions = self.vaultService.security_engine.list(path)
                 self.sessions.clear()
-                for s in sessions:
-                    p = ClientVaultPath.SESSIONS_VAULT_PATH(self.miniService_id,s)
-                    signature:AuthSignature = self.vaultService.security_engine.read('clients',p)
+                path = ClientVaultPath.SESSIONS_VAULT_PATH(self.miniService_id,'')
+                for s,signature in self.vaultService.security_engine.view('clients',path):
                     self.sessions[s] = ChaCha20SecretsWrapper(signature)
 
             case 'redis+sync':
@@ -145,11 +142,10 @@ class ClientMiniService(BaseMiniService):
         if session_id == '':
             match self.configService.SESSION_MECHANISM:
                 case 'vault+sync':
-                    path = f"clients/{ClientVaultPath.SESSIONS_VAULT_PATH(self.client_id,'')}"
-                    sessions = await RunInThreadPool(self.vaultService.security_engine.list)(path)
-                    for s in sessions:
-                        p =  ClientVaultPath.SESSIONS_VAULT_PATH(self.client_id,s)
-                        res[s] =await  RunInThreadPool(self.vaultService.security_engine.read)('clients',p)
+                    path = ClientVaultPath.SESSIONS_VAULT_PATH(self.client_id,'')
+                    sessions:list[tuple[str,AuthSignature]] = list(await RunInThreadPool(self.vaultService.security_engine.list)(path))
+                    for s,signatures in sessions:
+                        res[s] =signatures
                     return res
                 case 'redis' | 'redis+sync':
                     path = ClientVaultPath.SESSIONS_REDIS_PATH(self.client_id,'*')
@@ -225,8 +221,8 @@ class ClientMiniService(BaseMiniService):
 
         match self.configService.SESSION_MECHANISM:
             case 'vault+sync':
-                path = f'clients/{ClientVaultPath.SESSIONS_VAULT_PATH(self.client_id)}'
-                sessions =  await RunInThreadPool(self.vaultService.security_engine.list)(path)
+                path = ClientVaultPath.SESSIONS_VAULT_PATH(self.client_id)
+                sessions =  await RunInThreadPool(self.vaultService.security_engine.list)('clients',path)
 
             case 'redis' | 'redis+sync':
                 path = ClientVaultPath.SESSIONS_REDIS_PATH(self.client_id,'*')
@@ -271,8 +267,8 @@ class ClientMiniService(BaseMiniService):
         else:
             match self.configService.SESSION_MECHANISM:
                 case 'vault+sync':
-                    path = f'clients/{ClientVaultPath.SESSIONS_VAULT_PATH(self.client_id)}'
-                    sessions = await RunInThreadPool(self.vaultService.security_engine.list)(path)
+                    path = ClientVaultPath.SESSIONS_VAULT_PATH(self.client_id)
+                    sessions = await RunInThreadPool(self.vaultService.security_engine.list)('clients',path)
 
                     if session not in sessions:
                         raise SessionNotValidatedError(self.client_id,session,'No sessions found at the db level')
@@ -457,15 +453,13 @@ class AdminService(BaseMiniServiceManager[ClientMiniService]):
         self.mappings:list[dict] = []
 
     def build(self,build_state=DEFAULT_BUILD_STATE):
-
         if self.configService.AUTH_MECHANISM != 'userpass':
             return
         
         policies = {} 
         mappings = self.tortoiseConnService.fetch(PolicyMappingORM,listing='list')
-        for pk in self.vaultService.security_engine.list('policies'):
-            p = self.vaultService.security_engine.read('policies',pk)
-            policies[pk] = PolicyModel(**p)
+        for p,policy in self.vaultService.security_engine.view('policies'):
+            policies[p] = PolicyModel(**policy)
 
         self.policies= policies
         self.mappings = mappings

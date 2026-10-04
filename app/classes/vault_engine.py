@@ -4,7 +4,7 @@ from app.definition._error import BaseError
 from app.utils.constant import VaultConstant
 from app.utils.helper import b64_decode, b64_encode
 from hvac import Client
-from typing import Literal, TypedDict, Optional, Dict, Any
+from typing import List, Literal, TypedDict, Optional, Dict, Any
 
 
 class VaultDatabaseCredentialsData(TypedDict):
@@ -95,10 +95,10 @@ class KV1VaultEngine(VaultEngine):
                 )    
         return delete_response
 
-    def list(self,sub_mount:str,known:bool=True)->list[str]:
+    def list(self,sub_mount:VaultConstant.NotifyrSecretType,path:str='',known:bool=True)->List[str]:
         try:
             list_response = self.client.secrets.kv.v1.list_secrets(
-                path=VaultConstant.KV_ENGINE_BASE_PATH(sub_mount),
+                path=VaultConstant.KV_ENGINE_BASE_PATH(sub_mount,path),
                 mount_point=self.mount_point
             )
             return list_response['data'].get('keys',[])
@@ -106,6 +106,15 @@ class KV1VaultEngine(VaultEngine):
             if known:
                 return []
             raise e
+
+    def view(self,sub_mount:str,path:str='',known:bool=True):
+        keys = self.list(sub_mount,path,known)
+        for k in keys:
+            if path !='':
+                p = f"{path}/{k}"
+            else:
+                p=k
+            yield k,self.read(sub_mount,p)
         
 class KV2VaultEngine(VaultEngine):
 

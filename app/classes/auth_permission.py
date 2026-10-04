@@ -27,12 +27,12 @@ EXTENSION = [f".{ext}" for ext in Extension._value2member_map_.keys()]
 
 class AccessTypeModel(BaseModel):
     type:ClientTypeLiteral
-    allowed_ip:str|None
-    time:float
+    allowed_ip:List[str]|None
+    alias:Optional[str] = Field(default=None,min_length=8,max_length=40)
 
 class AccessTypeAPIModel(AccessTypeModel):
     token:str
-
+    time:float = Field(default_factory=lambda :time.time())
     _path:str|None=PrivateAttr(default=None)
     _input:str|None=PrivateAttr(default=None)
 
@@ -349,6 +349,16 @@ class WSPermission(TypedDict):
     
 class WSPathNotFoundError(BaseError):
     ...
+
+class AccessAlreadyExistsError(BaseError):
+    def __init__(self, access: str):
+        super().__init__(access)
+        self.access = access
+
+class AccessHardLimitReachedError(BaseError):
+    def __init__(self, limit: int):
+        super().__init__(limit)
+        self.limit = limit
 
 class PoliciesNotMatchingError(BaseError):
     ...

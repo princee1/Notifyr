@@ -17,7 +17,7 @@ from app.errors.ingest_error import AgenticDatabaseNotAllowedError, IngestConfig
 from app.errors.agentic_error import *
 from app.errors.llm_error import LLMProviderDoesNotExistError, LLMModelNotPermittedError, LLMModelMaxTokenExceededError, LLMRateLimiterError, LLMConfigNotConfiguredError
 from app.services.worker.arq_service import DataTaskNotFoundError, JobAlreadyExistsError, JobDequeueError, JobDoesNotExistsError, JobInProgressError, JobStatusNotValidError,ResultNotFound, UnexpectedJobStatusError
-from app.classes.auth_permission import WSPathNotFoundError
+from app.classes.auth_permission import AccessAlreadyExistsError, AccessHardLimitReachedError, WSPathNotFoundError
 from app.classes.stream_data_parser import ContinuousStateError, DataParsingError, SequentialStateError, ValidationDataError
 from app.classes.template import SchemaValidationError, SkipTemplateCreationError, TemplateBuildError, TemplateCreationError, TemplateFormatError, TemplateInjectError, TemplateNotFoundError, TemplateValidationError
 from app.container import InjectInMethod
@@ -1487,3 +1487,19 @@ class DataSourceHandler(Handler):
             return await super().handle(function, *args, **kwargs)
         except DataSourceNotSupportedError as e:
             raise  
+
+class AccessHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await super().handle(function, *args, **kwargs)
+        except AccessHardLimitReachedError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail='Hard limit reached'
+            ) from e
+        except AccessAlreadyExistsError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f'access : {e.access} already exists'
+            ) from e
