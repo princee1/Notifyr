@@ -2,10 +2,10 @@ from typing import Annotated, Optional
 
 from aiohttp.web_request import Request
 from fastapi import Depends, HTTPException, Response
-from pydantic import Field
+from pydantic import Field, field_validator
 from starlette import status
 
-from app.classes.auth_permission import AccessAlreadyExistsError, AccessHardLimitReachedError, AccessTypeAPIModel, AccessTypeModel
+from app.classes.auth_permission import AccessAlreadyExistsError, AccessHardLimitReachedError, AccessTypeAPIModel, AccessTypeModel, ClientTypeLiteral
 from app.decorators.guards import AccessTypeGuard
 from app.decorators.handlers import AccessHandler, CostHandler, VaultHandler
 from app.decorators.interceptors import DataCostInterceptor
@@ -32,6 +32,14 @@ class AccessRessource(BaseHTTPRessource):
 
     class CreateAccessTypeModel(AccessTypeModel):
         access_id:Optional[str] = Field(default_factory=lambda : str(uuid_v1_mc(1)),min_length=10,max_length=40)
+
+        @field_validator('type',mode='after')
+        def validate_type(cls,t:ClientTypeLiteral):
+            if t == 'Admin':
+                raise ValueError('We cannot create a new admin access')
+            
+            return t
+
 
     @staticmethod
     def get_access_id(accessModel:CreateAccessTypeModel):

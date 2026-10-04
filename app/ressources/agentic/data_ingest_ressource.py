@@ -9,7 +9,7 @@ from app.decorators.guards import ArqDataTaskGuard, DataIngestDatabaseGuard, Upl
 from app.decorators.handlers import CustomSchemaHandler, GatewayHandler, LLMHandler, ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, FileHandler, MiniServiceHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler, UploadFileHandler, VaultHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.pipes import  DataClassToDictPipe, GraphRelationshipPipe, MerchantPipe, MiniServiceInjectorPipe, QueryToModelPipe, update_status_upon_no_metadata_pipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, LockService
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, Throttle, UseAccess, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, LockService
 from app.depends.class_dep import EmbeddingSimilarity, FileDataIngestQuery
 from app.depends.dependencies import get_auth_permission, get_client_info, get_request_id
 from app.depends.funcs_dep import get_profile
@@ -53,6 +53,7 @@ class JobArqRessource(BaseHTTPRessource):
     
     @UseHandler(AsyncIOHandler)
     @PingService([ArqIngestTaskService])
+    @UseAccess(accesses={'Admin':True,'User':True})
     @LockService(ArqIngestTaskService,lockType='reader')
     @UsePipe(DataClassToDictPipe(),before=False)
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.GET])
@@ -61,6 +62,7 @@ class JobArqRessource(BaseHTTPRessource):
         
     @UseHandler(AsyncIOHandler)
     @PingService([ArqIngestTaskService])
+    @UseAccess(accesses={'Admin':True,'User':True})
     @LockService(ArqIngestTaskService,lockType='reader')
     @UsePipe(DataClassToDictPipe(),before=False)
     @BaseHTTPRessource.HTTPRoute('/results/', methods=[HTTPMethod.GET])
@@ -69,6 +71,7 @@ class JobArqRessource(BaseHTTPRessource):
         
     @UseHandler(AsyncIOHandler)    
     @PingService([ArqIngestTaskService])
+    @UseAccess(accesses={'Admin':True,'User':True})
     @LockService(ArqIngestTaskService,lockType='reader')
     @UsePipe(DataClassToDictPipe(),before=False)
     @BaseHTTPRessource.HTTPRoute('/info/{job_id}/', methods=[HTTPMethod.GET])
@@ -80,6 +83,7 @@ class JobArqRessource(BaseHTTPRessource):
     @UseHandler(AsyncIOHandler)
     @PingService([ArqIngestTaskService])
     @UsePipe(DataClassToDictPipe(),before=False)
+    @UseAccess(accesses={'Admin':True,'User':True})
     @LockService(ArqIngestTaskService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/result/{job_id}/', methods=[HTTPMethod.GET])
     async def get_job_result(self, job_id: str, request: Request,response:Response,autPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
@@ -89,6 +93,7 @@ class JobArqRessource(BaseHTTPRessource):
 
     @UseLimiter('5/hour')
     @Throttle(uniform=(100,300))
+    @UseAccess(accesses={'Admin':True})
     @PingService([ArqIngestTaskService])
     @LockService(ArqIngestTaskService,lockType='reader')
     @UseHandler(CostHandler,AsyncIOHandler,FileHandler,RedisHandler,ArqHandler)
@@ -128,10 +133,11 @@ class JobArqRessource(BaseHTTPRessource):
                 raise UnexpectedJobStatusError(job_id,status)
 
 @UseRoles([Role.ADMIN])
-@PingService([ArqIngestTaskService])
-@IncludeRessource(JobArqRessource)
-@UsePermission(JWTRouteHTTPPermission)
 @UsePipe(GraphRelationshipPipe)
+@IncludeRessource(JobArqRessource)
+@UseAccess(accesses={'Admin':True})
+@PingService([ArqIngestTaskService])
+@UsePermission(JWTRouteHTTPPermission)
 @UseHandler(ServiceAvailabilityHandler,CostHandler,DataIngestHandler,CustomSchemaHandler)
 @HTTPRessource('data-ingest')
 class DataIngestRessource(BaseHTTPRessource):

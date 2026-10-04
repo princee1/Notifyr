@@ -8,10 +8,10 @@ from app.cost.sms_cost import SMSCost
 from app.decorators.guards import CarrierTypeGuard, CeleryBrokerGuard, CeleryTaskGuard
 from app.decorators.handlers import AsyncIOHandler, CeleryTaskHandler, ContactsHandler, CostHandler, MiniServiceHandler, ProfileHandler, ServiceAvailabilityHandler, TemplateHandler, TwilioHandler
 from app.decorators.interceptors import RegisterBackgroundTaskInterceptor, TaskCostInterceptor
-from app.decorators.permissions import AgentPermission, MCPPermission, ProfilePermission, TaskCostPermission,JWTRouteHTTPPermission
+from app.decorators.permissions import AgentPermission, MCPPermission, ProfilePermission, TaskCostPermission,JWTRouteHTTPPermission, TwilioPermission
 from app.decorators.pipes import CeleryTaskPipe, ContactToInfoPipe, ContentIndexPipe, MiniServiceInjectorPipe, OffloadedTaskResponsePipe, TwilioPhoneNumberPipe, RegisterSchedulerPipe, to_otp_path, force_task_manager_attributes_pipe
 from app.definition._cost import SimpleTaskCost
-from app.definition._ressource import HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseInterceptor, LockService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, UsePipe, UseRoles
+from app.definition._ressource import HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseAccess, UseInterceptor, LockService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, UsePipe, UseRoles
 from app.container import Get, InjectInMethod
 from app.depends.class_dep import  TwilioTracker
 from app.manager.broker_manager import Broker
@@ -48,6 +48,7 @@ SMS_ONGOING_PREFIX = 'ongoing'
 #@PingService([SMSService])
 @UseHandler(ServiceAvailabilityHandler,TwilioHandler)
 @UsePermission(JWTRouteHTTPPermission)
+@UseAccess(accesses={'Admin':True,'App':True,'Service':True,'User':True})
 @HTTPRessource(SMS_ONGOING_PREFIX)
 class OnGoingSMSRessource(BaseHTTPRessource):
     mcp_operation_id = MCPOperationID('sms',action_word_map={'OPTIONS':'fetch','POST':'send'},parameter_relation_map={'template':'using','agent':'prompting_with'})
@@ -169,9 +170,10 @@ if CAPABILITIES['chat']:
 
 @UseRoles([Role.TWILIO])
 @PingService([SMSService])
-@UseHandler(ServiceAvailabilityHandler,TwilioHandler)
-#@UsePermission(TwilioPermission)
+@UsePermission(TwilioPermission)
+@UseAccess(accesses={'Twilio':True})
 @UsePermission(JWTRouteHTTPPermission)
+@UseHandler(ServiceAvailabilityHandler,TwilioHandler)
 @HTTPRessource(SMS_INCOMING_PREFIX )
 class IncomingSMSRessource(BaseHTTPRessource):
     @InjectInMethod()

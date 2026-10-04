@@ -7,7 +7,7 @@ from app.decorators.handlers import AgenticHandler, ArqHandler, AsyncIOHandler, 
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import DeleteDocumentIngestUpdatePipe, MerchantPipe, domain_pipe, update_status_upon_no_metadata_pipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, LockService
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseAccess, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, LockService
 from app.depends.dependencies import get_auth_permission, get_client_info
 from app.interface.delete_ingest import DeleteIngestDocumentInterface
 from app.manager.merchant_manager import Merchant
@@ -19,6 +19,7 @@ from app.services.worker.arq_service import ArqIngestTaskService
 from app.utils.constant import AgenticConstant, CostConstant
 from fastapi import status
 
+@UseAccess(accesses={'Admin':True})
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(AsyncIOHandler,ServiceAvailabilityHandler)
 @HTTPRessource('k-graph')

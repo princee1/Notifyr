@@ -23,7 +23,7 @@ from app.manager import TaskManager
 from app.services.link_service import LinkService
 from app.services.security_service import SecurityService
 from app.container import Get, InjectInMethod
-from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, UseInterceptor, LockService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse, UsePipe, UseRoles
+from app.definition._ressource import HTTPMethod, HTTPRessource, PingService, UseAccess, UseInterceptor, LockService, UseGuard, UseLimiter, UsePermission, BaseHTTPRessource, UseHandler, NextHandlerException, RessourceResponse, UsePipe, UseRoles
 from app.services.ntfr.email_service import EmailReaderService, EmailSenderService
 from fastapi import Request, Response, status
 from app.depends.dependencies import Depends, get_auth_permission, get_client_info, get_query_params
@@ -47,6 +47,7 @@ DEFAULT_RESPONSE = {
 }
 
 @UseRoles([Role.RELAY])
+@UseAccess(accesses={'Admin':True,'App':True,'Service':True,'User':True})
 @UseHandler(handlers.ServiceAvailabilityHandler,handlers.CeleryTaskHandler)
 @UsePermission(permissions.JWTRouteHTTPPermission)
 @HTTPRessource(EMAIL_PREFIX)

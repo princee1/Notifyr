@@ -27,7 +27,7 @@ from app.services.logger_service import LoggerService
 from app.services.reactive_service import ReactiveService
 from app.services.worker.task_service import TaskService
 from app.services.ntfr.twilio_service import CallService, TwilioAccountMiniService, TwilioService
-from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseInterceptor, LockService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseAccess, UseInterceptor, LockService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.container import Get, InjectInMethod
 from app.depends.dependencies import get_auth_permission, get_client_info
 from app.depends.funcs_dep import Get_Contact,get_template,wait_timeout_query,get_profile
@@ -46,8 +46,9 @@ if CAPABILITIES['object']:
     from app.decorators.permissions import JWTAssetObjectPermission
     from app.decorators.pipes import FilterAllowedSchemaPipe, TemplateParamsPipe, TemplateValidationInjectionPipe
 
-@UseHandler(ServiceAvailabilityHandler, TwilioHandler)
 @UsePermission(JWTRouteHTTPPermission)
+@UseHandler(ServiceAvailabilityHandler, TwilioHandler)
+@UseAccess(accesses={'Admin':True,'App':True,'Service':True,'User':True})
 @HTTPRessource(CALL_ONGOING_PREFIX)
 class OnGoingCallRessource(BaseHTTPRessource):
     get_contacts = Get_Contact(False,False)
@@ -246,8 +247,9 @@ if CAPABILITIES['chat']:
     from app.services.chat_service import ChatService
 
 @UseRoles([Role.TWILIO])
+@UseAccess(accesses={'Twilio':True})
 @UseHandler(ServiceAvailabilityHandler, TwilioHandler)
-# @UsePermission(TwilioPermission)
+@UsePermission(TwilioPermission)
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource(CALL_INCOMING_PREFIX)
 class IncomingCallRessources(BaseHTTPRessource):

@@ -10,7 +10,7 @@ from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, MCPPermission, ProfilePermission
 from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe, SanitizePathParameterPipe
 from app.definition._cost import DataCost
-from app.definition._ressource import BaseHTTPRessource, ClassMetaData, HTTPMethod,HTTPRessource, HTTPStatusCode, PingService, Throttle, UseInterceptor, UseLimiter, LockService, UseHandler, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import BaseHTTPRessource, ClassMetaData, HTTPMethod,HTTPRessource, HTTPStatusCode, PingService, Throttle, UseAccess, UseInterceptor, UseLimiter, LockService, UseHandler, UsePermission, UsePipe, UseRoles
 from app.definition._service import MiniStateProtocol, StateProtocol
 from app.depends.dependencies import get_auth_permission, get_client_info
 from app.depends.funcs_dep import get_profile
@@ -67,6 +67,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @Throttle(normal=(200,75))
     @PingService([VaultService])
     @UsePermission(AdminPermission)
+    @UseAccess(accesses={'Admin':True})
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @LockService(VaultService,lockType='reader')
     @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT))
@@ -108,6 +109,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @Throttle(normal=(200,75))
     @PingService([VaultService])
     @UsePermission(AdminPermission)
+    @UseAccess(accesses={'Admin':True})
     @UsePipe(DocumentFriendlyPipe,before=False)
     @UseHandler(VaultHandler,MiniServiceHandler,CostHandler,CeleryControlHandler,RedisHandler)
     @LockService(VaultService,lockType='reader',check_status=False,infinite_wait=True)
@@ -137,9 +139,10 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         broker.propagate(StateProtocol(service=ProfileService,to_build=True,to_destroy=True,bypass_async_verify=False))
         return profileModel
     
-    @Throttle(uniform=(50,100))
     @UseLimiter('10/minutes')
+    @Throttle(uniform=(50,100))
     @UsePermission(AdminPermission)
+    @UseAccess(accesses={'Admin':True})
     @HTTPStatusCode(status.HTTP_200_OK)
     @UsePipe(DocumentFriendlyPipe,before=False)
     @UseHandler(PydanticHandler,CeleryControlHandler)
@@ -163,6 +166,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     
     @PingService([VaultService])
     @UsePermission(AdminPermission)
+    @UseAccess(accesses={'Admin':True})
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
     @UseHandler(VaultHandler,PydanticHandler,CeleryControlHandler)
@@ -184,11 +188,12 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
         broker.propagate(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
         return None
-    
+
     @UsePipe(DocumentFriendlyPipe,before=False)
     @UseHandler(MiniServiceHandler,DataSourceHandler)
     @UsePipe(SanitizePathParameterPipe({},profile=True))
     @UsePermission(ProfilePermission(True),MCPPermission)
+    @UseAccess(accesses={'Admin':True,'User':True,'App':True})
     @LockService(ProfileService,lockType='reader',as_manager=False,motor_fallback=True)
     @UseRoles([Role.PUBLIC],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
     @BaseHTTPRessource.HTTPRoute('/{profile:path}',methods=[HTTPMethod.GET],to_mcp_tool=True,operation_id='get_profile_information')
@@ -216,6 +221,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UseRoles([Role.PUBLIC])
     @Throttle(normal=(400,120))
     @UsePermission(ProfilePermission)
+    @UseAccess(accesses={'Admin':True})
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @UseHandler(MiniServiceHandler,CeleryControlHandler)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
@@ -228,7 +234,8 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @Throttle(normal=(400,120))
     @UseHandler(MiniServiceHandler,RedisHandler)
     @UsePipe(DocumentFriendlyPipe(),before=False)
-    @UsePermission(ProfilePermission,MCPPermission)
+    @UseAccess(accesses={'Admin':True,'User':True})
+    @UsePermission(ProfilePermission(),MCPPermission())
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'service'),)
     @LockService(ProfileService,'reader',as_manager=True,miniLockType='reader')
     @UseRoles([Role.PUBLIC],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])

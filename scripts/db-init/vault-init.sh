@@ -322,7 +322,7 @@ create_default_token(){
   vault kv put notifyr-secrets/internal/MCP API_KEY="$mcp_api_key"
 
   vault kv put notifyr-secrets/internal/INCOMING_WEBHOOK API_KEY="$webhook_api_key"
-  vault kv put notifyr-secrets/internal/ACCESS/admin '{"type":"Admin","allowed_ip":null,"time":,"token","$admin_api_key"}'
+  vault kv put notifyr-secrets/internal/ACCESS/admin value="$(printf '{\"type\":\"Admin\",\"allowed_ip\":null,\"time\":null,\"token\":\"%s\"}' "$admin_api_key")"
 
   echo -n "$dmz_api_key" > "$VAULT_SECRETS_DIR/dmz-api-key.txt"
   echo -n "$admin_api_key" > "$VAULT_SECRETS_DIR/admin-api-key.txt"

@@ -7,7 +7,7 @@ from app.decorators.handlers import AgenticHandler, ArqHandler, AsyncIOHandler, 
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import JWTRouteHTTPPermission
 from app.decorators.pipes import DeleteDocumentIngestUpdatePipe, update_status_upon_no_metadata_pipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe,LockService
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseAccess, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe,LockService
 from app.depends.dependencies import get_auth_permission, get_client_info
 from app.depends.variables import DeleteMode,source_mode_query
 from app.interface.delete_ingest import DeleteIngestDocumentInterface
@@ -22,6 +22,7 @@ from app.utils.constant import AgenticConstant, CostConstant
  
 BASE_AGENTIC_PATH = '/vector'
 
+@UseAccess(accesses={'Admin':True})
 @UseHandler(AsyncIOHandler,ServiceAvailabilityHandler)
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource('vector')
