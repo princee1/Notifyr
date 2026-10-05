@@ -155,10 +155,6 @@ deploy-data:
 	./scripts/utils/generate-creds.sh minio
 	@echo "--- ✅ Minio Credentials ready."
 
-	@echo "--- 🔑 Initializing API Key Credentials..."
-	./scripts/utils/generate-creds.sh api-key
-	@echo "--- ✅ API Key Credentials ready."
-
 	@echo "--- 🔑 Initializing MongoDB Replicas Keyfile"
 	./scripts/utils/generate-creds.sh mongodb
 	@echo "--- ✅ MongoDB keyfile ready."
@@ -266,20 +262,6 @@ purge:
 	@echo "🧹 Pruning Docker builder cache (all)"
 	$(DOCKER) builder prune --all -f
 	@echo "✅ Docker build cache purged."
-
-
-refresh-apikey:
-	@echo "================================================="
-	@echo "🔄 Refreshing API Key and Redeploying App"
-	@echo "================================================="
-	@echo "--- 🔑 Creating new API Key..."
-	./scripts/utils/generate-creds.sh api-key --force
-	@echo "--- 🚀 Redeploying 'app' service with new build..."
-	$(call COMPOSE_RUN, App Update, up -d, app)
-	@echo "================================================="
-	@echo "✅ API Key Refreshed."
-	@echo "================================================="
-
 
 refresh-cost:
 	@echo "================================================="

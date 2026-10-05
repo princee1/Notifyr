@@ -2,9 +2,9 @@ from app.classes.auth_permission import AuthPermission, ClientAccessInfo, Role
 from app.container import InjectInMethod
 from app.decorators.guards import CreditPlanGuard
 from app.decorators.handlers import AsyncIOHandler, CostHandler, RedisHandler, ServiceAvailabilityHandler, TortoiseHandler
-from app.decorators.permissions import JWTRouteHTTPPermission
+from app.decorators.permissions import ClientTypesPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import JSONLoadsPipe
-from app.definition._ressource import BaseHTTPRessource, HTTPRessource, HTTPMethod, PingService, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles, LockService
+from app.definition._ressource import BaseHTTPRessource, HTTPRessource, HTTPMethod, PingService, UseAccess, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles, LockService
 from app.definition._utils_decorator import Pipe
 from app.depends.dependencies import get_auth_permission, get_client_info
 from app.services.cost_service import CostService,REDIS_CREDIT_KEY_BUILDER
@@ -34,6 +34,9 @@ class CostRessource(BaseHTTPRessource):
         self.redisService = redisService
 
     @UseRoles([Role.PUBLIC])
+    @UseHandler(CostHandler())
+    @UseAccess(accesses={'Admin':True,'User':True,'App':True})
+    @UsePermission(ClientTypesPermission(['Admin','App','User']))
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.GET])
     def show_cost_file(self, request: Request, response: Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         """Return a summary of the currently loaded cost definitions.
@@ -51,9 +54,11 @@ class CostRessource(BaseHTTPRessource):
         }
 
     @UseRoles([Role.PUBLIC])
-    @UseHandler(RedisHandler,CostHandler)
-    @PingService([RedisService])
     @LockService(RedisService)
+    @PingService([RedisService])
+    @UseHandler(RedisHandler,CostHandler)
+    @UseAccess(accesses={'Admin':True,'User':True,'App':True})
+    @UsePermission(ClientTypesPermission(['Admin','App','User']))
     @BaseHTTPRessource.HTTPRoute('/credits/', methods=[HTTPMethod.GET])
     async def show_current_credits(self, request: Request,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         """Return current credits for all plan keys. May be restricted in production via permissions in future.
@@ -61,10 +66,12 @@ class CostRessource(BaseHTTPRessource):
         return await self.costService.get_all_credits_balance()
 
     @UseRoles([Role.ADMIN])
-    @UseHandler(CostHandler,RedisHandler)
-    @PingService([RedisService])
     @UseGuard(CreditPlanGuard)
+    @PingService([RedisService])
     @UsePipe(JSONLoadsPipe,before=False)
+    @UseHandler(CostHandler,RedisHandler)
+    @UseAccess(accesses={'Admin':True,'User':True})
+    @UsePermission(ClientTypesPermission(['Admin','App','User']))
     @BaseHTTPRessource.HTTPRoute('/bills/{credit}/', methods=[HTTPMethod.GET],)
     async def get_bills(self,credit:CostConstant.Credit, request: Request,start:int = Query(0),stop:int=Query(-1), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         """Placeholder for billing/history endpoint. Implement retrieval from DB/audit store when available."""
@@ -74,9 +81,10 @@ class CostRessource(BaseHTTPRessource):
     
     @UseRoles([Role.ADMIN])
     @UseGuard(CreditPlanGuard)
-    @UseHandler(CostHandler,RedisHandler)
     @UsePipe(JSONLoadsPipe,before=False)
+    @UseHandler(CostHandler,RedisHandler)
     @PingService([CostService,RedisService])
+    @UseAccess(accesses={'Admin':True,'User':True})
     @BaseHTTPRessource.HTTPRoute('/receipts/{credit}/', methods=[HTTPMethod.GET],)
     async def get_receipts(self,credit:CostConstant.Credit, request: Request,start:int = Query(0),stop:int=Query(-1),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         

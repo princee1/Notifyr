@@ -6,6 +6,7 @@ from pydantic import Field, field_validator
 from starlette import status
 
 from app.classes.auth_permission import AccessAlreadyExistsError, AccessHardLimitReachedError, AccessTypeAPIModel, AccessTypeModel, ClientTypeLiteral
+from app.container import InjectInMethod
 from app.decorators.guards import AccessTypeGuard
 from app.decorators.handlers import AccessHandler, CostHandler, VaultHandler
 from app.decorators.interceptors import DataCostInterceptor
@@ -45,6 +46,7 @@ class AccessRessource(BaseHTTPRessource):
     def get_access_id(accessModel:CreateAccessTypeModel):
         return accessModel.access_id
 
+    @InjectInMethod()
     def __init__(self,configService:ConfigService,vaultService:VaultService,securityService:SecurityService):
         super().__init__(None,None)
         self.configService = configService
@@ -105,7 +107,7 @@ class AccessRessource(BaseHTTPRessource):
     @UseGuard(AccessTypeGuard(True))
     @UseLimiter('3/minutes',key_func='access')
     @LockService(SecurityService,lockType='reader')
-    @UsePipe(SanitizePathParameterPipe(access=True))
+    @UsePipe(SanitizePathParameterPipe({},access=True))
     @BaseHTTPRessource.HTTPRoute('/{access:path}',methods=[HTTPMethod.GET])
     async def read_access(self,request:Request,response:Response,access:str='',source:SourceMode=Depends(source_mode_query)):
         match source:

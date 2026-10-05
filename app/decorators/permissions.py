@@ -308,12 +308,16 @@ class TaskCostPermission(Permission):
     """
 
     @InjectInMethod(True)
-    def __init__(self,costService:CostService,redisService:RedisService):
+    def __init__(self,costService:CostService,redisService:RedisService,configService:ConfigService):
         super().__init__()
         self.costService = costService
         self.redisService = redisService
+        self.configService = configService
 
     async def permission(self,func_meta:FuncMetaData, taskManager: TaskManager, scheduler: SchedulerModel = None):
+        if not self.configService.COST_FLAG:
+            return True 
+
         definition:SimpleTaskCostDefinition = func_meta['cost_definition'] 
         credit_key  = definition.get('__credit_key__')
 

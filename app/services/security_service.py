@@ -259,9 +259,10 @@ class SecurityService(BaseService):
             if self.configService.AUTH_MECHANISM == 'token':
                 self.API_KEY.clear()
                 for access_id,access in self.vaultService.secrets_engine.view(VaultConstant.INTERNAL_API_SECRETS,'ACCESS'):
+                    print(access_id,access)
                     access['access'] = access_id
                     self.API_KEY[access['token']] = access
-
+            
         if build_state == DEFAULT_BUILD_STATE:
             try:
                 self.DMZ_KEY=self.vaultService.secrets_engine.read(VaultConstant.INTERNAL_API_SECRETS,'DMZ')['API_KEY']
@@ -275,7 +276,7 @@ class SecurityService(BaseService):
     
     def build_cipher(self):
         self.ciphers.clear()
-        self.ciphers['api-token'] = StringCipher(self.vaultService.ON_TOP_SECRET_KEY)
+        self.ciphers['api-token'] = StringCipher(self.vaultService.ON_TOP_SECRET_KEY,'fernet')
 
     def hash(self, value:str, key:str=None, salt:bytes|str=None,algorithm=None):
         if salt == None:

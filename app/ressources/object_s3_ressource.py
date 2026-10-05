@@ -18,7 +18,7 @@ from app.decorators.handlers import AsyncIOHandler, CostHandler, FileHandler, Fi
 from app.decorators.interceptors import DataCostInterceptor, ResponseCacheInterceptor
 from app.decorators.permissions import AdminPermission, JWTAssetObjectPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import MerchantPipe, ObjectS3OperationResponsePipe, SanitizePathParameterPipe, TemplateParamsPipe, ValidFreeInputTemplatePipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, LockService
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, Throttle, UseAccess, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, LockService
 from app.definition._service import StateProtocol
 from app.depends.class_dep import ObjectsSearch
 from app.depends.dependencies import get_auth_permission, get_client_info, is_mcp_request
@@ -107,10 +107,11 @@ class S3ObjectRessource(BaseHTTPRessource):
             metadata = {MinioConstant.ENCRYPTED_KEY:True}
         await self.objectS3Service.upload_object(filename,file_bytes,metadata=metadata)
 
-    @UsePermission(AdminPermission)
-    @PingService([ObjectS3Service])
     @UsePipe(MerchantPipe)
     @Throttle(normal=(200,60))
+    @UsePermission(AdminPermission)
+    @PingService([ObjectS3Service])
+    @UseAccess(accesses={'Admin':True})
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UseGuard(GlobalsTemplateGuard,UploadFilesGuard())
     @UseInterceptor(DataCostInterceptor(CostConstant.OBJECT_CREDIT,'purchase'))
@@ -156,10 +157,11 @@ class S3ObjectRessource(BaseHTTPRessource):
         return ObjectResponseUploadModel(metadata=metadata,uploaded_files=upload_files,errors=errors)
 
 
-    @UsePermission(JWTAssetObjectPermission(accept_none_template=True))
-    @UseHandler(S3Handler,VaultHandler,FileNamingHandler)
-    @PingService([ObjectS3Service,VaultService])
     @UsePipe(ValidFreeInputTemplatePipe)
+    @PingService([ObjectS3Service,VaultService])
+    @UseAccess(accesses={'Admin':True,'User':True})
+    @UseHandler(S3Handler,VaultHandler,FileNamingHandler)
+    @UsePermission(JWTAssetObjectPermission(accept_none_template=True))
     @LockService(VaultService,ObjectS3Service,AssetService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/download/{template:path}',methods=[HTTPMethod.GET],mount=False)
     async def download_stream(self,request:Request,template:str,objectSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)): # type: ignore
@@ -182,10 +184,11 @@ class S3ObjectRessource(BaseHTTPRessource):
             headers={"Content-Disposition": f"attachment; filename={attachment_name}"}
         )
 
+    @Throttle(uniform=(100,180))
     @UsePermission(AdminPermission)
     @PingService([ObjectS3Service])
     @UseGuard(GlobalsTemplateGuard)
-    @Throttle(uniform=(100,180))
+    @UseAccess(accesses={'Admin':True})
     @UseHandler(S3Handler,FileHandler,CostHandler,RedisHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.OBJECT_CREDIT,'refund'))
     @UsePipe(ObjectS3OperationResponsePipe,before=False)
@@ -228,6 +231,7 @@ class S3ObjectRessource(BaseHTTPRessource):
     @PingService([ObjectS3Service,VaultService])
     @UsePipe(ObjectS3OperationResponsePipe,before=False)
     @UsePipe(SanitizePathParameterPipe({},template=True))
+    @UseAccess(accesses={'Admin':True,'User':True,'App':True})
     @UsePermission(JWTAssetObjectPermission(accept_none_template=True))
     @UseHandler(S3Handler,VaultHandler,FileNamingHandler,TemplateHandler)
     @UseRoles([Role.PUBLIC],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
@@ -275,6 +279,7 @@ class S3ObjectRessource(BaseHTTPRessource):
                 
     @Throttle(normal=(300,200))
     @UsePermission(AdminPermission)
+    @UseAccess(accesses={'Admin':True})
     @PingService([ObjectS3Service,VaultService])
     @UseInterceptor(DataCostInterceptor(CostConstant.OBJECT_CREDIT,'purchase'))
     @LockService(VaultService,ObjectS3Service,AssetService,lockType='reader',check_status=False)
@@ -314,6 +319,7 @@ class S3ObjectRessource(BaseHTTPRessource):
     @PingService([ObjectS3Service])
     @UsePermission(AdminPermission)
     @UseGuard(GlobalsTemplateGuard)
+    @UseAccess(accesses={'Admin':True})
     @UsePipe(ObjectS3OperationResponsePipe,before=False)
     @UseHandler(S3Handler,FileNamingHandler,CostHandler,RedisHandler)
     @UsePipe(ValidFreeInputTemplatePipe(False,False),pipe_restore,MerchantPipe())

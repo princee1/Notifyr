@@ -207,3 +207,7 @@ class CostMoreThanZeroError(CostException):
     def __init__(self, total):
         super().__init__()
         self.total = total
+
+
+class CostMechanismNotActivatedError(CostException):
+    """COST_FLAG deactivated the cost mechanism"""

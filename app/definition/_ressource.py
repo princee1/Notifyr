@@ -558,7 +558,7 @@ def HTTPRessource(prefix: str, routers: list[Type[R]] = [], websockets: list[Typ
 
 ################################################################                           #########################################################
 
-def UseAccess(accesses:Dict[ClientTypeLiteral,bool],default_error: HTTPExceptionParams = None,mount=True):
+def UseAccess(accesses:Dict[ClientTypeLiteral,bool],mount=True):
     if not mount:
         def decorator(func:Callable):
             return func
@@ -570,7 +570,7 @@ def UseAccess(accesses:Dict[ClientTypeLiteral,bool],default_error: HTTPException
         return decorator
     
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func,UseAccess,access=accesses, default_error=default_error,mount=mount)
+        cls = common_class_decorator(func,UseAccess,None,accesses=accesses,mount=mount)
         if cls != None:
             return cls
 
@@ -1042,13 +1042,25 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
         elif isinstance(cost,dict):
             if key_func != 'private':
                 raise ValueError('To add cost based on the client type we must have the client_id as key. HINT: use key_func="private"')
-            def cost_func(request:Request):
-                authPermission:AuthPermission =  get_auth_permission(request)
-                clientInfo:ClientAccessInfo = get_client_info(request)
-                clientType = clientInfo['client_type']
-                unit_cost = cost.get(clientType,1)
-                unit_cost = max(1,unit_cost)
-                return min(unit_cost,max_limit)
+            
+            if configService.AUTH_MECHANISM == 'userpass':
+                def cost_func(request:Request):
+                    authPermission:AuthPermission =  get_auth_permission(request)
+                    clientInfo:ClientAccessInfo = get_client_info(request)
+                    clientType = clientInfo['client_type']
+                    unit_cost = cost.get(clientType,1)
+                    unit_cost = max(1,unit_cost)
+                    return min(unit_cost,max_limit)
+
+            elif configService.AUTH_MECHANISM == 'token':
+                def cost_func(request:Request):
+                    access_type = request.state.access['type']
+                    unit_cost = cost.get(access_type,1)
+                    unit_cost = max(1,unit_cost)
+                    return min(unit_cost,max_limit)
+            else:
+                def cost_func(request:Request):
+                    return 1
             return cost_func
         else:
             raise ValueError('Could not parse the cost as a function')

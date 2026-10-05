@@ -117,6 +117,11 @@ class CostService(BaseService):
         else:
             self.service_status = ServiceStatus.AVAILABLE
  
+
+    def pingService(self, infinite_wait, data, profile = None, as_manager = False, **kwargs):
+        if not self.configService.COST_FLAG:
+            raise 
+
     ###################################################                        #######################################
 
     ###################################################                        #######################################

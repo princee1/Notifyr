@@ -983,6 +983,7 @@ from app.classes.cost_definition import (
     CostDefinitionNotFoundError,
     CostException,
     CostLessThanZeroError,
+    CostMechanismNotActivatedError,
     CostMoreThanZeroError,
     CreditNotInPlanError,
     PaymentFailedError,
@@ -1067,6 +1068,9 @@ class CostHandler(Handler):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={'message':'Credit does not appear in the plan','error':str(e)}
             )
+
+        except CostMechanismNotActivatedError as e:
+            raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED,detail='Cost Mechanism not implemented')
 
         except CostException as e:
             # generic cost-related errors fallback
