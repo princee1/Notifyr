@@ -199,10 +199,10 @@ class ClientRessource(BaseHTTPRessource):
     @UsePermission(AdminPermission)
     @UseGuard(AdminModificationGuard)
     @HTTPStatusCode(status.HTTP_200_OK,)
-    @UsePipe(ClientMiniServiceResponsePipe,before=False)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
-    @LockService(SettingService,VaultService,AdminService,as_manager=True,miniLockType='reader')
+    @UsePipe(ClientMiniServiceResponsePipe('client'),before=False)
     @UseInterceptor(DataCostInterceptor(CostConstant.CLIENT_CREDIT,'refund'))
+    @LockService(SettingService,VaultService,AdminService,as_manager=True,miniLockType='reader')
     @UseHandler(ORMCacheHandler,CostHandler,RedisHandler,VaultHandler,ClientSecurityHandler,MiniServiceHandler)
     @BaseHTTPRessource.Delete('/{client}/')
     async def delete_client(self,broker:Annotated[Broker,Depends(Broker)], merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[DataCost,Depends(DataCost)],request:Request,response:Response, client: Annotated[ClientMiniService, Depends(get_client)],profile:str=Depends(get_client), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
@@ -223,7 +223,7 @@ class ClientRessource(BaseHTTPRessource):
     @UseGuard(session_guard)
     @UsePermission(AdminPermission)
     @LockService(AdminService,lockType='reader')
-    @UsePipe(SanitizePathParameterPipe(client=True))
+    @UsePipe(SanitizePathParameterPipe({},client=True))
     @UseHandler(MiniServiceHandler,DataSourceHandler)
     @UsePipe(ObjectRelationalFriendlyPipe(when=lambda source: source == 'database'),before=False)
     @UsePipe(ClientMiniServiceResponsePipe('result',when=lambda source: source == 'memory'),before=False)
@@ -397,15 +397,16 @@ class AdminRessource(BaseHTTPRessource):
     @UseLimiter(limit_value='10/day')
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @UseInterceptor(InvalidBlacklistTokenInterceptor)
-    @UsePipe(StateResponseInjectionPipe,before=False)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @PingService([VaultService,AdminService],is_manager=True)
+    @UsePipe(StateResponseInjectionPipe(tuple(),merge=False),before=False)
     @UseGuard(AdminModificationGuard,SessionMechanismGuard,ClientAuthTypeGuard)
     @UseHandler(ClientHandler,ORMCacheHandler,VaultHandler,MiniServiceHandler,ClientSecurityHandler)
     @LockService(VaultService,SettingService,AdminService,JWTAuthService,lockType='reader',as_manager=True)
     @BaseHTTPRessource.HTTPRoute('/revoke/{client}/', methods=[HTTPMethod.DELETE])
     async def revoke_tokens(self,revoke:RevokeSessionModel,broker:Annotated[Broker,Depends(Broker)], request: Request,response:Response, client: Annotated[ClientMiniService, Depends(get_client)],state:Annotated[StateManager,Depends(StateManager)],profile:str=Depends(get_client), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
-
+        state.deactivate()
+        
         async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:    
             if client.client.auth_type == AuthType.ACCESS_TOKEN:
                 await client.revoke_itself(ctx,revoke.session,revoke.can_login)
@@ -425,12 +426,12 @@ class AdminRessource(BaseHTTPRessource):
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @PingService([VaultService,AdminService],is_manager=True)
     @UseHandler(ClientHandler,ORMCacheHandler,MiniServiceHandler)
-    @UsePipe(AccessTokenModelPipe,StateResponseInjectionPipe,before=False)
     @LockService(VaultService,SettingService,AdminService,lockType='reader',as_manager=True)
+    @UsePipe(AccessTokenModelPipe,StateResponseInjectionPipe(tuple(),merge=False),before=False)
     @UseGuard(AdminModificationGuard,BlacklistClientGuard,ClientAuthTypeGuard(accept_access=False, accept_api=True),)
     @BaseHTTPRessource.HTTPRoute('/issue-auth/{client}/', methods=[HTTPMethod.GET],response_model=AccessModel)
     async def issue_auth_token(self,broker:Annotated[Broker,Depends(Broker)], client: Annotated[ClientMiniService, Depends(get_client)], request: Request, response:Response,state:Annotated[StateManager,Depends(StateManager)] ,profile:str= Depends(get_client),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
-        
+        state.deactivate()
         async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:    
             await client.revoke_itself(ctx)
             session_id = str(uuid_v1_mc())

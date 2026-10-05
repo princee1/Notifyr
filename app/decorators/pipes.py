@@ -935,7 +935,7 @@ async def auth_state_pipe(result:Any,session:AuthSessionManager,request:Request)
 
 class StateResponseInjectionPipe(Pipe):
 
-    def __init__(self,*keys:str,merge:bool,result:str=None):
+    def __init__(self,*keys:str,merge:bool=False,result:str=None):
         """
         result str : The key name of the result
         """
