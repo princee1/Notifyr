@@ -227,7 +227,6 @@ CipherMode = Literal['api-token']
 ACCESS_BUILD_STATE = 49043
 @Service()
 class SecurityService(BaseService):
-    NONCE="1234567891234578"
 
     def __init__(self, configService: ConfigService, fileService: FileService,settingService:SettingService,vaultService:VaultService) -> None:
         super().__init__()
@@ -240,7 +239,7 @@ class SecurityService(BaseService):
 
         self.API_KEY:dict[str,dict] = {}
 
-    def verify_server_access(self, token: str) -> bool:
+    def verify_server_access(self, token: str):
         if not self.API_KEY:
             raise APIKeyMissingError(source='server_api_key')
 
@@ -259,7 +258,6 @@ class SecurityService(BaseService):
             if self.configService.AUTH_MECHANISM == 'token':
                 self.API_KEY.clear()
                 for access_id,access in self.vaultService.secrets_engine.view(VaultConstant.INTERNAL_API_SECRETS,'ACCESS'):
-                    print(access_id,access)
                     access['access'] = access_id
                     self.API_KEY[access['token']] = access
             

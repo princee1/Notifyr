@@ -13,7 +13,7 @@ from app.definition._ws import W
 from app.depends.dependencies import get_auth_permission, get_client_info
 from app.services.config_service import MODE, ConfigService, WorkerService
 from app.utils.helper import _make_delay_fn, copy_response
-from app.utils.constant import SpecialKeyParameterConstant
+from app.utils.constant import HTTPHeaderConstant, SpecialKeyParameterConstant
 from app.services import CostService
 from app.container import Get, Need
 from app.definition._service import S, BaseMiniService, BaseMiniServiceManager, BaseService, ServiceLockType
@@ -907,26 +907,30 @@ def Headers(header:Header|Callable[...,Header]):
         header = list(header.items())
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, Headers, header)
+        cls = common_class_decorator(func, Headers,None,header= header)
         if cls != None:
             return cls
 
-        @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
-            if 'response' in kwargs and isinstance(kwargs['response'], Response):
-                response = kwargs['response']
-                if is_callable:
-                    hs = APIFilterInject(header)
-                    if isinstance(hs,dict):
-                        hs = list(hs.items())
-                    response.raw_headers.extend(hs)
+        def wrapper(function:Callable):
+
+            @functools.wraps(function)
+            async def callback(*args, **kwargs):
+                if 'response' in kwargs and isinstance(kwargs['response'], Response):
+                    response = kwargs['response']
+                    if is_callable:
+                        hs = APIFilterInject(header)
+                        if isinstance(hs,dict):
+                            hs = list(hs.items())
+                        response.raw_headers.extend(hs)
+                    else:
+                        response.raw_headers.extend(header)
+                    
+                if asyncio.iscoroutinefunction(function):
+                    return await function(*args, **kwargs)
                 else:
-                    response.raw_headers.extend(header)
-                
-            if asyncio.iscoroutinefunction(func):
-                return await func(*args, **kwargs)
-            else:
-                return func(*args, **kwargs)
+                    return function(*args, **kwargs)
+
+            return callback
 
         Helper.appends_funcs_callback(func,wrapper, DecoratorPriority.META)
         return func
@@ -957,19 +961,22 @@ def HTTPStatusCode(code: int | str):
         raise ValueError
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, HTTPStatusCode, code)
+        cls = common_class_decorator(func, HTTPStatusCode,None,code= code)
         if cls != None:
             return cls
+        
+        def wrapper(function:Callable):
+            @functools.wraps(function)
+            async def callback(*args, **kwargs):
+                if 'response' in kwargs and isinstance(kwargs['response'], Response):
+                    kwargs['response'].status_code = code
 
-        @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
-            if 'response' in kwargs and isinstance(kwargs['response'], Response):
-                kwargs['response'].status_code = code
-
-            if asyncio.iscoroutinefunction(func):
-                return await func(*args, **kwargs)
-            else:
-                return func(*args, **kwargs)
+                if asyncio.iscoroutinefunction(function):
+                    return await function(*args, **kwargs)
+                else:
+                    return function(*args, **kwargs)
+            return callback
+        
         Helper.appends_funcs_callback(func,wrapper, DecoratorPriority.META)
         return func
 
@@ -1002,6 +1009,8 @@ def Throttle(fixed: float | None = None,fn: Callable[[], float] | None = None,un
                 delay = delay_fn()
                 if delay > 0:
                     await asyncio.sleep(delay/MS_TO_SEC)
+                response:Response = kwargs.get('response')
+                response.headers[HTTPHeaderConstant.X_THROTTLE_DELAY] = f'{delay} (ms)'
                 return await target_function(*args,**kwargs)
             return callback
         
@@ -1187,7 +1196,7 @@ def PingService(services: list[S | dict], infinite_wait=False,is_manager=False,w
             async def callback(*args, **kwargs):
                 
                 if not infinite_wait and wait_timeout >= 0:
-                    asyncio.wait_for(inner_callback(kwargs), wait_timeout)
+                    await asyncio.wait_for(inner_callback(kwargs), wait_timeout)
                 else:
                     await inner_callback(kwargs)
                 return await Helper.return_result(target_function,args,kwargs)

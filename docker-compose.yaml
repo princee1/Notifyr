@@ -480,11 +480,11 @@ services:
       - REDIS_VAULT_PASSWORD=${VAULTPASS:-vaultpass}
       - DEFAULT_USER=on
       - SKIP_FIX_PERMS=1
+      
     volumes:
       - redis-data:/data
       - ./scripts/entrypoint/redis-entrypoint.sh:/entrypoint.sh
       - ./scripts/credit/ncs-lib.lua:/functions/ncs-lib.lua
-      - ./scripts/credit/credit-deduction.lua:/functions/credit-deduction.lua
     networks:
       - data_net
 

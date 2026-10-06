@@ -107,8 +107,8 @@ class KV1VaultEngine(VaultEngine):
                 return []
             raise e
 
-    def view(self,sub_mount:str,path:str='',known:bool=True):
-        keys = self.list(sub_mount,path,known)
+    def view(self,sub_mount:str,path:str='',known:bool=True,source:List[str]|None=None):
+        keys = source or self.list(sub_mount,path,known)
         for k in keys:
             if path !='':
                 p = f"{path}/{k}"

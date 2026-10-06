@@ -465,6 +465,9 @@ class AdminService(BaseMiniServiceManager[ClientMiniService]):
         self.mappings = mappings
 
     async def load_clients(self,build_state=SYNC_ADMIN_BUILD_STATE):
+        if self.configService.AUTH_MECHANISM != 'userpass':
+            return
+
         self.MiniServiceStore.clear()
         for client in await ClientORM.filter():
             policy = []

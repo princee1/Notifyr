@@ -78,7 +78,7 @@ class APITokenAuthMiddleware(MiddleWare):
         super().__init__(app, dispatch)
         self.securityService= Get(SecurityService)
 
-    @BypassOn(configService.AUTH_MECHANISM != 'api')
+    @BypassOn(configService.AUTH_MECHANISM != 'token')
     @ExcludeOn(['/','/contacts/manage/*'])
     @ExcludeOn(['/docs/*','/openapi.json'])
     @ExcludeOn(['/link/visits/*','/link/email-track/*'])

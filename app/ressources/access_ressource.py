@@ -1,14 +1,13 @@
 from typing import Annotated, Optional
 
-from aiohttp.web_request import Request
-from fastapi import Depends, HTTPException, Response
+from fastapi import Depends, HTTPException, Response, Request
 from pydantic import Field, field_validator
 from starlette import status
 
-from app.classes.auth_permission import AccessAlreadyExistsError, AccessHardLimitReachedError, AccessTypeAPIModel, AccessTypeModel, ClientTypeLiteral
+from app.classes.auth_permission import AccessAlreadyExistsError, AccessDoesNotExistsError, AccessHardLimitReachedError, AccessTypeAPIModel, AccessTypeModel, ClientTypeLiteral
 from app.container import InjectInMethod
 from app.decorators.guards import AccessTypeGuard
-from app.decorators.handlers import AccessHandler, CostHandler, VaultHandler
+from app.decorators.handlers import AccessHandler, CostHandler, DataSourceHandler, VaultHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.pipes import AccessPathPipe, SanitizePathParameterPipe
 from app.definition._cost import DataCost
@@ -16,6 +15,7 @@ from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessour
 from app.definition._service import StateProtocol
 from app.depends.funcs_dep import get_access
 from app.depends.variables import SourceMode , source_mode_query
+from app.errors.depends_error import DataSourceNotSupportedError
 from app.manager.broker_manager import Broker
 from app.services.config_service import ConfigService
 from app.services.security_service import ACCESS_BUILD_STATE, SecurityService
@@ -32,19 +32,15 @@ from app.utils.toolbox import RunInThreadPool
 class AccessRessource(BaseHTTPRessource):
 
     class CreateAccessTypeModel(AccessTypeModel):
-        access_id:Optional[str] = Field(default_factory=lambda : str(uuid_v1_mc(1)),min_length=10,max_length=40)
-
         @field_validator('type',mode='after')
         def validate_type(cls,t:ClientTypeLiteral):
             if t == 'Admin':
                 raise ValueError('We cannot create a new admin access')
-            
             return t
 
-
     @staticmethod
-    def get_access_id(accessModel:CreateAccessTypeModel):
-        return accessModel.access_id
+    def compute_access_id():
+        return str(uuid_v1_mc(1))
 
     @InjectInMethod()
     def __init__(self,configService:ConfigService,vaultService:VaultService,securityService:SecurityService):
@@ -53,23 +49,27 @@ class AccessRessource(BaseHTTPRessource):
         self.vaultService = vaultService
         self.securityService = securityService
 
-    @Throttle(uniform=(150,250))
     @UseHandler(CostHandler)
+    @Throttle(uniform=(150,250))
     @UsePipe(AccessPathPipe(False))
     @UseGuard(AccessTypeGuard(False))
     @UseLimiter('10/day',key_func='access')
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @UseInterceptor(DataCostInterceptor(CostConstant.CLIENT_CREDIT))
-    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.PUT],response_class=AccessTypeAPIModel)
-    async def create_access(self,request:Request,response:Response,accessModel:CreateAccessTypeModel,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],access:str=Depends(get_access_id)):
+    @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST],response_class=AccessTypeAPIModel)
+    async def create_access(self,request:Request,response:Response,accessModel:CreateAccessTypeModel,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],access:str=Depends(compute_access_id)):
         accesses = await RunInThreadPool(self.vaultService.secrets_engine.list)(VaultConstant.INTERNAL_API_SECRETS,'ACCESS')
         if len(accesses) >= 15:
             raise AccessHardLimitReachedError(15)
 
         if access in accesses:
-            raise AccessAlreadyExistsError(access)
+            raise AccessAlreadyExistsError(access,'uuid')
 
-        accessModel = AccessTypeAPIModel(token =generateId(75),**accessModel.model_dump(mode='json',exclude=('access_id',)))
+        for access_id,a in self.vaultService.secrets_engine.view(VaultConstant.INTERNAL_API_SECRETS,'ACCESS',sources =accesses):
+            if a['alias'] == accessModel.alias:
+                raise AccessAlreadyExistsError(access_id,'uuid')
+
+        accessModel = AccessTypeAPIModel(token =generateId(75),**accessModel.model_dump(mode='json'))
         accessModel = accessModel.model_dump(mode='json')
         await RunInThreadPool(self.vaultService.secrets_engine.put)(VaultConstant.INTERNAL_API_SECRETS,accessModel,access)
 
@@ -104,6 +104,7 @@ class AccessRessource(BaseHTTPRessource):
         return
 
     @Throttle(uniform=(150,250))
+    @UseHandler(DataSourceHandler)
     @UseGuard(AccessTypeGuard(True))
     @UseLimiter('3/minutes',key_func='access')
     @LockService(SecurityService,lockType='reader')
@@ -126,8 +127,12 @@ class AccessRessource(BaseHTTPRessource):
                     if access == '':
                         res[_access['access']]=_access
                     elif access == _access['access']:
-                        return 
+                        return _access
+                if access == '':                
+                    return res
+                raise AccessDoesNotExistsError(access)
             case _:
-                ...
+                raise DataSourceNotSupportedError(source,['database','memory'])
+                
         
     

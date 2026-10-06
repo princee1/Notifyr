@@ -23,7 +23,7 @@ if APP_MODE == ApplicationMode.server:
 
 
 REDIS_CREDIT_KEY_BUILDER= lambda credit_key: f"notifyr/credit:{credit_key}"
-DEDUCT_CREDITS_SCRIPT='credit-deduction'
+DEDUCT_CREDITS_SCRIPT='credit_deduction'
 
 CREDIT_TO_CAPABILITIES:dict[CostConstant.Credit,str] = {
     'email':'email',
@@ -130,7 +130,7 @@ class CostService(BaseService):
     async def check_enough_credits(self,credit_key:str,purchase_cost:int):
         current_balance = await self.redisService.retrieve(RedisConstant.COST_DB,credit_key)
         if current_balance == None:
-            raise InvalidPurchaseRequestError
+            raise InvalidPurchaseRequestError(f'Balance on credit: {credit_key} is not available')
         
         current_balance = int(current_balance)
 
@@ -164,12 +164,13 @@ class CostService(BaseService):
 
         try:
             result = await self.redisService.redis_cost.fcall(DEDUCT_CREDITS_SCRIPT,1,credit_key,bill_total,overdraft_allowed)
-        except:
+        except Exception as e:
+            print(e)
             raise CreditDeductionFailedError()
 
         status = result[0]
         if status == 1:
-            raise InvalidPurchaseRequestError()
+            raise InvalidPurchaseRequestError(f'Balance on {credit_key} is not available')
 
         old_balance = int(result[1])
         new_balance = int(result[2])

@@ -59,9 +59,7 @@ async def main():
 
     tortoiseService:TortoiseConnectionService = Get(TortoiseConnectionService)
 
-    if configService.AUTH_MECHANISM != 'userpass':
-        return 
-
+    
     setup = await redisService.retrieve(RedisConstant.CONFIG_DB,ADMIN_INIT_KEY)
     if bool(setup):
         await redisService.close_connections()

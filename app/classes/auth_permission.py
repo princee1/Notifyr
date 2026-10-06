@@ -351,8 +351,14 @@ class WSPathNotFoundError(BaseError):
     ...
 
 class AccessAlreadyExistsError(BaseError):
-    def __init__(self, access: str):
-        super().__init__(access)
+    def __init__(self, access: str,mode:Literal['uuid','alias']):
+        super().__init__(access,mode)
+        self.access = access
+        self.mode = mode
+
+class AccessDoesNotExistsError(BaseError):
+    def __init__(self, access:str):
+        super().__init__()
         self.access = access
 
 class AccessHardLimitReachedError(BaseError):
