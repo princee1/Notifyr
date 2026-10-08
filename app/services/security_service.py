@@ -24,7 +24,7 @@ from .file.file_service import FileService
 from app.definition._service import DEFAULT_BUILD_STATE, BaseService, BuildFailureError, Service, ServiceStatus
 import jwt
 import time
-from app.classes.auth_permission import AccessTypeAPIModel, ClientTypeLiteral, AuthPermission, AuthType, ClientAccessInfo, ClientType, ContactPermission, ContactPermissionScope, ClientRefresh, Role, RoutePermission, Scope, WSPermission
+from app.classes.auth_permission import AccessTypeAPIDict, AccessTypeAPIModel, ClientTypeLiteral, AuthPermission, AuthType, ClientAccessInfo, ClientType, ContactPermission, ContactPermissionScope, ClientRefresh, Role, RoutePermission, Scope, WSPermission
 from app.utils.helper import generateId, b64_encode, b64_decode
 import os
 import hmac
@@ -245,9 +245,9 @@ class SecurityService(BaseService):
 
         self.ciphers:dict[CipherMode,StringCipher] = {}
 
-        self.API_KEY:dict[str,dict] = {}
+        self.API_KEY:dict[str,AccessTypeAPIDict] = {}
 
-    def verify_server_access(self, token: str):
+    def verify_server_access(self, token: str)->AccessTypeAPIDict:
         if not self.API_KEY:
             raise APIKeyMissingError(source='server_api_key')
 
@@ -266,8 +266,8 @@ class SecurityService(BaseService):
             if self.configService.AUTH_MECHANISM == 'token':
                 self.API_KEY.clear()
                 path = AccessVaultConstant.ACCESS_PATH()
-                for access_id,access in self.vaultService.secrets_engine.view(VaultConstant.INTERNAL_API_SECRETS,'ACCESS'):
-                    access['access'] = access_id
+                for access_id,access in self.vaultService.secrets_engine.view(VaultConstant.INTERNAL_API_SECRETS,path):
+                    access['id'] = access_id
                     self.API_KEY[access['token']] = access
             
         if build_state == DEFAULT_BUILD_STATE:

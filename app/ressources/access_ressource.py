@@ -156,7 +156,7 @@ class AccessRessource(BaseHTTPRessource):
     @Throttle(uniform=(150,250))
     @UseHandler(DataSourceHandler)
     @UseGuard(AccessTypeGuard(True))
-    @UseLimiter('3/minutes',key_func='access')
+    @UseLimiter('5/hour',key_func='access')
     @LockService(SecurityService,lockType='reader')
     @UsePipe(SanitizePathParameterPipe({},access=True))
     @BaseHTTPRessource.HTTPRoute('/{access:path}',methods=[HTTPMethod.GET])
@@ -176,8 +176,8 @@ class AccessRessource(BaseHTTPRessource):
                 res = {}
                 for _access in self.securityService.API_KEY.values():
                     if access == '':
-                        res[_access['access']]=_access
-                    elif access == _access['access']:
+                        res[_access['id']]=_access
+                    elif access == _access['id']:
                         return _access
                 if access == '':                
                     return res

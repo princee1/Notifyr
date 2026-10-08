@@ -19,7 +19,7 @@ PermissionStatus= Literal['active','inactive','expired']
 ClientTypeLiteral = Literal['User','Admin','Twilio','App','Service']
 
 PolicyUpdateMode = Literal['set','merge','delete']
-AuthMechanism = Literal['userpass','token','none']
+AuthMechanism = Literal['userpass','token','none','both']
 SessionMechanism =Literal['redis+sync','vault+sync','redis','none']
 
 EXTENSION = [f".{ext}" for ext in Extension._value2member_map_.keys()]
@@ -27,8 +27,9 @@ EXTENSION = [f".{ext}" for ext in Extension._value2member_map_.keys()]
 
 class AccessTypeModel(BaseModel):
     type:ClientTypeLiteral
+    description:Optional[str] = Field(default=None,max_length=400)
     allowed_ip:List[str]|None
-    alias:Optional[str] = Field(default=None,min_length=8,max_length=40)
+    alias:str = Field(default=None,min_length=8,max_length=40)
 
 class AccessTypeAPIModel(AccessTypeModel):
     token:str
@@ -36,6 +37,15 @@ class AccessTypeAPIModel(AccessTypeModel):
     _path:str|None=PrivateAttr(default=None)
     _input:str|None=PrivateAttr(default=None)
 
+class AccessTypeAPIDict(TypedDict):
+    type:ClientTypeLiteral
+    description:Optional[str]
+    allowed_ip:Optional[List[str]]
+    alias:str
+    token:str
+    time:float
+    id:str
+    
 class Role(Enum):
     PUBLIC = 'PUBLIC'
     STATIC = 'STATIC'
