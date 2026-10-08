@@ -34,14 +34,15 @@ SERVER_RESSOURCES:list[Type[BaseHTTPRessource]] = [
                                                  ProfileRessource,
                                                  CostRessource,
                                                  CeleryRessource]
-if configService.AUTH_MECHANISM == 'userpass':
+
+if configService.AUTH_MECHANISM == 'userpass' or configService.AUTH_MECHANISM == 'both':
     from .admin_ressource import AdminRessource
     from .auth_ressource import AuthRessource
 
     SERVER_RESSOURCES.append(AdminRessource)
     SERVER_RESSOURCES.append(AuthRessource)
 
-if configService.AUTH_MECHANISM == 'token':
+if configService.AUTH_MECHANISM == 'token' or configService.AUTH_MECHANISM == 'both':
     from .access_ressource import AccessRessource
 
     SERVER_RESSOURCES.append(AccessRessource)

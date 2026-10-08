@@ -453,7 +453,7 @@ class AdminService(BaseMiniServiceManager[ClientMiniService]):
         self.mappings:list[dict] = []
 
     def build(self,build_state=DEFAULT_BUILD_STATE):
-        if self.configService.AUTH_MECHANISM != 'userpass':
+        if self.configService.AUTH_MECHANISM != 'userpass' and self.configService.AUTH_MECHANISM == 'both':
             return
         
         policies = {} 
@@ -465,7 +465,7 @@ class AdminService(BaseMiniServiceManager[ClientMiniService]):
         self.mappings = mappings
 
     async def load_clients(self,build_state=SYNC_ADMIN_BUILD_STATE):
-        if self.configService.AUTH_MECHANISM != 'userpass':
+        if self.configService.AUTH_MECHANISM != 'userpass' and self.configService.AUTH_MECHANISM == 'both':
             return
 
         self.MiniServiceStore.clear()

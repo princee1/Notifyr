@@ -35,7 +35,7 @@ def get_user_language(request: Request) -> str:
     return ... 
 
 def get_user_agent(request: Request) -> str:
-    return request.headers.get('User-Agent')
+    return request.headers.get('User-Agent',None)
 
 def get_timezone(request:Request)->str:
     ...
@@ -64,11 +64,18 @@ def get_bearer_token_from_request(request: Request):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization header missing")
 
 def get_auth_permission(request: Request):
-    if configService.AUTH_MECHANISM != 'userpass':
-        return None
-    if not hasattr(request.state, "authPermission") or request.state.authPermission is None:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    return request.state.authPermission
+
+    match configService.AUTH_MECHANISM:
+        case 'userpass':
+            if not hasattr(request.state, "authPermission") or request.state.authPermission is None:
+                raise HTTPException(status_code=401, detail="Unauthorized")
+            return request.state.authPermission
+        case 'both':
+            return None
+        case 'token':
+            raise HTTPException(status_code=401, detail="Bad Authentication Method required: userpass")
+        case 'none':
+            return None
 
 def wrapper_auth_permission(request:Request):
     try:
@@ -108,15 +115,30 @@ def get_contact_token():
     return APIKeyHeader(name=HTTPHeaderConstant.CONTACT_TOKEN)
 
 def get_client_info(request:Request):
-    if configService.AUTH_MECHANISM != 'userpass':
-        return None
+    match configService.AUTH_MECHANISM:
+        case 'userpass':
+            if not hasattr(request.state, "clientInfo") or request.state.clientInfo is None:
+                raise HTTPException(status_code=401, detail="Unauthorized")
+            return request.state.clientInfo       
+        case 'both':
+            return None
+        case 'token':
+            raise HTTPException(status_code=401, detail="Bad Authentication Method required: userpass")
+        case 'none':
+            return None
 
-    if not hasattr(request.state, "clientInfo") or request.state.clientInfo is None:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    return request.state.clientInfo
+def get_access_info(request:Request):
+    match configService.AUTH_MECHANISM:
+        case 'token':
+            if not hasattr(request.state, "access") or request.state.accessInfo is None:
+                raise HTTPException(status_code=401, detail="Unauthorized")
+            return request.state.accessInfo       
+        case 'both':
+            return None
+        case 'userpass':
+            raise HTTPException(status_code=401, detail="Bad Authentication Method required: token")
+        case 'none':
+            return None
 
 def get_session_id(request: Request):
-    ...
-
-def get_router_name(request: Request):
     ...

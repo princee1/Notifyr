@@ -61,6 +61,7 @@ class HTTPHeaderConstant:
     X_AUTH_STATE = 'X-Auth-State'
     X_AUTH_TYPE= 'X-Auth-Type'
     X_THROTTLE_DELAY = 'X-Throttle-Delay'
+    X_AUTH_MECHANISM = 'X-Auth-Mechanism'
 
 
 class CookieConstant:

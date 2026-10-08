@@ -1,10 +1,10 @@
 from uuid import uuid4
 from fastapi.responses import JSONResponse
-from app.classes.auth_permission import AuthPermission, AuthType, ClientAccessInfo, ClientType, filter_asset_permission, parse_authPermission_enum
+from app.classes.auth_permission import AuthMechanism, AuthPermission, AuthType, ClientAccessInfo, ClientType, filter_asset_permission, parse_authPermission_enum
 from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE
 from app.definition._ressource import HTTPMethod
 from app.depends.orm_cache import BlacklistClientCache, BlacklistGroupCache
-from app.errors.security_error import APIKeyMismatchError, APIKeyMissingError, AuthzSignatureMisMatchError, CipherDoesNotExistError, CipherSchemeNotValidError, JWTInvalidTokenError, RequestOriginIsNotValidError, SecurityIdentityNotResolvedError, SessionNotValidatedError, TokenDataMissingError, TokenExpiredError, TokenGenerationMismatchError
+from app.errors.security_error import APIKeyMismatchError, APIKeyMissingError, AuthzSignatureMisMatchError, BadAuthMechanismContextError, CipherDoesNotExistError, CipherSchemeNotValidError, JWTInvalidTokenError, RequestOriginIsNotValidError, SecurityIdentityNotResolvedError, SessionNotValidatedError, TokenDataMissingError, TokenExpiredError, TokenGenerationMismatchError
 from app.errors.service_error import MiniServiceDoesNotExistsError
 from app.services.admin_service import AdminService
 from app.services.database.redis_service import RedisService
@@ -78,22 +78,33 @@ class APITokenAuthMiddleware(MiddleWare):
         super().__init__(app, dispatch)
         self.securityService= Get(SecurityService)
 
-    @BypassOn(configService.AUTH_MECHANISM != 'token')
+    @BypassOn(configService.AUTH_MECHANISM != 'token' and configService.AUTH_MECHANISM != 'both')
     @ExcludeOn(['/','/contacts/manage/*'])
     @ExcludeOn(['/docs/*','/openapi.json'])
     @ExcludeOn(['/link/visits/*','/link/email-track/*'])
     async def dispatch(self, request:Request, call_next:Callable[...,Response]):
 
-        token = get_bearer_token_from_request(request)
         try:
+            if configService.AUTH_MECHANISM == 'none':
+
+                if (auth_mechanism:=request.headers.get(HTTPHeaderConstant.X_AUTH_MECHANISM,None)) != 'token':
+                    raise BadAuthMechanismContextError('token',auth_mechanism)
+
+            token = get_bearer_token_from_request(request)
             async with self.securityService.lock('reader'):
                 access = self.securityService.verify_server_access(token)
 
             origin = get_client_ip(request)
             self.securityService.verify_token_origin(origin,access)
             
-            request.state.access = access
-                
+            request.state.accessInfo = access
+
+        except HTTPException as e:
+            return JSONResponse(e.detail,e.status_code,e.headers)
+
+        except BadAuthMechanismContextError as e:
+            return JSONResponse(e.detail,status.HTTP_401_UNAUTHORIZED)
+
         except APIKeyMissingError as e:
             return JSONResponse({'message':'AUTH_MECHANISM set as "token" but not token was found, contact the server administrator'},
                                 status.HTTP_503_SERVICE_UNAVAILABLE)
@@ -118,7 +129,7 @@ class JWTAuthMiddleware(MiddleWare):
         self.securityService:SecurityService = Get(SecurityService)
         self.vaultService:VaultService = Get(VaultService)
 
-    @BypassOn(configService.AUTH_MECHANISM != 'userpass')
+    @BypassOn(configService.AUTH_MECHANISM != 'userpass' and configService.AUTH_MECHANISM != 'both') 
     @ExcludeOn(['/','/contacts/manage/*'])
     @ExcludeOn(['/docs/*','/openapi.json'])
     @ExcludeOn(['/auth/login/','/auth/refresh/'])
@@ -126,6 +137,12 @@ class JWTAuthMiddleware(MiddleWare):
     @ExcludeOn(['/link/visits/*','/link/email-track/*'])
     async def dispatch(self,  request: Request, call_next: Callable[..., Response]):
         try:  
+
+            if configService.AUTH_MECHANISM == 'none':
+
+                if (auth_mechanism:=request.headers.get(HTTPHeaderConstant.X_AUTH_MECHANISM,None)) != 'userpass':
+                    raise BadAuthMechanismContextError('userpass',auth_mechanism)
+                
             token = get_bearer_token_from_request(request)
             if request.headers.get(HTTPHeaderConstant.X_AUTH_TYPE,None) == AuthType.API_TOKEN:
                 async with self.securityService.lock('reader'):
@@ -168,6 +185,9 @@ class JWTAuthMiddleware(MiddleWare):
 
         except HTTPException as e:
             return JSONResponse(e.detail,e.status_code,e.headers)
+
+        except BadAuthMechanismContextError as e:
+            return JSONResponse(e.detail,status.HTTP_401_UNAUTHORIZED)
 
         except RequestOriginIsNotValidError as e:
             return JSONResponse(e.detail,status.HTTP_401_UNAUTHORIZED)

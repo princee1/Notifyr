@@ -239,6 +239,7 @@ class ConfigService(_service.BaseService):
 
         # SESSION CONFIG #
         self.SESSION_MECHANISM:SessionMechanism = self.getenv('SESSION_MECHANISM','redis')
+
         # SECURITY CONFIG #
         self.AUTH_MECHANISM:AuthMechanism  = self.getenv('AUTH_MECHANISM','userpass').lower()
 
@@ -256,15 +257,15 @@ class ConfigService(_service.BaseService):
         if self.CELERY_BROKER_PROVIDER not in ['redis','rabbitmq']:
             raise BuildWarningError()
 
-        if self.AUTH_MECHANISM not in ['userpass','token','none']:
-            raise BuildAbortError('AUTH MECHANISM must be either "userpass", "token", "none"')
+        if self.AUTH_MECHANISM not in ['userpass','token','both','none']:
+            raise BuildAbortError('AUTH MECHANISM must be either "userpass", "token", "both", "none"')
 
         if self.AUTH_MECHANISM == 'none':
             if self.MODE == MODE.DEV_MODE:
                 raise BuildWarningError(f"AUTH_MECHANISM {self.AUTH_MECHANISM} is set to None, this is not recommended for production environments")
 
             if self.MODE == MODE.PROD_MODE:
-                raise BuildAbortError('AUTH_MECHANISM must be either userpass or token, but jwt is better')
+                raise BuildAbortError('AUTH_MECHANISM must be either userpass, token or both, but userpass is better')
 
         if self.AUTH_MECHANISM != 'userpass':
             self.SESSION_MECHANISM == 'none'

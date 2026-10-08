@@ -8,7 +8,7 @@ from app.utils.globals import CAPABILITIES
 
 def verify_dashboard_token(x_dashboard_token:Annotated[str,Header()]):
     configService:ConfigService = Get(ConfigService)
-    if configService.AUTH_MECHANISM != 'userpass':
+    if configService.AUTH_MECHANISM == 'none':
         return
     securityService:SecurityService = Get(SecurityService)
     if securityService.DASHBOARD_KEY != x_dashboard_token:

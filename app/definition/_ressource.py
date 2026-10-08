@@ -10,7 +10,8 @@ from pydantic import BaseModel
 from app.classes.cost_definition import SimpleTaskCostDefinition
 from app.classes.profiles import ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
 from app.definition._ws import W
-from app.depends.dependencies import get_auth_permission, get_client_info
+from app.depends.dependencies import get_access_info, get_auth_permission, get_client_info
+from app.errors.security_error import BadAuthMechanismContextError
 from app.services.config_service import MODE, ConfigService, WorkerService
 from app.utils.helper import _make_delay_fn, copy_response
 from app.utils.constant import HTTPHeaderConstant, SpecialKeyParameterConstant
@@ -23,7 +24,7 @@ import functools
 from app.interface.events import EventInterface
 from enum import Enum
 from ._utils_decorator import *
-from app.classes.auth_permission import ClientTypeLiteral, AuthPermission, ClientAccessInfo, ClientTypeLiteral, FuncMetaData, Role, WSPathNotFoundError
+from app.classes.auth_permission import AuthMechanism, ClientTypeLiteral, AuthPermission, ClientAccessInfo, ClientTypeLiteral, FuncMetaData, Role, WSPathNotFoundError
 import asyncio
 from asgiref.sync import sync_to_async
 import warnings
@@ -558,6 +559,51 @@ def HTTPRessource(prefix: str, routers: list[Type[R]] = [], websockets: list[Typ
 
 ################################################################                           #########################################################
 
+def UseProtection(allowed_token_mechanism:bool=True,mount=True):
+    if not mount:
+        def decorator(func:Callable):
+            return func
+        return decorator
+    
+    if Get(ConfigService).AUTH_MECHANISM != 'both':
+        def decorator(func:Callable):
+            return func
+        return decorator
+    
+    def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
+        cls = common_class_decorator(func,UseProtection,None,allowed_token_mechanism=allowed_token_mechanism,mount=mount)
+        if cls != None:
+            return cls
+
+        class_name = Helper.get_class_name_from_method(func)
+        Helper.add_protected_route_metadata(class_name, func.meta['operation_id'],)
+    
+        def wrapper(function: Callable):
+
+            @functools.wraps(function)
+            async def callback(*args, **kwargs):
+                request:Request = kwargs.get('request',None)
+                if request == None:
+                    raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED,'missing request attributes')
+
+                clientInfo = get_client_info(request)
+                accessInfo = get_access_info(request)
+
+                if accessInfo == None and clientInfo == None:
+                    raise HTTPException(status.HTTP_401_UNAUTHORIZED,f'needs to authenticate with either the "token" or the "userpass" method')
+
+
+                if request.headers.get(HTTPHeaderConstant.X_AUTH_MECHANISM,None) == 'token' and not allowed_token_mechanism:
+                    raise BadAuthMechanismContextError('userpass','token','route')
+
+                return await function(*args,**kwargs)
+
+            return callback
+        Helper.appends_funcs_callback(func, wrapper, DecoratorPriority.PERMISSION-0.5)
+        return func
+    return decorator
+
+
 def UseAccess(accesses:Dict[ClientTypeLiteral,bool],mount=True):
     if not mount:
         def decorator(func:Callable):
@@ -580,15 +626,18 @@ def UseAccess(accesses:Dict[ClientTypeLiteral,bool],mount=True):
         def wrapper(function: Callable):
 
             @functools.wraps(function)
-            async def callback(*args, **kwargs):
+            async def callback(*args, **kwargs):                    
                 request:Request = kwargs.get('request',None)
                 if request == None:
                     raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED,'missing request attributes')
+
+                if configService.AUTH_MECHANISM == 'both' and (request.headers.get(HTTPHeaderConstant.X_AUTH_MECHANISM,None)) != 'token':
+                    return
                 
-                if (access:= getattr(request.state,'access',None))==None:
+                if (accessInfo:= getattr(request.state,'accessInfo',None))==None:
                     raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED,'missing access attributes')
 
-                if not accesses.get(access['type'],False):
+                if not accesses.get(accessInfo['type'],False):
                     raise HTTPException(status.HTTP_403_FORBIDDEN,'Access Type not valid for this route')
                     
                 return await function(*args,**kwargs)
@@ -597,8 +646,6 @@ def UseAccess(accesses:Dict[ClientTypeLiteral,bool],mount=True):
         Helper.appends_funcs_callback(func, wrapper, DecoratorPriority.PERMISSION)
         return func
     return decorator
-
-
 
 
 def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[Permission], default_error: HTTPExceptionParams = None,mount=True):
@@ -631,6 +678,12 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
 
             @functools.wraps(function)
             async def callback(*args, **kwargs):
+                request:Request = kwargs.get('request',None)
+                if request == None:
+                    raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED,'missing request attributes')
+
+                if configService.AUTH_MECHANISM == 'both' and (request.headers.get(HTTPHeaderConstant.X_AUTH_MECHANISM,None)) != 'userpass':
+                    return
 
                 if empty_decorator:
                     return await function(*args, **kwargs)

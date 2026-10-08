@@ -37,7 +37,7 @@ class AccessTypeAPIModel(AccessTypeModel):
     _path:str|None=PrivateAttr(default=None)
     _input:str|None=PrivateAttr(default=None)
 
-class AccessTypeAPIDict(TypedDict):
+class AccessAPIInfo(TypedDict):
     type:ClientTypeLiteral
     description:Optional[str]
     allowed_ip:Optional[List[str]]

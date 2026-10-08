@@ -213,3 +213,9 @@ class CipherDoesNotExistError(SecurityBaseError):
 class CipherSchemeNotValidError(SecurityBaseError):
     def __init__(self,scheme):
         super().__init__('Cipher scheme not valid', scheme =scheme)
+
+
+class BadAuthMechanismContextError(SecurityBaseError):
+
+    def __init__(self,required:str,provided:str,context:Literal['global','route']='global'):
+        super().__init__('Bad Auth Mechanism Context Error', required=required,provided=provided,context=context)
