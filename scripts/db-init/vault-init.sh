@@ -322,7 +322,7 @@ create_default_token(){
   vault kv put notifyr-secrets/internal/INCOMING_WEBHOOK API_KEY="$webhook_api_key"
 
   jq -n --arg token "$admin_api_key" \
-    '{type: "Admin", allowed_ip: null, time: null, token: $token, "access":"admin"}' \
+    '{type: "Admin", allowed_ip: null, time: null, token: $token, "access":"Notifyr Admin"}' \
     > "$VAULT_SECRETS_DIR/admin-api-key.json"
   vault kv put notifyr-secrets/internal/ACCESS/admin @"$VAULT_SECRETS_DIR/admin-api-key.json"
 
@@ -485,7 +485,7 @@ setup_database_config(){
       db_name="redis-notifyr" \
       default_ttl="35d" \
       max_ttl="35d" \
-      creation_statements='["~notifyr/credit:*","+@transaction", "+GET", "+SET", "+INCRBY", "+LPUSH", "+LTRIM", "+LRANGE", "+SELECT", "+FCALL", "+EVAL", "+EXISTS"]'
+      creation_statements='["~notifyr/credit:*","+@transaction", "+GET", "+SET", "+INCRBY","+DECRBY", "+LPUSH", "+LTRIM", "+LRANGE", "+SELECT", "+FCALL", "+EVAL", "+EXISTS"]'
 
     vault write notifyr-database/roles/app-redis-security-ntfr-role \
       db_name="redis-notifyr" \
@@ -515,7 +515,7 @@ setup_database_config(){
       db_name="redis-notifyr" \
       default_ttl="10m" \
       max_ttl="20m" \
-      creation_statements='["~notifyr/credit:*", "+GET", "+SET", "+INCRBY", "+LPUSH", "+LTRIM", "+LRANGE", "+SELECT", "+FCALL","+EXISTS"]'
+      creation_statements='["~notifyr/credit:*", "+GET", "+SET", "+INCRBY","+DECRBY", "+LPUSH", "+LTRIM", "+LRANGE", "+SELECT", "+FCALL","+EXISTS"]'
     setup_config_kv2 "redis_roles" "set"
   fi
   

@@ -65,5 +65,9 @@ scope_choices = list(get_args(ScopeMode))
 scope_mode_query:Callable[[Request],ScopeMode] = get_query_params('scope','single',False,raise_except=True,checker=_wrap_checker('scope',lambda v: v in scope_choices,choices=scope_choices))
 
 # ----------------------------------------------                                    ---------------------------------- #
-def bool_query_creator(name:str,default:Literal['true','false']='true'):
+
+def bool_query_creator(name:str,default:Literal['true','false']='true')->Callable[[Request],bool]:
     return get_query_params(name,default,True,raise_except=True,cls=bool)
+
+
+confirm_query = bool_query_creator('confirm','false')

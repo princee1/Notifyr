@@ -581,3 +581,9 @@ class AccessTypeGuard(Guard):
             raise ValidationError()
 
         return True,''
+
+async def access_confirm_guard(access:str,confirm:bool):
+    if access == '' and not confirm:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail='To continue with this operation confirm must be true')
+
+    return True,''

@@ -143,13 +143,13 @@ class CostService(BaseService):
     @CreditSilentFail()
     @RedisCreditKeyBuilder
     async def refund_credits(self,credit_key:str,bill:Bill):
+        balance = await self.get_credit_balance(credit_key,__builder__=False)
+
         async with self.redisService.db[RedisConstant.COST_DB].pipeline(transaction=False) as pipe:
             refund_cost = bill['total']
-            balance = await self.get_credit_balance(credit_key,__builder__=False,redis=pipe)
-            
             pipe.multi()
 
-            await self.redisService.decrement(RedisConstant.COST_DB,credit_key,refund_cost,pipe)
+            await self.redisService.decrement(RedisConstant.COST_DB,credit_key,refund_cost,redis=pipe)
             self.set_balance(bill, balance)
             await self.push_bill(credit_key,bill,redis=pipe)
 

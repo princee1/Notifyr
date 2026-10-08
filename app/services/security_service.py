@@ -224,6 +224,14 @@ class JWTAuthService(BaseService):
 
 CipherMode = Literal['api-token']
 
+class AccessVaultConstant:
+    
+    @staticmethod
+    def ACCESS_PATH(access:str=''):
+        if access == '':
+            return 'ACCESS'
+        return F'ACCESS/{access}'
+
 ACCESS_BUILD_STATE = 49043
 @Service()
 class SecurityService(BaseService):
@@ -257,6 +265,7 @@ class SecurityService(BaseService):
         if build_state == DEFAULT_BUILD_STATE or build_state == ACCESS_BUILD_STATE:
             if self.configService.AUTH_MECHANISM == 'token':
                 self.API_KEY.clear()
+                path = AccessVaultConstant.ACCESS_PATH()
                 for access_id,access in self.vaultService.secrets_engine.view(VaultConstant.INTERNAL_API_SECRETS,'ACCESS'):
                     access['access'] = access_id
                     self.API_KEY[access['token']] = access
