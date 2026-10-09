@@ -18,7 +18,7 @@ from app.decorators.handlers import AsyncIOHandler, CostHandler, FileHandler, Fi
 from app.decorators.interceptors import DataCostInterceptor, ResponseCacheInterceptor
 from app.decorators.permissions import AdminPermission, JWTAssetObjectPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import MerchantPipe, ObjectS3OperationResponsePipe, SanitizePathParameterPipe, TemplateParamsPipe, ValidFreeInputTemplatePipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, Throttle, UseAccess, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, LockService
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, Throttle, UseAccess, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseProtection, UseRoles, LockService
 from app.definition._service import StateProtocol
 from app.depends.class_dep import ObjectsSearch
 from app.depends.dependencies import get_auth_permission, get_client_info, is_mcp_request
@@ -50,6 +50,7 @@ class S3ObjectWebhookRessource(BaseHTTPRessource):
     def webhooks(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)]):
         ...
 
+@UseProtection()
 @UseRoles([Role.ASSETS])
 @UseHandler(ServiceAvailabilityHandler,AsyncIOHandler)
 @UsePermission(JWTRouteHTTPPermission)

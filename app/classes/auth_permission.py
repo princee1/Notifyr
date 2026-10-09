@@ -16,7 +16,7 @@ PermissionScope= Literal['custom','all']
 
 ContactPermissionScope = Literal['update','create','any']
 PermissionStatus= Literal['active','inactive','expired']
-ClientTypeLiteral = Literal['User','Admin','Twilio','App','Service']
+ClientTypeLiteral = Literal['User','Admin','Twilio','App','Service','System']
 
 PolicyUpdateMode = Literal['set','merge','delete']
 AuthMechanism = Literal['userpass','token','none','both']
@@ -80,6 +80,7 @@ class ClientType(Enum):
     Twilio = 'Twilio'
     App = 'App'
     Service = 'Service'
+    System = 'System'
 
 class AuthType(Enum):
     ACCESS_TOKEN = 'ACCESS_TOKEN'
@@ -371,6 +372,11 @@ class AccessDoesNotExistsError(BaseError):
         super().__init__()
         self.access = access
 
+class AccessIdCannotBeUsedError(BaseError):
+    def __init__(self, access:str):
+        super().__init__()
+        self.access = access
+ 
 class AccessHardLimitReachedError(BaseError):
     def __init__(self, limit: int):
         super().__init__(limit)

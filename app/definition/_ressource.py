@@ -559,7 +559,7 @@ def HTTPRessource(prefix: str, routers: list[Type[R]] = [], websockets: list[Typ
 
 ################################################################                           #########################################################
 
-def UseProtection(allowed_token_mechanism:bool=True,mount=True):
+def UseProtection(require:Optional[AuthMechanism],mount=True):
     if not mount:
         def decorator(func:Callable):
             return func
@@ -569,9 +569,12 @@ def UseProtection(allowed_token_mechanism:bool=True,mount=True):
         def decorator(func:Callable):
             return func
         return decorator
+
+    if require!= None and require not in ['userpass','token']:
+        raise ValueError('Here require must be either "userpass" or "token"')
     
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func,UseProtection,None,allowed_token_mechanism=allowed_token_mechanism,mount=mount)
+        cls = common_class_decorator(func,UseProtection,None,require=require,mount=mount)
         if cls != None:
             return cls
 
@@ -592,9 +595,8 @@ def UseProtection(allowed_token_mechanism:bool=True,mount=True):
                 if accessInfo == None and clientInfo == None:
                     raise HTTPException(status.HTTP_401_UNAUTHORIZED,f'needs to authenticate with either the "token" or the "userpass" method')
 
-
-                if request.headers.get(HTTPHeaderConstant.X_AUTH_MECHANISM,None) == 'token' and not allowed_token_mechanism:
-                    raise BadAuthMechanismContextError('userpass','token','route')
+                if require!= None and (auth_mechanism:=request.headers.get(HTTPHeaderConstant.X_AUTH_MECHANISM,None))!=require:
+                    raise BadAuthMechanismContextError(require,auth_mechanism,'route')
 
                 return await function(*args,**kwargs)
 
@@ -604,7 +606,7 @@ def UseProtection(allowed_token_mechanism:bool=True,mount=True):
     return decorator
 
 
-def UseAccess(accesses:Dict[ClientTypeLiteral,bool],mount=True):
+def UseAccess(*access_function: Callable[..., bool] | Access | Type[Access],accesses:Dict[ClientTypeLiteral,bool],default_error: HTTPExceptionParams = None,mount=True):
     if not mount:
         def decorator(func:Callable):
             return func
@@ -614,6 +616,8 @@ def UseAccess(accesses:Dict[ClientTypeLiteral,bool],mount=True):
         def decorator(func:Callable):
             return func
         return decorator
+
+    access_function = Helper.filter_type_function(access_function)
     
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
         cls = common_class_decorator(func,UseAccess,None,accesses=accesses,mount=mount)
@@ -639,6 +643,29 @@ def UseAccess(accesses:Dict[ClientTypeLiteral,bool],mount=True):
 
                 if not accesses.get(accessInfo['type'],False):
                     raise HTTPException(status.HTTP_403_FORBIDDEN,'Access Type not valid for this route')
+
+                for access in access_function:
+                    try:
+                        if isinstance(access,Access):
+                            flag = access.access(*args,**kwargs)
+                        else:
+                            flag = await APIFilterInject(access)(*args,**kwargs)
+                        if flag:
+                            continue
+                        else:
+                            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+                        
+                    except AccessDefaultException as e:
+                        if e.response != None and isinstance(e.response,Response):
+                            return e.response
+                        
+                        e.raise_http_exception()
+
+                        if default_error == None:
+                            raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)
+                        
+                        raise HTTPException(**default_error)
+
                     
                 return await function(*args,**kwargs)
 

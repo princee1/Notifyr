@@ -3,7 +3,7 @@ import json
 from typing import Any, Callable, Coroutine, Iterable, Literal, Optional, Type, TypedDict, get_args
 from beanie import Document
 from fastapi import HTTPException, Request, Response,status
-from app.classes.auth_permission import AccessTypeAPIModel, AuthPermission, ClientAccessInfo, TokensModel
+from app.classes.auth_permission import AccessDoesNotExistsError, AccessTypeAPIModel, AuthPermission, ClientAccessInfo, TokensModel
 from app.classes.broker import exception_to_json
 from app.classes.celery import AlgorithmType, SchedulerModel,TaskType
 from app.classes.email import EmailInvalidFormatError
@@ -1006,25 +1006,30 @@ class ClientMiniServiceResponsePipe(Pipe):
 
 class AccessPathPipe(Pipe):
 
-    def __init__(self,parse:bool=False,parse_empty=True):
+    def __init__(self,transform:bool=False,transform_empty=True):
         super().__init__(True)
         self.vaultService = Get(VaultService)
-        self.parse = parse
-        self.parse_empty = parse_empty
-
+        self.transform = transform
+        self.transform_empty = transform_empty
 
     async def pipe(self,access:str):                
+        if access == 'system':
+            raise AccessDoesNotExistsError(access)
+        
         path = AccessVaultConstant.ACCESS_PATH(access)
-        if self.parse:
+        if self.transform:
             if access == '':
                 return {'access':''}
-            accessRes = await RunInThreadPool(self.vaultService.secrets_engine.read)(VaultConstant.INTERNAL_API_SECRETS,path)
+            try:
+                accessRes = await RunInThreadPool(self.vaultService.secrets_engine.read)(VaultConstant.INTERNAL_API_SECRETS,path)
+            except:
+                raise AccessDoesNotExistsError(access)
             accessRes = AccessTypeAPIModel(**accessRes)
             accessRes._input =access
             accessRes._path = path
             return {'access':access}
         else:
-            if not self.parse_empty and access =='':
+            if not self.transform_empty and access =='':
                 return {'access',access}
             else:
                 return {'access':path}

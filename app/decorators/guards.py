@@ -1,5 +1,5 @@
 from typing import Any, Callable, List, Literal, Type
-from app.classes.auth_permission import AccessTypeAPIModel, AuthPermission, AuthType, ClientAccessInfo, ClientType, PolicyModel, ClientRefresh
+from app.classes.auth_permission import AccessDoesNotExistsError, AccessIdCannotBeUsedError, AccessTypeAPIModel, AuthPermission, AuthType, ClientAccessInfo, ClientType, PolicyModel, ClientRefresh
 from app.classes.cost_definition import CreditNotInPlanError
 from app.classes.mongo import BaseDocument
 from app.definition._error import ServerFileError
@@ -564,21 +564,24 @@ class SessionMechanismGuard(Guard):
         return True,''
 
 
-class AccessTypeGuard(Guard):
+class AccessAdminGuard(Guard):
 
-    def __init__(self,admin=False):
+    def __init__(self,admin:bool):
         super().__init__()
         self.admin = admin
 
     def guard(self,access:str|AccessTypeAPIModel):
         if isinstance(access,str):
-            if access == 'admin' and not self.admin:
-                return False,'Cannot use the admin in this route'
+            if access.endswith('system'):
+                raise AccessIdCannotBeUsedError(access)
+            if access.endswith('admin') and not self.admin:
+                raise AccessIdCannotBeUsedError(access)
+            
         elif isinstance(access,AccessTypeAPIModel):
+            if access._input == 'system':
+                raise AccessDoesNotExistsError(access._input)
             if access._input == 'admin' and not self.admin:
-                return False,'Cannot use the admin in this route'
-        else:
-            raise ValidationError()
+                raise AccessDoesNotExistsError(access._input)
 
         return True,''
 

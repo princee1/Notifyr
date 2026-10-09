@@ -107,6 +107,18 @@ class Permission(DecoratorObj):
 class PermissionDefaultException(DecoratorException):
     ...
 
+class Access(DecoratorObj):
+
+    def __init__(self,):
+        super().__init__(self.access, True)
+
+    def access(self,):
+        ...
+
+class AccessDefaultException(DecoratorException):
+    ...
+
+
 class Interceptor(DecoratorObj):
 
     def __init__(self,filter_before_params:bool= True,filter_after_params:bool=True,inject_meta=False):

@@ -10,7 +10,7 @@ from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, MCPPermission, ProfilePermission
 from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe, SanitizePathParameterPipe
 from app.definition._cost import DataCost
-from app.definition._ressource import BaseHTTPRessource, ClassMetaData, HTTPMethod,HTTPRessource, HTTPStatusCode, PingService, Throttle, UseAccess, UseInterceptor, UseLimiter, LockService, UseHandler, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import BaseHTTPRessource, ClassMetaData, HTTPMethod,HTTPRessource, HTTPStatusCode, PingService, Throttle, UseAccess, UseInterceptor, UseLimiter, LockService, UseHandler, UsePermission, UsePipe, UseProtection, UseRoles
 from app.definition._service import MiniStateProtocol, StateProtocol
 from app.depends.dependencies import get_auth_permission, get_client_info
 from app.depends.funcs_dep import get_profile
@@ -37,6 +37,7 @@ from app.depends.variables import mcp_configuration
 PROFILE_PREFIX = 'profile'
 
 
+@UseProtection()
 @UseRoles([Role.ADMIN])
 @PingService([MongooseService])
 @LockService(MongooseService,lockType='reader',check_status=False)

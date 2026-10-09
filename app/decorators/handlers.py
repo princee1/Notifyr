@@ -17,7 +17,7 @@ from app.errors.ingest_error import AgenticDatabaseNotAllowedError, IngestConfig
 from app.errors.agentic_error import *
 from app.errors.llm_error import LLMProviderDoesNotExistError, LLMModelNotPermittedError, LLMModelMaxTokenExceededError, LLMRateLimiterError, LLMConfigNotConfiguredError
 from app.services.worker.arq_service import DataTaskNotFoundError, JobAlreadyExistsError, JobDequeueError, JobDoesNotExistsError, JobInProgressError, JobStatusNotValidError,ResultNotFound, UnexpectedJobStatusError
-from app.classes.auth_permission import AccessAlreadyExistsError, AccessDoesNotExistsError, AccessHardLimitReachedError, WSPathNotFoundError
+from app.classes.auth_permission import AccessAlreadyExistsError, AccessDoesNotExistsError, AccessHardLimitReachedError, AccessIdCannotBeUsedError, WSPathNotFoundError
 from app.classes.stream_data_parser import ContinuousStateError, DataParsingError, SequentialStateError, ValidationDataError
 from app.classes.template import SchemaValidationError, SkipTemplateCreationError, TemplateBuildError, TemplateCreationError, TemplateFormatError, TemplateInjectError, TemplateNotFoundError, TemplateValidationError
 from app.container import InjectInMethod
@@ -1510,3 +1510,6 @@ class AccessHandler(Handler):
 
         except AccessDoesNotExistsError as e:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail=f'access : {e.access} does not exists')
+
+        except AccessIdCannotBeUsedError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail=f'access : {e.access} does not exists')

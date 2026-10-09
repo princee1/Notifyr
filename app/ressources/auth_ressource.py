@@ -10,7 +10,7 @@ from app.decorators.handlers import ClientHandler, MiniServiceHandler, ORMCacheH
 from app.decorators.interceptors import InvalidBlacklistTokenInterceptor
 from app.decorators.permissions import JWTRouteHTTPPermission, UserPermission
 from app.decorators.pipes import AccessTokenModelPipe, ClientMiniServiceResponsePipe, MiniServiceInjectorPipe, ObjectRelationalFriendlyPipe, SanitizePathParameterPipe, auth_state_pipe, refresh_logout_handler
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, LockService, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, LockService, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseProtection, UseRoles
 from app.definition._service import MiniStateProtocol
 from app.depends.dependencies import get_auth_permission, get_client_info, get_client_ip, get_query_params, get_user_agent
 from app.depends.funcs_dep import get_client_from_info
@@ -59,6 +59,7 @@ class AuthRessource(BaseHTTPRessource):
 
     @Throttle(normal=(300,30))
     @UseHandler(MiniServiceHandler)
+    @UseProtection(require='userpass')
     @UseLimiter('2/day',key_func='client')
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @UsePermission(JWTRouteHTTPPermission,UserPermission)
@@ -242,6 +243,7 @@ class AuthRessource(BaseHTTPRessource):
 
     @Throttle(normal=(250,50))
     @UseHandler(MiniServiceHandler)
+    @UseProtection(require='userpass')
     @UseLimiter('20/day',key_func='client')
     @UsePermission(JWTRouteHTTPPermission,UserPermission)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
@@ -255,6 +257,7 @@ class AuthRessource(BaseHTTPRessource):
 
     @Throttle(normal=(300,30))
     @UseHandler(MiniServiceHandler)
+    @UseProtection(require='userpass')
     @UseLimiter('1/hour',key_func='client')
     @UseInterceptor(InvalidBlacklistTokenInterceptor)
     @UsePipe(ObjectRelationalFriendlyPipe,before=False)
@@ -276,6 +279,7 @@ class AuthRessource(BaseHTTPRessource):
     if Get(ConfigService).SESSION_MECHANISM != 'none':
 
         @UseRoles([Role.ADMIN])
+        @UseProtection(require='userpass')
         @UsePipe(SanitizePathParameterPipe({},session=True))
         @UsePermission(JWTRouteHTTPPermission,UserPermission)
         @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
@@ -315,6 +319,7 @@ class AuthRessource(BaseHTTPRessource):
             return res
 
         @UseRoles([Role.ADMIN])
+        @UseProtection(require='userpass')
         @UseInterceptor(InvalidBlacklistTokenInterceptor)
         @UsePipe(SanitizePathParameterPipe({},session=True))
         @UsePermission(JWTRouteHTTPPermission,UserPermission)

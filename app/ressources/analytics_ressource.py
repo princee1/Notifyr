@@ -2,17 +2,18 @@
 from fastapi import Depends, Request
 from app.classes.auth_permission import ClientAccessInfo, Role
 from app.decorators.handlers import AsyncIOHandler, TortoiseHandler
-from app.decorators.permissions import JWTRouteHTTPPermission
-from app.definition._ressource import BaseHTTPRessource, HTTPRessource, PingService, LockService, UseAccess, UseHandler, UsePermission, UseRoles,HTTPMethod
+from app.decorators.permissions import ClientTypesPermission, JWTRouteHTTPPermission
+from app.definition._ressource import BaseHTTPRessource, HTTPRessource, PingService, LockService, UseAccess, UseHandler, UsePermission, UseProtection, UseRoles,HTTPMethod
 from app.depends.dependencies import get_auth_permission, get_client_info
 from app.services.database.tortoise_service import TortoiseConnectionService
 
+@UseProtection()
 @UseRoles([Role.ADMIN])
-@UsePermission(JWTRouteHTTPPermission)
 @PingService([TortoiseConnectionService])
 @UseHandler(TortoiseHandler,AsyncIOHandler)
 @UseAccess(accesses={'Admin':True,'User':True})
 @LockService(TortoiseConnectionService,lockType='reader',infinite_wait=True)
+@UsePermission(JWTRouteHTTPPermission,ClientTypesPermission(['User','Admin']))
 @HTTPRessource('analytics')
 class AnalyticsRessource(BaseHTTPRessource):
 

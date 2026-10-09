@@ -25,7 +25,7 @@ from app.services.config_service import ConfigService
 from app.utils.constant import ConfigAppConstant, CostConstant
 from app.depends.dependencies import get_auth_permission, get_client_info, get_client_ip, get_query_params, get_request_id, get_user_agent
 from app.container import InjectInMethod, Get, InjectInMiniService
-from app.definition._ressource import PingService, UseInterceptor, LockService, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseRoles, UseLimiter,HTTPStatusCode
+from app.definition._ressource import PingService, UseInterceptor, LockService, UseGuard, UseHandler, UsePermission, BaseHTTPRessource, HTTPMethod, HTTPRessource, UsePipe, UseProtection, UseRoles, UseLimiter,HTTPStatusCode
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
 from app.classes.auth_permission import AccessModel, AuthPermission, AuthSignature, AuthType, ClientAccessInfo, ClientType, PoliciesNotMatchingError, PolicyModel, PolicyUpdateMode, Role, Scope
 from app.decorators.handlers import AsyncIOHandler, CostHandler, DataSourceHandler, MiniServiceHandler, ORMCacheHandler, PydanticHandler, RedisHandler, ClientHandler, ClientSecurityHandler, ServiceAvailabilityHandler, TortoiseHandler, ValueErrorHandler, VaultHandler
@@ -39,7 +39,7 @@ CLIENT_PREFIX = 'client'
 
 policy_update_mode_query:Callable[[Request],str] = get_query_params('mode','merge',False,raise_except=True,checker=_wrap_checker('mode', lambda v: v in get_args(PolicyUpdateMode), choices=list(get_args(PolicyUpdateMode))))
 
-
+@UseProtection(require='userpass')
 @UsePermission(JWTRouteHTTPPermission,AdminPermission)
 @UseHandler(ServiceAvailabilityHandler,TortoiseHandler,AsyncIOHandler)
 @HTTPRessource('policy')
@@ -95,7 +95,7 @@ class PolicyRessource(BaseHTTPRessource):
     async def read_policy(self,request:Request,policy:Annotated[PolicyModel,Depends(get_policy)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         return {**policy.model_dump(), **{'policy_id':policy._policy_id}}
 
-
+@UseProtection(require='userpass')
 @UsePermission(JWTRouteHTTPPermission)
 @PingService([TortoiseConnectionService])
 @LockService(TortoiseConnectionService,lockType='reader',infinite_wait=True,check_status=False)
@@ -304,6 +304,7 @@ class ClientRessource(BaseHTTPRessource):
         else:
             return await fetch_group(group)
         
+@UseProtection(require='userpass')
 @UseHandler(ServiceAvailabilityHandler)
 @PingService([TortoiseConnectionService])
 @UsePermission(JWTRouteHTTPPermission,AdminPermission)

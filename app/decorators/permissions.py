@@ -211,6 +211,10 @@ class TwilioPermission(AbstractClientTypePermission):
     def __init__(self,ensure=False):
         super().__init__({ClientType.Twilio,}, ensure)
 
+class SystemPermission(AbstractClientTypePermission):
+    def __init__(self,ensure=False):
+        super().__init__({ClientType.System,}, ensure)
+
 class UserPermission(AbstractClientTypePermission):
 
     def __init__(self,ensure=False,accept_none_auth=False):
