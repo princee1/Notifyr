@@ -68,4 +68,6 @@ class StepRunner:
         meta['success'] = False
 
         return False
-        
+
+class LambdaStepRunner(StepRunner):
+    ...

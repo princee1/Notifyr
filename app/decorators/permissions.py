@@ -42,7 +42,7 @@ class JWTRouteHTTPPermission(Permission):
             if clientInfo['status'] == 'expired' and not self.accept_expired:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Permission expired")
         
-        if clientInfo['client_type'] == ClientType.Admin:
+        if clientInfo['client_type'] == ClientType.Admin or clientInfo['client_type']  == ClientType.System:
             return True
 
         operation_id = func_meta["operation_id"]
@@ -99,7 +99,7 @@ if CAPABILITIES['object']:
             self.accept_none= accept_none_template
 
         def permission(self,authPermission:AuthPermission,clientInfo:ClientAccessInfo,template:str,scheduler:SchedulerModel=None,template_type:RouteAssetType=None):
-            if clientInfo['client_type'] == ClientType.Admin:
+            if clientInfo['client_type'] == ClientType.Admin or clientInfo['client_type']  == ClientType.System:
                 return True
             
             template_type = self.template_type if template_type == None else template_type
@@ -132,7 +132,7 @@ if CAPABILITIES['object']:
     class JWTStaticObjectPermission(Permission):
             
         def permission(self,authPermission:AuthPermission,clientInfo:ClientAccessInfo,blog:str):
-            if clientInfo['client_type'] == ClientType.Admin:
+            if clientInfo['client_type'] == ClientType.Admin or clientInfo['client_type']  == ClientType.System:
                 return True
             
             if blog not in authPermission['allowed_blogs']:
@@ -204,7 +204,7 @@ class AdminPermission(AbstractClientTypePermission):
     # only because theres 3 type of client otherwise there would be only the ClientTypePermission class
 
      def __init__(self, ensure=False):
-        super().__init__({ClientType.Admin,}, ensure)
+        super().__init__({ClientType.Admin,ClientType.System}, ensure)
 
 class TwilioPermission(AbstractClientTypePermission):
 
@@ -267,7 +267,7 @@ class ProfilePermission(Permission):
         if profile == '' and self.allow_empty:
             return True
 
-        if clientInfo['client_type'] == ClientType.Admin:
+        if clientInfo['client_type'] == ClientType.Admin or clientInfo['client_type']  == ClientType.System:
             return True
 
         if not self.predicate(profile,authPermission):
@@ -291,7 +291,7 @@ class AgentPermission(Permission):
         if agent == '' and self.allow_empty:
             return True
 
-        if clientInfo['client_type'] == ClientType.Admin:
+        if clientInfo['client_type'] == ClientType.Admin or clientInfo['client_type']  == ClientType.System:
             return True
         
         if not self.predicate(agent,authPermission):
@@ -371,7 +371,7 @@ class MCPPermission(Permission):
         if not (operation_id:=func_meta.get('operation_id',None)):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail='Function is not available as a tool')
 
-        if clientInfo['client_type'] == ClientType.Admin:
+        if clientInfo['client_type'] == ClientType.Admin or clientInfo['client_type']  == ClientType.System:
             return True
 
         if operation_id in set(authPermission.get('allowed_mcp',{}).get('operations',[])):

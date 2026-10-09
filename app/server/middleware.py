@@ -69,6 +69,22 @@ class LoadBalancerMiddleWare(MiddleWare):
         # TODO add headers like application id, notifyr-service id, Signature-Service, myb generation id 
         return response
 
+
+class SetupGuardMiddleware(MiddleWare):
+    priority = MiddlewarePriority.SETUP_GUARD
+
+    def __init__(self, app, dispatch = None):
+        super().__init__(app, dispatch)
+        
+        self.configService: ConfigService = Get(ConfigService)
+        self.redisService: RedisService = Get(RedisService)
+        self.adminService:AdminService = Get(AdminService)
+        self.securityService: SecurityService = Get(SecurityService)
+
+    async def dispatch(self, request:Request, call_next:Callable[...,Response]):
+        response = await call_next(request)
+        return response
+
 class APITokenAuthMiddleware(MiddleWare):
 
     priority = MiddlewarePriority.AUTH

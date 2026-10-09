@@ -195,7 +195,7 @@ class BlacklistClientGuard(Guard):
 
 class AdminModificationGuard(Guard):
 
-    def guard(self,client:ClientMiniService):
+    def guard(self,client:ClientMiniService,clientInfo:ClientAccessInfo):
         if client.client.client_type == ClientType.Admin:
             raise ClientDoesNotExistError(client.client_id)
 
@@ -578,9 +578,13 @@ class AccessAdminGuard(Guard):
                 raise AccessIdCannotBeUsedError(access)
             
         elif isinstance(access,AccessTypeAPIModel):
+            if access.type == 'System':
+                raise AccessDoesNotExistsError(access._input)
             if access._input == 'system':
                 raise AccessDoesNotExistsError(access._input)
             if access._input == 'admin' and not self.admin:
+                raise AccessDoesNotExistsError(access._input)
+            if access.type == 'Admin' and not self.admin:
                 raise AccessDoesNotExistsError(access._input)
 
         return True,''

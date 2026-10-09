@@ -16,7 +16,7 @@ CREATE DOMAIN Scope AS VARCHAR(15) CHECK (
 );
 
 CREATE DOMAIN ClientType AS VARCHAR(10) CHECK (
-    VALUE IN ('User','Admin','Twilio','App','Service')
+    VALUE IN ('User','Admin','Twilio','App','Service','System')
 );
 
 CREATE TABLE IF NOT EXISTS GroupClient (
@@ -152,6 +152,18 @@ BEGIN
         END IF;
         RETURN NEW;
     END IF;
+    IF NEW.client_type = 'System' THEN
+        IF NEW.can_login IS FALSE THEN
+            RAISE EXCEPTION 'System clients must be able to login';
+            RETURN NULL;
+        END IF;
+
+        IF (SELECT COUNT(*) FROM Client WHERE client_type = 'System') > 0 THEN
+            RAISE EXCEPTION 'System already exists';
+            RETURN NULL;
+        END IF;
+        RETURN NEW;
+    END IF;
     RETURN NEW;
 END;
 $guard_admin_creation$ LANGUAGE PLPGSQL;
@@ -162,22 +174,22 @@ CREATE TRIGGER guard_admin_creation
     FOR EACH ROW
     EXECUTE FUNCTION guard_admin_creation();
 
-CREATE OR REPLACE FUNCTION guard_admin_deletion() RETURNS TRIGGER AS $guard_admin_deletion$
+CREATE OR REPLACE FUNCTION guard_super_user_deletion() RETURNS TRIGGER AS $guard_super_user_deletion$
 BEGIN
     SET search_path = clients;
-    IF OLD.client_type = 'Admin' THEN
-        RAISE EXCEPTION 'Admin cannot be deleted';
+    IF OLD.client_type = 'Admin' or OLD.client_type = 'System' THEN
+        RAISE EXCEPTION 'Superuser cannot be deleted';
         RETURN NULL;  
     END IF;
     RETURN NEW;
 END;
-$guard_admin_deletion$ LANGUAGE plpgsql;
+$guard_super_user_deletion$ LANGUAGE plpgsql;
 
-CREATE TRIGGER guard_admin_deletion
+CREATE TRIGGER guard_super_user_deletion
     BEFORE DELETE
     ON Client
     FOR EACH ROW
-    EXECUTE FUNCTION guard_admin_deletion();
+    EXECUTE FUNCTION guard_super_user_deletion();
 
 CREATE OR REPLACE FUNCTION guard_client_identity_modification() RETURNS TRIGGER AS $guard_client_identity_modification$
 BEGIN
@@ -203,26 +215,26 @@ CREATE TRIGGER guard_client_identity_modification
     FOR EACH ROW
     EXECUTE FUNCTION guard_client_identity_modification();
 
-CREATE OR REPLACE FUNCTION guard_admin_group_modification() RETURNS TRIGGER AS $guard_admin_group_modification$
+CREATE OR REPLACE FUNCTION guard_super_user_modification() RETURNS TRIGGER AS $guard_super_user_modification$
 BEGIN
-    IF NEW.client_type = 'Admin' AND NEW.can_login IS FALSE THEN
+    IF (NEW.client_type = 'Admin' or NEW.client_type = 'System' )AND NEW.can_login IS FALSE THEN
         RAISE EXCEPTION 'Admin clients must be able to login';
         RETURN NULL;
     END IF;
 
-    IF OLD.client_type = 'Admin' AND OLD.group_id IS DISTINCT FROM NEW.group_id THEN
+    IF (OLD.client_type = 'Admin' or NEW.client_type = 'System') AND OLD.group_id IS DISTINCT FROM NEW.group_id THEN
         RAISE EXCEPTION 'The Admin client group cannot be modified';
     END IF;
 
     RETURN NEW;
 END;
-$guard_admin_group_modification$ LANGUAGE plpgsql;
+$guard_super_user_modification$ LANGUAGE plpgsql;
 
-CREATE TRIGGER guard_admin_group_modification
+CREATE TRIGGER guard_super_user_modification
     BEFORE UPDATE
     ON Client
     FOR EACH ROW
-    EXECUTE FUNCTION guard_admin_group_modification();
+    EXECUTE FUNCTION guard_super_user_modification();
 
 
 -- ------------------------------------             -------------------------------------------#

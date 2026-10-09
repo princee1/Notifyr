@@ -486,7 +486,13 @@ setup_database_config(){
       default_ttl="35d" \
       max_ttl="35d" \
       creation_statements='["~notifyr/security/*","+@transaction","+@string","+EXISTS","+SELECT","+KEYS","+DEL","+EXPIRE"]'
-
+    
+    vault write notifyr-database/roles/app-redis-config-ntfr-role \
+      db_name="redis-notifyr" \
+      default_ttl="35d" \
+      max_ttl="35d" \
+      creation_statements='["~notifyr/config/*","+@transaction","+@string","+EXISTS","+KEYS","+DEL","+EXPIRE"]'
+    
     vault write notifyr-database/roles/app-redis-ntfr-role \
       db_name="redis-notifyr" \
       default_ttl="35d" \

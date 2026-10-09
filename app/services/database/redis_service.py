@@ -37,6 +37,7 @@ CELERY_BROKER_CREDS='celery-broker'
 AGENTIC_CREDS='agentic'
 CREDIT_CREDS='credit'
 SECURITY_CREDS='security'
+CONFIG_CREDS='config'
 
 AGENTIC_APP_MODE_CRED = {ApplicationMode.arq,ApplicationMode.agentic,ApplicationMode.server}
 
@@ -62,9 +63,11 @@ REDIS_PREFIX_BUILDER:dict[int|str,Callable[[str],str]] ={
     #RedisConstant.COST_DB: lambda c:f'notifyr/credit:{c}',
     RedisConstant.SECURITY_DB: lambda s:f'notifyr/security/{s}',
     RedisConstant.AGENTIC_DB: lambda a:f'notifyr/agentic/{a}',
+    RedisConstant.CONFIG_DB:lambda c:f'notifyr/config/{c}',
     'agentic':lambda a:f'notifyr/agentic/{a}',
     #'cost':lambda c:f'notifyr/credit:{c}',
-    'security':lambda s: f'notifyr/security/{s}'
+    'security':lambda s: f'notifyr/security/{s}',
+    'config':lambda c:f'notifyr/config/{c}',
 }
 
 @Service()
@@ -283,8 +286,9 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
             raise BuildFailureError(e.args)
     
     def generate_credentials(self):
-        self.add_credentials(VaultConstant.REDIS_ROLE)
+        self.add_credentials(VaultConstant.REDIS_ROLE,prefix='app')
         self.add_credentials(VaultConstant.REDIS_ROLE,CREDIT_CREDS,prefix='app',suffix='credit')
+        self.add_credentials(VaultConstant.REDIS_ROLE,CONFIG_CREDS,prefix='app',suffix='config')
         
         if self.configService.JOBSTORE_DB == 'redis':
             self.add_credentials(VaultConstant.REDIS_ROLE,CELERY_BACKEND_CREDS,suffix='celery-backend')
@@ -304,7 +308,7 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         
         self.redis_limiter = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.LIMITER_DB,username=self.db_user(),password=self.db_password())
         self.redis_cache = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.CACHE_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
-        self.redis_config = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.CONFIG_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
+        self.redis_config = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.CONFIG_DB,decode_responses=True,username=self.db_user(CONFIG_CREDS),password=self.db_password(CONFIG_CREDS))
 
         if APP_MODE == ApplicationMode.beat or APP_MODE == ApplicationMode.worker:
             self.redis_events = SyncRedis(host=HostConstant.REDIS_HOST,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
