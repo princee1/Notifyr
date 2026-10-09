@@ -20,7 +20,7 @@ wait_for_server() {
     if curl -sSf "$VAULT_ADDR/v1/sys/health" >/dev/null 2>&1; then
       break
     fi
-    sleep 2
+    sleep 1
   done
 }
 
@@ -36,8 +36,7 @@ wait_active_server(){
       echo "Vault is not running in HA mode (single node) — safe to continue"
       break
     fi
-    echo "Waiting for Vault to become active..."
-    sleep 2
+    sleep 1
   done
 }
 
