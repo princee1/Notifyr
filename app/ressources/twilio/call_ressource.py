@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Annotated
 from fastapi import BackgroundTasks, Depends, HTTPException, Request, Response
-from app.classes.auth_permission import AuthPermission, BypassRole, ClientAccessInfo, MustHave, MustHaveWhen, Role
+from app.classes.auth_permission import AccessAPIInfo, AuthPermission, BypassRole, ClientAccessInfo, MustHave, MustHaveWhen, Role
 from app.classes.celery import TaskHeaviness, s
 from app.classes.stream_data_parser import StreamContinuousDataParser, StreamSequentialDataParser
 from app.classes.template import PhoneTemplate
@@ -29,7 +29,7 @@ from app.services.worker.task_service import TaskService
 from app.services.ntfr.twilio_service import CallService, TwilioAccountMiniService, TwilioService
 from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseAccess, UseInterceptor, LockService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.container import Get, InjectInMethod
-from app.depends.dependencies import get_auth_permission, get_client_info
+from app.depends.dependencies import get_access_info, get_auth_permission, get_client_info
 from app.depends.funcs_dep import Get_Contact,get_template,wait_timeout_query,get_profile
 from app.depends.class_dep import SubjectParams, TwilioTracker
 from app.utils.constant import CostConstant, StreamConstant
@@ -76,7 +76,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         @UseRoles([Role.MFA_OTP,Role.TWILIO],options=[MustHave(Role.ASSETS),MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
         @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio','main'),to_otp_path,force_task_manager_attributes_pipe,TwilioPhoneNumberPipe('otp',True), TemplateParamsPipe('phone', 'xml'),TemplateValidationInjectionPipe('phone','','',False))
         @BaseHTTPRessource.Post('/otp/{template:path}',cost_definition=CostConstant.phone_otp,operation_id=mcp_operation_id,to_mcp_tool=True)
-        async def voice_relay_otp(self,twilio:Annotated[TwilioAccountMiniService,Depends(profile_query)], template: Annotated[PhoneTemplate,Depends(get_template)], otpModel: OTPModel, request: Request,response:Response,cost:Annotated[SimpleTaskCost,Depends(SimpleTaskCost)],taskManager: Annotated[TaskManager, Depends(TaskManager)],profile:str=Depends(profile_query), wait_timeout: int | float = Depends(wait_timeout_query),authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+        async def voice_relay_otp(self,twilio:Annotated[TwilioAccountMiniService,Depends(profile_query)], template: Annotated[PhoneTemplate,Depends(get_template)], otpModel: OTPModel, request: Request,response:Response,cost:Annotated[SimpleTaskCost,Depends(SimpleTaskCost)],taskManager: Annotated[TaskManager, Depends(TaskManager)],profile:str=Depends(profile_query), wait_timeout: int | float = Depends(wait_timeout_query),authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
             
             _, body = template.build(otpModel.content, ...,True)
             taskManager.set_algorithm('route')
@@ -95,7 +95,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         @UseRoles([Role.MFA_OTP,Role.TWILIO],options=[MustHave(Role.ASSETS),MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
         @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio'),MiniServiceInjectorPipe(CeleryService,'channel'),CeleryTaskPipe,RegisterSchedulerPipe,TemplateParamsPipe('phone', 'xml'),ContentIndexPipe(),TemplateValidationInjectionPipe('phone','data','index',True),ContactToInfoPipe('phone','to'), TwilioPhoneNumberPipe('default'))
         @BaseHTTPRessource.HTTPRoute('/template/{profile}/{template:path}/', methods=[HTTPMethod.POST], cost_definition=CostConstant.phone_twiml,operation_id=mcp_operation_id,to_mcp_tool=True)
-        async def voice_template(self,profile:str,twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],channel:Annotated[ChannelMiniService,Depends(get_profile)],template: Annotated[PhoneTemplate,Depends(get_template)], scheduler: CallTemplateSchedulerModel,cost:Annotated[CallCost,Depends(CallCost)], request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)] ,taskManager: Annotated[TaskManager, Depends(TaskManager)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+        async def voice_template(self,profile:str,twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],channel:Annotated[ChannelMiniService,Depends(get_profile)],template: Annotated[PhoneTemplate,Depends(get_template)], scheduler: CallTemplateSchedulerModel,cost:Annotated[CallCost,Depends(CallCost)], request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)] ,taskManager: Annotated[TaskManager, Depends(TaskManager)],wait_timeout: int | float = Depends(wait_timeout_query), authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
             
             for content in scheduler.content:
                 index= content.index
@@ -121,7 +121,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         @UsePermission(MCPPermission,JWTAssetObjectPermission('sms','xml',accept_none_template=True))
         @UseRoles([Role.ADMIN,Role.TWILIO],options=[BypassRole(Role.ADMIN),MustHave(Role.ASSETS),MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
         @BaseHTTPRessource.HTTPRoute('/template/{template:path}',methods=[HTTPMethod.OPTIONS],mcp_operation_id=mcp_operation_id,to_mcp_tool=True)
-        def get_template_schema(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info),template:str='',wait_timeout: int | float = Depends(wait_timeout_query)):
+        def get_template_schema(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ,template:str='',wait_timeout: int | float = Depends(wait_timeout_query)):
             assetService = Get(AssetService)
             schemas = assetService.get_schema('phone')
             if template in schemas:
@@ -137,7 +137,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio','main'),TwilioPhoneNumberPipe('otp',True),)
         @UseHandler(CostHandler,AsyncIOHandler,ReactiveHandler,StreamDataParserHandler,RedisHandler)
         @BaseHTTPRessource.Get('/otp/',methods=[HTTPMethod.GET], cost_definition=CostConstant.phone_digit_otp,operation_id=SimpleOperationID('call',add_method=False))
-        async def enter_digit_otp(self, twilio:Annotated[TwilioAccountMiniService,Depends(profile_query)],otpModel: GatherDtmfOTPModel, request: Request, response: Response,cost:Annotated[SimpleTaskCost,Depends(SimpleTaskCost)], keepAliveConn: Annotated[KeepAliveManager, Depends(KeepAliveManager)],profile:str=Depends(profile_query), authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+        async def enter_digit_otp(self, twilio:Annotated[TwilioAccountMiniService,Depends(profile_query)],otpModel: GatherDtmfOTPModel, request: Request, response: Response,cost:Annotated[SimpleTaskCost,Depends(SimpleTaskCost)], keepAliveConn: Annotated[KeepAliveManager, Depends(KeepAliveManager)],profile:str=Depends(profile_query), authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
 
             rx_id = keepAliveConn.create_subject('HTTP')
             keepAliveConn.register_lock()
@@ -159,7 +159,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
         @UseHandler(AsyncIOHandler,ReactiveHandler,StreamDataParserHandler,CostHandler,RedisHandler)
         @LockService(AssetService,ProfileService,TwilioService,lockType='reader',check_status=False,as_manager=True)
         @BaseHTTPRessource.HTTPRoute('/authenticate/', methods=[HTTPMethod.GET], mount=False,cost_definition=CostConstant.phone_auth,operation_id=SimpleOperationID('call',add_method=False))
-        async def voice_authenticate(self, request: Request,twilio:Annotated[TwilioAccountMiniService,Depends(profile_query)], otpModel:GatherSpeechOTPModel, response: Response, contact: Annotated[ContactORM, Depends(get_contacts)],cost:Annotated[CallCost,Depends(CallCost)], keepAliveConn: Annotated[KeepAliveManager, Depends(KeepAliveManager)],profile:str=Depends(profile_query), authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+        async def voice_authenticate(self, request: Request,twilio:Annotated[TwilioAccountMiniService,Depends(profile_query)], otpModel:GatherSpeechOTPModel, response: Response, contact: Annotated[ContactORM, Depends(get_contacts)],cost:Annotated[CallCost,Depends(CallCost)], keepAliveConn: Annotated[KeepAliveManager, Depends(KeepAliveManager)],profile:str=Depends(profile_query), authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
 
             if contact.phone != otpModel.to:
                 raise HTTPException(status_code=400,detail='Contact phone number mismatch')
@@ -189,7 +189,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @LockService(ProfileService,TwilioService,CeleryService,lockType='reader',check_status=False,as_manager=True)
     @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio'),MiniServiceInjectorPipe(CeleryService,'channel'),CeleryTaskPipe,ContentIndexPipe,ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('default'))
     @BaseHTTPRessource.HTTPRoute('/twiml/{profile}/', methods=[HTTPMethod.POST],  mount=False,cost_definition=CostConstant.phone_template,operation_id=mcp_operation_id,to_mcp_tool=True)
-    async def voice_twilio_twiml(self, scheduler: CallTwimlSchedulerModel,twilio:Annotated[TwilioAccountMiniService,Depends(profile_query)], channel:Annotated[ChannelMiniService,Depends(get_profile)],request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[CallCost,Depends(CallCost)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)], taskManager: Annotated[TaskManager, Depends(TaskManager)],profile:str=Depends(profile_query), authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def voice_twilio_twiml(self, scheduler: CallTwimlSchedulerModel,twilio:Annotated[TwilioAccountMiniService,Depends(profile_query)], channel:Annotated[ChannelMiniService,Depends(get_profile)],request: Request, response: Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[CallCost,Depends(CallCost)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)], taskManager: Annotated[TaskManager, Depends(TaskManager)],profile:str=Depends(profile_query), authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
 
         for content in scheduler.content:
             
@@ -218,7 +218,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseRoles([Role.RELAY,Role.TWILIO],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
     @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio'),MiniServiceInjectorPipe(CeleryService,'channel'),CeleryTaskPipe,ContentIndexPipe,ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('default'))
     @BaseHTTPRessource.HTTPRoute('/custom/{profile}/', methods=[HTTPMethod.POST], cost_definition=CostConstant.phone_custom,to_mcp_tool=True,operation_id=mcp_operation_id)
-    async def voice_custom(self,profile:str,twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],channel:Annotated[ChannelMiniService,Depends(get_profile)], scheduler: CallCustomSchedulerModel, request: Request, response: Response,cost:Annotated[CallCost,Depends(CallCost)], broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager: Annotated[TaskManager, Depends(TaskManager)], authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def voice_custom(self,profile:str,twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],channel:Annotated[ChannelMiniService,Depends(get_profile)], scheduler: CallCustomSchedulerModel, request: Request, response: Response,cost:Annotated[CallCost,Depends(CallCost)], broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager: Annotated[TaskManager, Depends(TaskManager)], authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         for content in scheduler.content:
             details = content.model_dump(
                 exclude={'body', 'voice', 'language', 'loop','as_contact','index','will_track','sender_type'})
@@ -266,36 +266,36 @@ class IncomingCallRessources(BaseHTTPRessource):
     if CAPABILITIES['chat']:
 
         @BaseHTTPRessource.HTTPRoute('/menu/', methods=[HTTPMethod.POST])
-        async def voice_menu(self, authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+        async def voice_menu(self, authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
             chatService = Get(ChatService)
 
         @UseRoles([Role.CHAT])
         @BaseHTTPRessource.HTTPRoute('/live-chat/', methods=[HTTPMethod.POST])
-        async def voice_live_chat(self, authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+        async def voice_live_chat(self, authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
             chatService = Get(ChatService)
             
         @BaseHTTPRessource.HTTPRoute('/automate-response/', methods=[HTTPMethod.POST])
-        async def voice_automate_response(self, authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+        async def voice_automate_response(self, authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
             chatService = Get(ChatService)
             pass
 
         @BaseHTTPRessource.HTTPRoute('/partial-result/', methods=[HTTPMethod.POST])
-        async def partial_result(self,authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+        async def partial_result(self,authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
             chatService = Get(ChatService)
             ...
         
         @BaseHTTPRessource.HTTPRoute('/handler_fail/', methods=[HTTPMethod.POST])
-        async def voice_primary_handler_fail(self, authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+        async def voice_primary_handler_fail(self, authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
             pass
 
         @BaseHTTPRessource.HTTPRoute('/error/', methods=[HTTPMethod.POST])
-        async def voice_error(self, authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+        async def voice_error(self, authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
             pass
     
     @UseHandler(ReactiveHandler)
     @UsePipe(TwilioResponseStatusPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/status/', methods=[HTTPMethod.POST])
-    async def voice_call_status(self, status: CallStatusModel, response:Response,broker:Annotated[Broker,Depends(Broker)],subject_params:Annotated[SubjectParams,Depends(SubjectParams)], authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info),):
+    async def voice_call_status(self, status: CallStatusModel, response:Response,broker:Annotated[Broker,Depends(Broker)],subject_params:Annotated[SubjectParams,Depends(SubjectParams)], authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ,):
         print(status)
         subject_id = subject_params.subject_id
         value = {
@@ -325,7 +325,7 @@ class IncomingCallRessources(BaseHTTPRessource):
         
     @UseHandler(ReactiveHandler)
     @BaseHTTPRessource.HTTPRoute('/gather-result/', methods=[HTTPMethod.POST])
-    async def gather_result(self,gatherResult:GatherResultModel, response:Response,broker:Annotated[Broker,Depends(Broker)],subject_params:Annotated[SubjectParams,Depends(SubjectParams)],authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def gather_result(self,gatherResult:GatherResultModel, response:Response,broker:Annotated[Broker,Depends(Broker)],subject_params:Annotated[SubjectParams,Depends(SubjectParams)],authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         value =gatherResult.model_dump(include=('data','state'))
         broker.publish(StreamConstant.TWILIO_REACTIVE,'plain',subject_params.subject_id,value,)
 
@@ -344,7 +344,7 @@ class CallRessource(BaseHTTPRessource):
     @UseLimiter(limit_value="1/hour")
     @UseRoles([Role.ADMIN])
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.HEAD])
-    def weird_head(self, request: Request, response: Response, authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    def weird_head(self, request: Request, response: Response, authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         response.status_code = 204
         pass
 

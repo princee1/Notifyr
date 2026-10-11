@@ -1,4 +1,4 @@
-from app.classes.auth_permission import AuthPermission, ClientAccessInfo, Role
+from app.classes.auth_permission import AccessAPIInfo, AuthPermission, ClientAccessInfo, Role
 from app.container import InjectInMethod
 from app.decorators.guards import CreditPlanGuard
 from app.decorators.handlers import AsyncIOHandler, CostHandler, RedisHandler, ServiceAvailabilityHandler, TortoiseHandler
@@ -6,7 +6,7 @@ from app.decorators.permissions import ClientTypesPermission, JWTRouteHTTPPermis
 from app.decorators.pipes import JSONLoadsPipe
 from app.definition._ressource import BaseHTTPRessource, HTTPRessource, HTTPMethod, PingService, UseAccess, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles, LockService
 from app.definition._utils_decorator import Pipe
-from app.depends.dependencies import get_auth_permission, get_client_info
+from app.depends.dependencies import get_access_info, get_auth_permission, get_client_info
 from app.services.cost_service import CostService,REDIS_CREDIT_KEY_BUILDER
 from app.services.database.redis_service import RedisService
 from app.services.reactive_service import ReactiveService
@@ -38,7 +38,7 @@ class CostRessource(BaseHTTPRessource):
     @UseAccess(accesses={'Admin':True,'User':True,'App':True})
     @UsePermission(ClientTypesPermission(['Admin','App','User']))
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.GET])
-    def show_cost_file(self, request: Request, response: Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    def show_cost_file(self, request: Request, response: Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         """Return a summary of the currently loaded cost definitions.
         Implementation note: this is a light placeholder — change to expose full file or a filtered view as needed.
         """
@@ -60,7 +60,7 @@ class CostRessource(BaseHTTPRessource):
     @UseAccess(accesses={'Admin':True,'User':True,'App':True})
     @UsePermission(ClientTypesPermission(['Admin','App','User']))
     @BaseHTTPRessource.HTTPRoute('/credits/', methods=[HTTPMethod.GET])
-    async def show_current_credits(self, request: Request,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def show_current_credits(self, request: Request,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         """Return current credits for all plan keys. May be restricted in production via permissions in future.
         """
         return await self.costService.get_all_credits_balance()
@@ -73,7 +73,7 @@ class CostRessource(BaseHTTPRessource):
     @UseAccess(accesses={'Admin':True,'User':True})
     @UsePermission(ClientTypesPermission(['Admin','App','User']))
     @BaseHTTPRessource.HTTPRoute('/bills/{credit}/', methods=[HTTPMethod.GET],)
-    async def get_bills(self,credit:CostConstant.Credit, request: Request,start:int = Query(0),stop:int=Query(-1), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def get_bills(self,credit:CostConstant.Credit, request: Request,start:int = Query(0),stop:int=Query(-1), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         """Placeholder for billing/history endpoint. Implement retrieval from DB/audit store when available."""
         credit = (await self.credit_pipe(credit))['credit']
         bill_key = self.costService.bill_key(credit)
@@ -86,7 +86,7 @@ class CostRessource(BaseHTTPRessource):
     @PingService([CostService,RedisService])
     @UseAccess(accesses={'Admin':True,'User':True})
     @BaseHTTPRessource.HTTPRoute('/receipts/{credit}/', methods=[HTTPMethod.GET],)
-    async def get_receipts(self,credit:CostConstant.Credit, request: Request,start:int = Query(0),stop:int=Query(-1),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def get_receipts(self,credit:CostConstant.Credit, request: Request,start:int = Query(0),stop:int=Query(-1),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         
         credit = (await self.credit_pipe(credit))['credit']
         receipt_key =  self.costService.receipts_key(credit)

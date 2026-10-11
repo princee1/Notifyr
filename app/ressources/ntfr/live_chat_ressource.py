@@ -14,9 +14,9 @@ from app.services.contacts_service import ContactsService
 from app.services.security_service import JWTAuthService
 from app.websockets.live_chat_ws import LiveChatWebSocket
 from app.decorators.handlers import  ServiceAvailabilityHandler, WebSocketHandler
-from app.classes.auth_permission import AuthPermission, ClientAccessInfo, WSPermission,Role
+from app.classes.auth_permission import AccessAPIInfo, AuthPermission, ClientAccessInfo, WSPermission,Role
 from app.decorators.permissions import JWTRouteHTTPPermission
-from app.depends.dependencies import get_auth_permission, get_client_info
+from app.depends.dependencies import get_access_info, get_auth_permission, get_client_info
 from app.utils.helper import generateId
 
 
@@ -64,17 +64,17 @@ class LiveChatRessource(BaseHTTPRessource):
 
     @UsePermission(JWTRouteHTTPPermission)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.DELETE])
-    async def dequeue_chat(self,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def dequeue_chat(self,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         ...
     
     @UsePermission(JWTRouteHTTPPermission)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.GET])
-    async def check_priority(self,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def check_priority(self,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         ...
 
     @UsePermission(JWTRouteHTTPPermission)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.PUT])
-    async def modify_priority(self,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def modify_priority(self,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         ...
 
 

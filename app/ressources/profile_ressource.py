@@ -2,7 +2,7 @@ from typing import Annotated, Literal, Optional, Type
 from beanie import Document
 from fastapi import Depends,Request, Response,status
 from pydantic import ConfigDict
-from app.classes.auth_permission import AuthPermission, ClientAccessInfo, MustHaveWhen, Role
+from app.classes.auth_permission import AccessAPIInfo, AuthPermission, ClientAccessInfo, MustHaveWhen, Role
 from app.classes.mongo import MongoFindFilter
 from app.container import InjectInMethod,Get
 from app.decorators.handlers import AsyncIOHandler, CostHandler, DataSourceHandler, MiniServiceHandler, MongooseHandler, MotorErrorHandler, ProfileHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler, VaultHandler,CeleryControlHandler
@@ -12,7 +12,7 @@ from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniService
 from app.definition._cost import DataCost
 from app.definition._ressource import BaseHTTPRessource, ClassMetaData, HTTPMethod,HTTPRessource, HTTPStatusCode, PingService, Throttle, UseAccess, UseInterceptor, UseLimiter, LockService, UseHandler, UsePermission, UsePipe, UseProtection, UseRoles
 from app.definition._service import MiniStateProtocol, StateProtocol
-from app.depends.dependencies import get_auth_permission, get_client_info
+from app.depends.dependencies import get_access_info, get_auth_permission, get_client_info
 from app.depends.funcs_dep import get_profile
 from app.classes.profiles import ErrorProfileMap, ProfilModelValues, BaseProfileModel, ErrorProfileModel
 from app.errors.db_error import DocumentSingletonLimitReachedError
@@ -74,7 +74,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT))
     @UseHandler(VaultHandler,MiniServiceHandler,PydanticHandler,CostHandler,CeleryControlHandler,RedisHandler)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
-    async def create_profile(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def create_profile(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         profileModel = await self.pipe_profil_model(request,'model')
         
         if self.Model._singleton:
@@ -118,7 +118,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT,'refund'))
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),MerchantPipe(-1))
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.DELETE])
-    async def delete_profile(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def delete_profile(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         profileModel = await self.mongooseService.get(self.Model,profile,True)
         creds = await self.profileService._read_encrypted_creds(profileModel.profile_id)
 
@@ -150,7 +150,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
     @LockService(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PUT])
-    async def update_profile(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def update_profile(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         
         profileModel = await self.mongooseService.get(self.Model,profile,True)
         modelUpdate = await self.pipe_profil_model(request,'model_update')
@@ -174,7 +174,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @LockService(VaultService,lockType='reader',check_status=False)
     @LockService(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PATCH])
-    async def set_credentials(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)], authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def set_credentials(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)], authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         
         profileModel:BaseProfileModel = await self.mongooseService.get(self.Model,profile,True)
         modelCreds = await self.pipe_profil_model(request,'model_creds')
@@ -198,7 +198,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @LockService(ProfileService,lockType='reader',as_manager=False,motor_fallback=True)
     @UseRoles([Role.PUBLIC],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
     @BaseHTTPRessource.HTTPRoute('/{profile:path}',methods=[HTTPMethod.GET],to_mcp_tool=True,operation_id='get_profile_information')
-    async def read_profile(self,profile:str,request:Request, response:Response,mongoFilter:Optional[MongoFindFilter],source:SourceMode=Depends(source_mode_query), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def read_profile(self,profile:str,request:Request, response:Response,mongoFilter:Optional[MongoFindFilter],source:SourceMode=Depends(source_mode_query), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         match source:
             case 'database':
                 if profile != '':
@@ -228,7 +228,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
     @LockService(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
     @BaseHTTPRessource.HTTPRoute('/refresh/{profile}/',methods=[HTTPMethod.PATCH])
-    async def refresh_memory_state(self,profile:str,request:Request,channel:Annotated[ChannelMiniService,Depends(get_profile)],broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def refresh_memory_state(self,profile:str,request:Request,channel:Annotated[ChannelMiniService,Depends(get_profile)],broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         await channel.refresh_worker_state()
         broker.propagate(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
 
@@ -241,7 +241,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @LockService(ProfileService,'reader',as_manager=True,miniLockType='reader')
     @UseRoles([Role.PUBLIC],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
     @BaseHTTPRessource.HTTPRoute('/errors/{profile}/',methods=[HTTPMethod.GET],to_mcp_tool=True,operation_id='get_profile_errors')
-    async def read_error(self,profile:str,error:ErrorProfileMap,service:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def read_error(self,profile:str,error:ErrorProfileMap,service:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         return await service.fetch_errors(**error.model_dump())
 
     @classmethod
@@ -296,7 +296,7 @@ class ProfileRessource(BaseHTTPRessource):
     
     @UsePipe(DocumentFriendlyPipe(include={'ignore'}),before=False)
     @BaseHTTPRessource.HTTPRoute('/error/{error}/',methods=[HTTPMethod.PATCH])
-    async def toggle_ignore(self,error:str,request:Request,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def toggle_ignore(self,error:str,request:Request,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         
         errorModel = await self.mongooseService.get(ErrorProfileModel,error)
         errorModel.ignore = not errorModel.ignore
@@ -306,9 +306,9 @@ class ProfileRessource(BaseHTTPRessource):
     
     @UsePipe(DocumentFriendlyPipe(include={'ignore'}),before=False)
     @BaseHTTPRessource.HTTPRoute('/all/',methods=[HTTPMethod.GET])
-    async def get_all(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def get_all(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         return await self.mongooseService.find_all(BaseProfileModel)
     
     @BaseHTTPRessource.HTTPRoute('/types/',methods=[HTTPMethod.GET])
-    async def get_profile_type(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    async def get_profile_type(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         ...
