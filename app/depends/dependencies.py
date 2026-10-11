@@ -13,6 +13,7 @@ from app.container import Get
 configService:ConfigService = Get(ConfigService)
 
 D = TypeVar('D',bound=type)
+Context = Literal['request','call']
 
 def get_user_language(request: Request) -> str:
     """
@@ -114,7 +115,7 @@ def get_query_params(name,default=None,parse=False,return_none=False,raise_excep
 def get_contact_token():
     return APIKeyHeader(name=HTTPHeaderConstant.CONTACT_TOKEN)
 
-def get_client_info(request:Request):
+def get_client_info(request:Request,context:Annotated[Context,Depends(lambda:'request')]='request'):
     match configService.AUTH_MECHANISM:
         case 'userpass':
             if not hasattr(request.state, "clientInfo") or request.state.clientInfo is None:
@@ -123,11 +124,14 @@ def get_client_info(request:Request):
         case 'both':
             return None
         case 'token':
-            raise HTTPException(status_code=401, detail="Bad Authentication Method required: userpass")
+            if context == 'call':
+                raise HTTPException(status_code=401, detail="Bad Authentication Method required: userpass")
+            else:
+                return None
         case 'none':
             return None
 
-def get_access_info(request:Request):
+def get_access_info(request:Request,context:Annotated[Context,Depends(lambda:'request')]='request'):
     match configService.AUTH_MECHANISM:
         case 'token':
             if not hasattr(request.state, "access") or request.state.accessInfo is None:
@@ -136,7 +140,10 @@ def get_access_info(request:Request):
         case 'both':
             return None
         case 'userpass':
-            raise HTTPException(status_code=401, detail="Bad Authentication Method required: token")
+            if  context == 'call':
+                raise HTTPException(status_code=401, detail="Bad Authentication Method required: token")
+            else:
+                return None
         case 'none':
             return None
 

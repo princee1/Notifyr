@@ -589,8 +589,8 @@ def UseProtection(require:Optional[AuthMechanism],mount=True):
                 if request == None:
                     raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED,'missing request attributes')
 
-                clientInfo = get_client_info(request)
-                accessInfo = get_access_info(request)
+                clientInfo = get_client_info(request,'call')
+                accessInfo = get_access_info(request,'call')
 
                 if accessInfo == None and clientInfo == None:
                     raise HTTPException(status.HTTP_401_UNAUTHORIZED,f'needs to authenticate with either the "token" or the "userpass" method')
@@ -620,7 +620,7 @@ def UseAccess(*access_function: Callable[..., bool] | Access | Type[Access],acce
     access_function = Helper.filter_type_function(access_function)
     
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func,UseAccess,None,accesses=accesses,mount=mount)
+        cls = common_class_decorator(func,UseAccess,access_function,accesses=accesses,mount=mount)
         if cls != None:
             return cls
 
@@ -1143,7 +1143,7 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
 
             elif configService.AUTH_MECHANISM == 'token':
                 def cost_func(request:Request):
-                    access_type = request.state.access['type']
+                    access_type = request.state.accessInfo['type']
                     unit_cost = cost.get(access_type,1)
                     unit_cost = max(1,unit_cost)
                     return min(unit_cost,max_limit)
@@ -1157,7 +1157,7 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
     cost_callback = cost_decorator()
 
     def access_type_token_func(request:Request):
-        return request.state.access['access']
+        return request.state.accessInfo['id']
 
     def client_private_key_func(request:Request):
         if configService.AUTH_MECHANISM != 'userpass':

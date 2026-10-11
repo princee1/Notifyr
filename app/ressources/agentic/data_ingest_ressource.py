@@ -26,7 +26,7 @@ from app.services.file.file_service import FileService
 from app.services.profile_service import ProfileMiniService, ProfileService
 from app.services.setting_service import SettingService
 from app.services.vault_service import VaultService
-from app.decorators.permissions import JWTRouteHTTPPermission, ProfilePermission
+from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, ProfilePermission, UserPermission
 from app.definition._ressource import UseLimiter
 from app.services.worker.arq_service import ArqIngestTaskService, JobAlreadyExistsError, JobInProgressError,JobStatus, UnexpectedJobStatusError
 from app.models.ingest_model import AbortedJobResponse,CrawlingComparableURL,DeleteIngestUriMetadata,ResearchDataIngestModel,ResearchIngestDataResponse
@@ -52,28 +52,31 @@ class JobArqRessource(BaseHTTPRessource):
         self.settingService = settingService
     
     @UseHandler(AsyncIOHandler)
+    @UsePermission(UserPermission)
     @PingService([ArqIngestTaskService])
-    @UseAccess(accesses={'Admin':True,'User':True})
-    @LockService(ArqIngestTaskService,lockType='reader')
     @UsePipe(DataClassToDictPipe(),before=False)
+    @LockService(ArqIngestTaskService,lockType='reader')
+    @UseAccess(accesses={'Admin':True,'User':True,'System':True})
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.GET])
     async def get_queued_jobs(self, request: Request,response:Response,autPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         return await self.arqService.get_queued_jobs()
         
     @UseHandler(AsyncIOHandler)
+    @UsePermission(UserPermission)
     @PingService([ArqIngestTaskService])
-    @UseAccess(accesses={'Admin':True,'User':True})
-    @LockService(ArqIngestTaskService,lockType='reader')
     @UsePipe(DataClassToDictPipe(),before=False)
+    @LockService(ArqIngestTaskService,lockType='reader')
+    @UseAccess(accesses={'Admin':True,'User':True,'System':True})
     @BaseHTTPRessource.HTTPRoute('/results/', methods=[HTTPMethod.GET])
     async def get_jobs_result(self, request: Request,response:Response,autPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         return await self.arqService.get_jobs_results()
         
     @UseHandler(AsyncIOHandler)    
+    @UsePermission(UserPermission)
     @PingService([ArqIngestTaskService])
-    @UseAccess(accesses={'Admin':True,'User':True})
-    @LockService(ArqIngestTaskService,lockType='reader')
     @UsePipe(DataClassToDictPipe(),before=False)
+    @LockService(ArqIngestTaskService,lockType='reader')
+    @UseAccess(accesses={'Admin':True,'User':True,'System':True})
     @BaseHTTPRessource.HTTPRoute('/info/{job_id}/', methods=[HTTPMethod.GET])
     async def get_job_info(self, job_id: str, request: Request,response:Response,autPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         job = await self.arqService.exists(job_id, raise_on_exist=False)
@@ -81,10 +84,11 @@ class JobArqRessource(BaseHTTPRessource):
         return info
 
     @UseHandler(AsyncIOHandler)
+    @UsePermission(UserPermission)
     @PingService([ArqIngestTaskService])
     @UsePipe(DataClassToDictPipe(),before=False)
-    @UseAccess(accesses={'Admin':True,'User':True})
     @LockService(ArqIngestTaskService,lockType='reader')
+    @UseAccess(accesses={'Admin':True,'User':True,'System':True})
     @BaseHTTPRessource.HTTPRoute('/result/{job_id}/', methods=[HTTPMethod.GET])
     async def get_job_result(self, job_id: str, request: Request,response:Response,autPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         job = await self.arqService.exists(job_id, raise_on_exist=False)
@@ -93,8 +97,9 @@ class JobArqRessource(BaseHTTPRessource):
 
     @UseLimiter('5/hour')
     @Throttle(uniform=(100,300))
-    @UseAccess(accesses={'Admin':True})
+    @UsePermission(AdminPermission)
     @PingService([ArqIngestTaskService])
+    @UseAccess(accesses={'Admin':True,'System':True})
     @LockService(ArqIngestTaskService,lockType='reader')
     @UseHandler(CostHandler,AsyncIOHandler,FileHandler,RedisHandler,ArqHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
@@ -135,9 +140,9 @@ class JobArqRessource(BaseHTTPRessource):
 @UseRoles([Role.ADMIN])
 @UsePipe(GraphRelationshipPipe)
 @IncludeRessource(JobArqRessource)
-@UseAccess(accesses={'Admin':True})
 @PingService([ArqIngestTaskService])
 @UsePermission(JWTRouteHTTPPermission)
+@UseAccess(accesses={'Admin':True,'System':True})
 @UseHandler(ServiceAvailabilityHandler,CostHandler,DataIngestHandler,CustomSchemaHandler)
 @HTTPRessource('data-ingest')
 class DataIngestRessource(BaseHTTPRessource):
@@ -173,9 +178,9 @@ class DataIngestRessource(BaseHTTPRessource):
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UsePipe(QueryToModelPipe('ingestTask'),MerchantPipe)
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
-    @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @PingService([RedisService,{'cls':LLMService,'kwargs':VerifyLLMConfig()}])
     @LockService(RedisService,ArqIngestTaskService,LLMService,lockType='reader')
+    @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @UseHandler(UploadFileHandler,ArqHandler,AsyncIOHandler,PydanticHandler,LLMHandler,RedisHandler)
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.FILE_DATA_TASK),UploadFilesGuard(),docling_guard)
     @BaseHTTPRessource.HTTPRoute('/file/',methods=[HTTPMethod.POST],response_model=FileUploadIngestEnqueueResponse)
@@ -232,8 +237,8 @@ class DataIngestRessource(BaseHTTPRessource):
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.CRAWL_DATA_TASK),crawl4ai_guard)
-    @UseHandler(ArqHandler,AsyncIOHandler,LLMHandler,RedisHandler,MiniServiceHandler,VaultHandler,GatewayHandler)
     @PingService([RemoteAgentService,RedisService,{'cls':LLMService,'kwargs':VerifyLLMConfig(crawl=True)}])
+    @UseHandler(ArqHandler,AsyncIOHandler,LLMHandler,RedisHandler,MiniServiceHandler,VaultHandler,GatewayHandler)
     @LockService(RemoteAgentService,RedisService,ArqIngestTaskService,CustomService,LLMService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/web/',methods=[HTTPMethod.POST],response_model=WebCrawlingUriMetadata,mount=False)
     async def ingest_web_crawling(self,request:Request,response:Response,ingestTask:WebCrawlingDataIngestModel, broker:Annotated[Broker,Depends(Broker)],cost:Annotated[CrawlMarkdownIngestCost,Depends(CrawlMarkdownIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],similarity:Annotated[EmbeddingSimilarity,Depends(EmbeddingSimilarity)],request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):

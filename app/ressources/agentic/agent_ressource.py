@@ -15,7 +15,7 @@ from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, AgentPermission, ClientTypesPermission, JWTRouteHTTPPermission, MCPPermission
 from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe, SanitizePathParameterPipe
 from app.definition._cost import DataCost
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseAccess, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles, LockService
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseAccess, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseProtection, UseRoles, LockService
 from app.definition._service import MiniStateProtocol, StateProtocol
 from app.depends.class_dep import EmbeddingSimilarity
 from app.depends.variables import SourceMode,source_mode_query
@@ -43,6 +43,7 @@ from app.depends.variables import mcp_configuration, source_mode_query
 base_attr = {'id','revision_id','created_at','last_modified','version'}
 
 
+@UseProtection()
 @UseRoles([Role.ADMIN])
 @PingService([MongooseService])
 @UsePermission(JWTRouteHTTPPermission)
@@ -108,9 +109,9 @@ class AgentsRessource(BaseHTTPRessource):
     @UsePipe(MerchantPipe())
     @Throttle(normal=(200,80))
     @UsePermission(AdminPermission) 
-    @UseAccess(accesses={'Admin':True})
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @UsePipe(DocumentFriendlyPipe,before=False)
+    @UseAccess(accesses={'Admin':True,'System':True})
     @UseInterceptor(DataCostInterceptor(CostConstant.AGENT_CREDIT))
     @UseHandler(LLMHandler,RedisHandler,CostHandler,AgentHandler)
     @LockService(LLMService,lockType='reader',as_manager=False)
@@ -140,10 +141,10 @@ class AgentsRessource(BaseHTTPRessource):
     @UsePipe(DocumentFriendlyPipe,before=False)
     @UseHandler(MiniServiceHandler,DataSourceHandler)
     @UsePermission(AgentPermission(True),MCPPermission)
-    @UseAccess(accesses={'Admin':True,'App':True,'User':True})
     @LockService(LLMService,lockType='reader',as_manager=False)
     @UsePipe(SanitizePathParameterPipe({},profile=True,agent=True))
     @LockService(RemoteAgentService,lockType='reader',as_manager=False)
+    @UseAccess(accesses={'Admin':True,'App':True,'User':True,'System':True})
     @UseRoles([Role.PUBLIC],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
     @BaseHTTPRessource.HTTPRoute('/{agent:path}/',methods=[HTTPMethod.GET],to_mcp_tool=True,operation_id='read_agent_information')
     async def read_agent(self,agent:str,request:Request,response:Response,mongoFilter:Optional[MongoFindFilter],profile:str=Depends(get_agent),source:SourceMode=Depends(source_mode_query), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
@@ -171,6 +172,7 @@ class AgentsRessource(BaseHTTPRessource):
     @Throttle(normal=(200,80))
     @UsePermission(AdminPermission)
     @UsePipe(DocumentFriendlyPipe,before=False)
+    @UseAccess(accesses={'Admin':True,'System':True})
     @UseHandler(CostHandler,RedisHandler,AgentHandler)
     @LockService(LLMService,lockType='reader',as_manager=False)
     @UseInterceptor(DataCostInterceptor(CostConstant.AGENT_CREDIT,'refund'))
@@ -203,8 +205,8 @@ class AgentsRessource(BaseHTTPRessource):
 
     @Throttle(uniform=(100,200))
     @UsePermission(AdminPermission)
-    @UseAccess(accesses={'Admin':True})
     @UsePipe(DocumentFriendlyPipe,before=False)
+    @UseAccess(accesses={'Admin':True,'System':True})
     @UseHandler(PydanticHandler,LLMHandler,AgentHandler)
     @LockService(LLMService,lockType='reader',as_manager=False)
     @BaseHTTPRessource.HTTPRoute('/{agent}/',methods=[HTTPMethod.PUT])
@@ -232,11 +234,11 @@ class AgentsRessource(BaseHTTPRessource):
 
     @Throttle(uniform=(30,60))
     @UseRoles([Role.AGENT,Role.ADMIN])
-    @UseAccess(accesses={'Admin':True,'App':True,'User':True})
     @LockService(LLMService,lockType='reader',as_manager=False)
     @UsePipe(MiniServiceInjectorPipe(RemoteAgentService,'agent'))
     @UseHandler(LLMHandler,AgenticHandler,GrpcHandler,AgentHandler)
-    @UseLimiter('100/hour',cost={'Admin':1,'User':3},key_func='private')
+    @UseAccess(accesses={'Admin':True,'App':True,'User':True,'System':True})
+    @UseLimiter('100/hour',cost={'Admin':1,'User':3,'System':1,'App':5},key_func='private')
     @LockService(RemoteAgentService,lockType='reader',as_manager=True,miniLockType='reader')
     @UsePermission(ClientTypesPermission([ClientType.User,ClientType.Admin]),AgentPermission)
     @PingService([{'cls':RemoteAgentService,'kwargs':{'grpc':True}}],is_manager=True,infinite_wait=True)
@@ -256,7 +258,7 @@ class AgentsRessource(BaseHTTPRessource):
     @UseAccess(accesses={'Admin':True,'App':True,'User':True})
     @UsePipe(MiniServiceInjectorPipe(RemoteAgentService,'agent'))
     @UseHandler(LLMHandler,AgenticHandler,GrpcHandler,AgentHandler)
-    @UseLimiter('100/hour',cost={'Admin':1,'User':3},key_func='private')
+    @UseLimiter('100/hour',cost={'Admin':1,'User':3,'System':1,'App':5},key_func='private')
     @LockService(RemoteAgentService,lockType='reader',as_manager=True,miniLockType='reader')
     @UsePermission(ClientTypesPermission([ClientType.User,ClientType.Admin]),AgentPermission)
     @PingService([{'cls':RemoteAgentService,'kwargs':{'grpc':True}}],is_manager=True,infinite_wait=True)

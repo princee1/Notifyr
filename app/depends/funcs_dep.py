@@ -203,3 +203,6 @@ def get_credentials(credentials: Annotated[HTTPBasicCredentials, Depends(HTTPBas
 
 def get_access(access:str):
     return access
+
+def get_issuer(request:Request):
+    return ''

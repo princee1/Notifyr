@@ -5,9 +5,9 @@ from app.container import InjectInMethod
 from app.cost.ingest_cost import DeleteDocumentIngestCost
 from app.decorators.handlers import AgenticHandler, ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, GraphitiHandler, GatewayHandler, RedisHandler, ServiceAvailabilityHandler
 from app.decorators.interceptors import DataCostInterceptor
-from app.decorators.permissions import JWTRouteHTTPPermission
+from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import DeleteDocumentIngestUpdatePipe, MerchantPipe, domain_pipe, update_status_upon_no_metadata_pipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseAccess, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, LockService
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseAccess, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, LockService, UseProtection
 from app.depends.dependencies import get_auth_permission, get_client_info
 from app.interface.delete_ingest import DeleteIngestDocumentInterface
 from app.manager.merchant_manager import Merchant
@@ -19,8 +19,9 @@ from app.services.worker.arq_service import ArqIngestTaskService
 from app.utils.constant import AgenticConstant, CostConstant
 from fastapi import status
 
-@UseAccess(accesses={'Admin':True})
-@UsePermission(JWTRouteHTTPPermission)
+@UseProtection()
+@UseAccess(accesses={'Admin':True,'System':True})
+@UsePermission(JWTRouteHTTPPermission,AdminPermission)
 @UseHandler(AsyncIOHandler,ServiceAvailabilityHandler)
 @HTTPRessource('k-graph')
 class KGraphDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
@@ -34,9 +35,9 @@ class KGraphDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
         self.remoteAgentService = remoteAgentService
 
     @Throttle(normal=(300,40))
-    @UseHandler(GraphitiHandler,GatewayHandler)
     @UseHandler(AgenticHandler)
     @PingService([RemoteAgentService])
+    @UseHandler(GraphitiHandler,GatewayHandler)
     @LockService(RemoteAgentService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/document/{document_id}/',methods=[HTTPMethod.GET])
     async def get_document_graph(self,document_id:str,response:Response,request:Request,authPermission:AuthPermission = Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
@@ -44,9 +45,9 @@ class KGraphDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
         return gateway_body
 
     @UsePipe(domain_pipe)
-    @UseHandler(GraphitiHandler,GatewayHandler)
     @UseHandler(AgenticHandler)
     @PingService([RemoteAgentService])
+    @UseHandler(GraphitiHandler,GatewayHandler)
     @LockService(RemoteAgentService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/domain/{domain}/',methods=[HTTPMethod.GET])
     async def get_domain_graph(self,domain:str,response:Response,request:Request,authPermission:AuthPermission = Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
