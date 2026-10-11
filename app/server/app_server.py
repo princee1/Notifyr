@@ -9,6 +9,7 @@ from app.container import Get, CONTAINER
 from app.definition._error import ServerFileError
 from app.callback import Callbacks_Stream,Callbacks_Sub
 from app.definition._service import ACCEPTABLE_STATES, DEFAULT_BUILD_STATE, BaseService, ServiceStatus
+from app.errors.security_error import RootSetupNotConfiguredError
 from app.models.odm.agents_model import AgentModel
 from app.models.odm.custom_model import CustomModel
 from app.models.odm.tools_model import ToolModel
@@ -25,7 +26,7 @@ from app.services.timer_service import TimerService
 from app.services.vault_service import VaultService
 from app.services.worker.task_service import TaskService
 from app.services.config_service import ConfigService, WorkerService
-from app.utils.constant import MCPConstant
+from app.utils.constant import MCPConstant, RedisConstant, SetupRootConstant
 from app.utils.prettyprint import PrettyPrinter_
 from fastapi import Depends, HTTPException, Request, Response, FastAPI
 from typing import Callable,Literal
@@ -92,6 +93,7 @@ class AppServer(EventInterface):
         self.configService: ConfigService = Get(ConfigService)
         self.costService: CostService = Get(CostService)
         self.vaultService:VaultService = Get(VaultService)
+        self.redisService:RedisService = Get(RedisService)
         
         self.app = FastAPI(title=server_meta.TITLE,
                            summary=server_meta.SUMMARY,
@@ -217,7 +219,19 @@ class AppServer(EventInterface):
         
         mcp.mount_http()
         mcp.mount_sse()
-            
+
+    @register_hook('startup')
+    async def before_startup(self):
+        async with self.redisService.redis_config.pipeline(True) as pipe:
+            for key in SetupRootConstant.KEYS:
+                await self.redisService.retrieve(RedisConstant.CONFIG_DB,key,redis=pipe)
+
+            setup = await pipe.execute()
+
+        setup = [bool(s) for s in setup]
+        if not all(setup):
+            raise RootSetupNotConfiguredError(setup)
+
     @register_hook('startup')
     async def on_startup(self):
 
@@ -300,7 +314,6 @@ class AppServer(EventInterface):
         adminService = Get(AdminService)
         await adminService.load_clients(DEFAULT_BUILD_STATE)
 
-
     @register_hook('shutdown')
     async def close_tortoise(self):
         tortoiseConnService = Get(TortoiseConnectionService)
@@ -350,6 +363,10 @@ class AppServer(EventInterface):
             
         await RunInThreadPool(vaultService.revoke_auth_token)()
 
+    @register_hook('shutdown')
+    async def after_shutdown(self):
+        ...
+    
     @property
     def shutdown_hooks(self):
         return [getattr(self,x) for x in _shutdown_hooks]

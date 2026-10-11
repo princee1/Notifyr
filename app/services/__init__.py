@@ -3,11 +3,11 @@ from app.utils.globals import APP_MODE,ApplicationMode,CAPABILITIES
 from app.services.config_service import ConfigService,WorkerService
 from app.services.logger_service import LoggerService
 
-if APP_MODE in {ApplicationMode.beat, ApplicationMode.server ,ApplicationMode.worker,ApplicationMode.admin}:
+if APP_MODE in {ApplicationMode.beat, ApplicationMode.server ,ApplicationMode.worker,ApplicationMode.root}:
     from app.services.vault_service import VaultService
     from app.services.database.redis_service import RedisService
 
-if APP_MODE == ApplicationMode.admin:
+if APP_MODE == ApplicationMode.root:
     from app.services.database.tortoise_service import TortoiseConnectionService
     from app.services.admin_service import AdminService
     from app.services.security_service import JWTAuthService

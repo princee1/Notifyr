@@ -1,7 +1,7 @@
 from typing import Annotated, Callable, Optional, get_args
 from fastapi import Depends, HTTPException, Query, Request, Response, status
 from tortoise.expressions import Q
-from app.decorators.guards import AdminModificationGuard,  BlacklistClientGuard, ClientAuthTypeGuard, PolicyGuard, SessionMechanismGuard, TortoiseHardLimitGuard
+from app.decorators.guards import SuperUserModificationGuard,  BlacklistClientGuard, ClientAuthTypeGuard, PolicyGuard, SessionMechanismGuard, TortoiseHardLimitGuard
 from app.decorators.interceptors import DataCostInterceptor, InvalidBlacklistTokenInterceptor
 from app.definition._cost import DataCost
 from app.definition._service import MiniStateProtocol, StateProtocol
@@ -163,12 +163,12 @@ class ClientRessource(BaseHTTPRessource):
 
     @PingService([VaultService])
     @UsePermission(AdminPermission)
-    @UseGuard(AdminModificationGuard)
+    @UseGuard(SuperUserModificationGuard)
     @UseInterceptor(InvalidBlacklistTokenInterceptor)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @UsePipe(ClientMiniServiceResponsePipe('client',True,False),before=False)
-    @UseHandler(ValueErrorHandler,ORMCacheHandler,VaultHandler,ClientHandler,ClientSecurityHandler,MiniServiceHandler)
     @LockService(VaultService,SettingService,AdminService,as_manager=True,lockType='reader',miniLockType='reader')
+    @UseHandler(ValueErrorHandler,ORMCacheHandler,VaultHandler,ClientHandler,ClientSecurityHandler,MiniServiceHandler)
     @BaseHTTPRessource.HTTPRoute('/{client}/', methods=[HTTPMethod.PUT])
     async def update_client(self,request:Request,response:Response, updateClient:UpdateClientModel,broker:Annotated[Broker,Depends(Broker)],client: Annotated[ClientMiniService, Depends(get_client)],mode:PolicyUpdateMode = Depends(policy_update_mode_query),profile:str=Depends(get_client), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info) ):
 
@@ -197,9 +197,9 @@ class ClientRessource(BaseHTTPRessource):
     
     @PingService([VaultService])        
     @UsePermission(AdminPermission)
-    @UseGuard(AdminModificationGuard)
     @HTTPStatusCode(status.HTTP_200_OK,)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
+    @UseGuard(SuperUserModificationGuard(accept_admin=False))
     @UsePipe(ClientMiniServiceResponsePipe('client'),before=False)
     @UseInterceptor(DataCostInterceptor(CostConstant.CLIENT_CREDIT,'refund'))
     @LockService(SettingService,VaultService,AdminService,as_manager=True,miniLockType='reader')
@@ -223,26 +223,35 @@ class ClientRessource(BaseHTTPRessource):
     @UseGuard(session_guard)
     @UsePermission(AdminPermission)
     @LockService(AdminService,lockType='reader')
-    @UsePipe(SanitizePathParameterPipe({},client=True))
     @UseHandler(MiniServiceHandler,DataSourceHandler)
+    @UsePipe(SanitizePathParameterPipe({},client=True))
+    @UsePipe(StateResponseInjectionPipe('sessions',merge=True),before=False)
     @UsePipe(ObjectRelationalFriendlyPipe(when=lambda source: source == 'database'),before=False)
     @UsePipe(ClientMiniServiceResponsePipe('result',when=lambda source: source == 'memory'),before=False)
-    @UsePipe(StateResponseInjectionPipe('sessions',merge=True),before=False)
     @BaseHTTPRessource.Get('/{client:path}')
     async def read_client(self,request:Request,response:Response,state:Annotated[StateManager,Depends(StateManager)],client:str='',session:bool = Depends(inject_session_query),source:SourceMode=Depends(source_mode_query),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         match source:
             case 'database':
                 state.deactivate()
                 if client == '':
-                    return [ c for c in await ClientORM.all() if c.client_type!=ClientType.Admin]
+                    return [ c for c in await ClientORM.all() if (c.client_type!=ClientType.Admin and clientInfo['client_type'] != ClientType.System )]
                 else:
-                    return await ClientORM.filter(client_id=client)
+                    clientORM  = await ClientORM.filter(client_id=client).exclude(client_type=ClientType.System).first()
+                    if clientORM == None or (clientORM.client_type == ClientType.Admin and clientInfo['client_type'] != ClientType.System):
+                        raise ClientDoesNotExistError(client)
+                    return clientORM
             case 'memory':
                 if not session:
                     state.deactivate()
 
                 if client != '':
                     async with self.adminService.MiniServiceStore.lock(client) as service:
+                        if service.client.client_type == ClientType.System:
+                            raise ClientDoesNotExistError(client)
+
+                        if (service.client.client_type == ClientType.Admin and clientInfo['client_type'] != ClientType.System):
+                            raise ClientDoesNotExistError(client)
+
                         if session:
                             sessions = await service.read_sessions()
                             state.store('sessions',sessions)
@@ -250,7 +259,7 @@ class ClientRessource(BaseHTTPRessource):
                 else:
                     clients = []
                     ref:list = state.store('sessions',[])
-                    async for service in self.adminService.MiniServiceStore.aiter(predicate=lambda c:c.client.client_type!=ClientType.Admin):
+                    async for service in self.adminService.MiniServiceStore.aiter(predicate=lambda c:(c.client.client_type!=ClientType.Admin and clientInfo['client_type'] != ClientType.System )):
                         if session:
                             sessions = await service.read_sessions()
                             ref.append(sessions)
@@ -338,8 +347,8 @@ class AdminRessource(BaseHTTPRessource):
             case 'session':
                 client_id,session = blacklist.identity.split('@')
                                 
-                client = await ClientORM.filter(client_id=client_id).first()
-                if client == None or client.client_type == ClientType.Admin:
+                client = await ClientORM.filter(client_id=client_id).exclude(client_type__in=[ClientType.Admin, ClientType.System]).first()
+                if client == None:
                     raise ClientDoesNotExistError(client_id)
 
                 if await BlacklistClientCache.Get([client.client_id,session]) and not blacklist.force:
@@ -356,8 +365,8 @@ class AdminRessource(BaseHTTPRessource):
                 if await BlacklistClientCache.Get([blacklist.identity,'']) and not blacklist.force:
                     raise IdentityAlreadyBlacklistedError(blacklist.identity,'client')
 
-                client = await ClientORM.filter(client_id=blacklist.identity).first()
-                if client == None or client.client_type == ClientType.Admin:
+                client = await ClientORM.filter(client_id=blacklist.identity).exclude(client_type__in=[ClientType.Admin, ClientType.System]).first()
+                if client == None:
                     raise ClientDoesNotExistError(blacklist.identity)
 
                 await BlacklistGroupCache.Store([blacklist.identity,''],True,blacklist.time)
@@ -394,14 +403,13 @@ class AdminRessource(BaseHTTPRessource):
 
                 await BlacklistGroupCache.Invalid(blacklist.identity)
 
-    
     @UseLimiter(limit_value='10/day')
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @UseInterceptor(InvalidBlacklistTokenInterceptor)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
     @PingService([VaultService,AdminService],is_manager=True)
     @UsePipe(StateResponseInjectionPipe(tuple(),merge=False),before=False)
-    @UseGuard(AdminModificationGuard,SessionMechanismGuard,ClientAuthTypeGuard)
+    @UseGuard(SuperUserModificationGuard,SessionMechanismGuard,ClientAuthTypeGuard)
     @UseHandler(ClientHandler,ORMCacheHandler,VaultHandler,MiniServiceHandler,ClientSecurityHandler)
     @LockService(VaultService,SettingService,AdminService,JWTAuthService,lockType='reader',as_manager=True)
     @BaseHTTPRessource.HTTPRoute('/revoke/{client}/', methods=[HTTPMethod.DELETE])
@@ -429,7 +437,7 @@ class AdminRessource(BaseHTTPRessource):
     @UseHandler(ClientHandler,ORMCacheHandler,MiniServiceHandler)
     @LockService(VaultService,SettingService,AdminService,lockType='reader',as_manager=True)
     @UsePipe(AccessTokenModelPipe,StateResponseInjectionPipe(tuple(),merge=False),before=False)
-    @UseGuard(AdminModificationGuard,BlacklistClientGuard,ClientAuthTypeGuard(accept_access=False, accept_api=True),)
+    @UseGuard(ClientAuthTypeGuard(accept_access=False, accept_api=True),SuperUserModificationGuard,BlacklistClientGuard)
     @BaseHTTPRessource.HTTPRoute('/issue-auth/{client}/', methods=[HTTPMethod.GET],response_model=AccessModel)
     async def issue_auth_token(self,broker:Annotated[Broker,Depends(Broker)], client: Annotated[ClientMiniService, Depends(get_client)], request: Request, response:Response,state:Annotated[StateManager,Depends(StateManager)] ,profile:str= Depends(get_client),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         state.deactivate()
@@ -491,4 +499,11 @@ class AdminRessource(BaseHTTPRessource):
     def check_version(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
         return self.jwtService.GENERATION_METADATA
 
+    if Get(ConfigService).AUTH_MECHANISM == 'both':
 
+        @PingService([VaultService])
+        @UseLimiter(limit_value='1/day')
+        @LockService(VaultService,lockType='reader')
+        @BaseHTTPRessource.HTTPRoute('/access/', methods=[HTTPMethod.GET])
+        async def read_admin_access(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+            ...

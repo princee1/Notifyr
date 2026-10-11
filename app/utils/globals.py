@@ -25,7 +25,7 @@ class ApplicationMode(Enum):
     agentic ='agentic'
     gunicorn = 'gunicorn'
     arq = 'arq'
-    admin = 'admin'
+    root = 'root'
 
 class ServerCapabilities(TypedDict):
     email:bool
@@ -57,8 +57,8 @@ elif 'agentic_main.py' in sys.argv[0]:
     APP_MODE = ApplicationMode.agentic
 elif ARQ_EXE_PATH and sys.argv[0] == ARQ_EXE_PATH:
     APP_MODE = ApplicationMode.arq
-elif 'admin_init.py' in sys.argv[0]:
-    APP_MODE = ApplicationMode.admin
+elif 'root_init.py' in sys.argv[0]:
+    APP_MODE = ApplicationMode.root
 else:
     APP_MODE = ApplicationMode.server
 

@@ -219,3 +219,8 @@ class BadAuthMechanismContextError(SecurityBaseError):
 
     def __init__(self,required:str,provided:str,context:Literal['global','route']='global'):
         super().__init__('Bad Auth Mechanism Context Error', required=required,provided=provided,context=context)
+
+class RootSetupNotConfiguredError(SecurityBaseError):
+
+    def __init__(self,keys:str):
+        super().__init__('Root Configuration not setup')

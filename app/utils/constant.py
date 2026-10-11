@@ -602,3 +602,11 @@ class HostConstant:
     POSTGRES_HOST='postgres'
     MONGOOSE_HOST='mongodb'
     VAULT_HOST='vault'
+
+class SetupRootConstant:
+    SYSTEM_ACCESS_KEY='system-access'
+    SYSTEM_LOGIN_KEY='system-login'
+    ADMIN_ACCESS_KEY = 'admin-access'
+    ADMIN_LOGIN_KEY = 'admin-login'
+
+    KEYS  = [SYSTEM_ACCESS_KEY,SYSTEM_LOGIN_KEY,ADMIN_ACCESS_KEY,ADMIN_LOGIN_KEY]

@@ -8,7 +8,7 @@ from app.container import InjectInMethod, Get
 from app.decorators.guards import BlacklistClientGuard, ClientAuthTypeGuard, PrimarySessionGuard
 from app.decorators.handlers import ClientHandler, MiniServiceHandler, ORMCacheHandler, RedisHandler, ClientSecurityHandler, VaultHandler
 from app.decorators.interceptors import InvalidBlacklistTokenInterceptor
-from app.decorators.permissions import JWTRouteHTTPPermission, UserPermission
+from app.decorators.permissions import ClientTypesPermission, JWTRouteHTTPPermission, UserPermission
 from app.decorators.pipes import AccessTokenModelPipe, ClientMiniServiceResponsePipe, MiniServiceInjectorPipe, ObjectRelationalFriendlyPipe, SanitizePathParameterPipe, auth_state_pipe, refresh_logout_handler
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, LockService, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseProtection, UseRoles
 from app.definition._service import MiniStateProtocol
@@ -90,7 +90,7 @@ class AuthRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/recover/',methods=[HTTPMethod.POST],response_class = AccessModel)
     async def recover(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)], credentials: Annotated[HTTPBasicCredentials, Depends(HTTPBasic())],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)]):
         
-        clientORM = await ClientORM.filter(Q(client_username=credentials.username) | Q(client_email=credentials.username)).first()
+        clientORM = await ClientORM.filter(Q(client_username=credentials.username) | Q(client_email=credentials.username)).exclude(client_type=ClientType.System).first()
         self.verify_client(credentials.username, clientORM, True)
         
         origin = get_client_ip(request)
@@ -214,17 +214,16 @@ class AuthRessource(BaseHTTPRessource):
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @UseInterceptor(InvalidBlacklistTokenInterceptor)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
-    @UsePermission(JWTRouteHTTPPermission(True),UserPermission)
     @UseGuard(ClientAuthTypeGuard(accept_access=True, accept_api=False))
     @LockService(VaultService,TortoiseConnectionService,AdminService,as_manager=True)
     @UseHandler(ORMCacheHandler,MiniServiceHandler,ClientSecurityHandler,RedisHandler)
+    @UsePermission(JWTRouteHTTPPermission(True),ClientTypesPermission([ClientType.Admin,ClientType.User,ClientType.System]))
     @BaseHTTPRessource.HTTPRoute('/logout/',methods=[HTTPMethod.DELETE])
     async def logout(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],client:Annotated[ClientMiniService,Depends(get_client_from_info)],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)],profile:str=Depends(get_client_from_info),scope:ScopeMode = Depends(scope_mode_query),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
 
         async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
             if scope == 'single':
                 await client.revoke_itself(ctx,clientInfo['session_id'])
-
             else:
                 session.verify_refresh_token(False)
                 if not await client.is_primary_session(clientInfo['session_id']):

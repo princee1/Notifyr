@@ -29,7 +29,7 @@ class SkipStepObj:
     def __call__(self):
         if self._raise:
             raise SkipStep()
-            
+
 class StepRunner:
 
     def __init__(self, state: Step, step_index: int, params: Any = None):
@@ -69,5 +69,42 @@ class StepRunner:
 
         return False
 
-class LambdaStepRunner(StepRunner):
-    ...
+
+class StepCallback:
+
+    def before_enter(self,):
+        ...
+
+    def after_exit(self,):
+        ...
+class LambdaStepRunner:
+    
+    def __init__(self,callback:StepCallback,*args,**kwargs):
+        self.callback = callback
+        self.args = args
+        self.kwargs = kwargs
+
+    async def __aenter__(self):
+
+        if asyncio.iscoroutinefunction(self.callback.before_enter):
+            flag:bool = await self.callback.before_enter(*self.args,**self.kwargs)
+        else:
+            flag:bool = self.callback.before_enter(*self.args,**self.kwargs)
+
+        return SkipStepObj(flag)
+
+    async def __aexit__(self, exc_type, exc, tb):
+
+        if exc_type is None:
+            if asyncio.iscoroutinefunction(self.callback.after_exit):
+                await self.callback.before_enter(*self.args,**self.kwargs)
+            else:
+                self.callback.after_exit(*self.args,**self.kwargs)
+
+            return True  # nothing to propagate
+
+        if exc_type is SkipStep:
+            return True  # suppress SkipStep
+
+        return False
+        

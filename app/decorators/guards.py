@@ -193,10 +193,17 @@ class BlacklistClientGuard(Guard):
             raise IdentityBlacklistedError(client.client_id,)
         return True,''
 
-class AdminModificationGuard(Guard):
+class SuperUserModificationGuard(Guard):
+
+    def __init__(self,accept_admin=True):
+        super().__init__()
+        self.accept_admin = accept_admin
 
     def guard(self,client:ClientMiniService,clientInfo:ClientAccessInfo):
-        if client.client.client_type == ClientType.Admin:
+        if client.client.client_type  == ClientType.System:
+            raise ClientDoesNotExistError(client.client_id)
+
+        if client.client.client_type == ClientType.Admin and clientInfo['client_type'] != ClientType.System and self.accept_admin:
             raise ClientDoesNotExistError(client.client_id)
 
         return True,''

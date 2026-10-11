@@ -16,6 +16,7 @@ DOCKER_COMPOSE_MONITOR = $(DOCKER) compose -f 'monitor.docker-compose.yaml'
 # Deployment Paths
 DEPLOY_CONFIG   = ./.notifyr/deploy.json
 SECRETS_DIR     = ./.secrets
+ROOT_DIR 		= ./.root
 
 #Admin Creds
 ADMIN_CREDS_DIR = ./.admin/creds.json
@@ -192,7 +193,7 @@ deploy-data:
 
 
 # Main deployment target
-deploy: deploy-data admin-init deploy-agentic deploy-server
+deploy: deploy-data root-init deploy-agentic deploy-server
 	@sleep 10 && clear
 	@echo "\n================================================="
 	@echo "🟢 FULL DEPLOYMENT COMPLETE (Data & Server) 🟢"
@@ -212,15 +213,17 @@ agentic: deploy-data deploy-agentic
 	@echo "🟢 AGENTIC DEPLOYMENT COMPLETE 🟢"
 	@echo "================================================="
 
-.PHONY: admin-init
-admin-init:
+.PHONY: root-init
+root-init:
 	@echo "================================================="
 	@echo "💾 Setting up Notifyr Admin"
 	@echo "================================================="
 
 	@trap 'rm -rf ./.admin/ ' EXIT INT TERM; \
 	./scripts/utils/generate-admin.sh $(ADMIN_CREDS_DIR) && \
-	docker compose run --rm -T admin-init python /usr/src/admin_init.py < $(ADMIN_CREDS_DIR)
+	$(DOCKER_COMPOSE_BASE) run -T root-init python /usr/src/root_init.py < $(ADMIN_CREDS_DIR) && \
+	$(DOCKER) cp root-init:/tmp/root-credentials.json $(shell dirname $(ROOT_DIR))/ && \
+	$(DOCKER) rm root-init
 	
 	@echo "================================================="
 	@echo "✅ Admin User Created"

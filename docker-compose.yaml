@@ -309,12 +309,12 @@ services:
       - data_net
       - vault_net
 
-  admin-init:
+  root-init:
     image: notifyr/fastapi:community
-    container_name: admin-init
+    container_name: root-init
     command: ["tail", "-f" ,"/dev/null"]
     volumes:
-      - ./scripts/admin_init.py:/usr/src/admin_init.py
+      - ./scripts/root_init.py:/usr/src/root_init.py
       - vault-shared:/vault/shared:ro
     environment:
       - REDIS_HOST=${REDIS_HOST-redis}
