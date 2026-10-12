@@ -18,7 +18,8 @@ class MiddlewarePriority(Enum):
     ANALYTICS = 3
     SETUP_GUARD = 4
     AUTH = 5
-    LIMITER = 6
+    PROTECTED = 6
+    LIMITER = 7
     
 
 class MiddleWare(BaseHTTPMiddleware):

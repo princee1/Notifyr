@@ -1,7 +1,7 @@
 from uuid import uuid4
 from fastapi.responses import JSONResponse
 from app.classes.auth_permission import AuthMechanism, AuthPermission, AuthType, ClientAccessInfo, ClientType, filter_asset_permission, parse_authPermission_enum
-from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE
+from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE, get_url, path_matcher
 from app.definition._ressource import HTTPMethod
 from app.depends.orm_cache import BlacklistClientCache, BlacklistGroupCache
 from app.errors.security_error import APIKeyMismatchError, APIKeyMissingError, AuthzSignatureMisMatchError, BadAuthMechanismContextError, CipherDoesNotExistError, CipherSchemeNotValidError, JWTInvalidTokenError, RequestOriginIsNotValidError, SecurityIdentityNotResolvedError, SessionNotValidatedError, TokenDataMissingError, TokenExpiredError, TokenGenerationMismatchError
@@ -18,7 +18,7 @@ from typing import Callable
 import time
 from app.services.vault_service import VaultService
 from app.utils.constant import HTTPHeaderConstant, MonitorConstant
-from app.depends.dependencies import get_client_ip,get_bearer_token_from_request
+from app.depends.dependencies import get_access_info, get_client_info, get_client_ip,get_bearer_token_from_request
     
 configService = Get(ConfigService)
 
@@ -81,6 +81,8 @@ class APITokenAuthMiddleware(MiddleWare):
     @BypassOn(configService.AUTH_MECHANISM != 'token' and configService.AUTH_MECHANISM != 'both')
     @ExcludeOn(['/','/contacts/manage/*'])
     @ExcludeOn(['/docs/*','/openapi.json'])
+    @ExcludeOn(['/auth/login/','/auth/refresh/'])
+    @ExcludeOn(['/auth/recover/'],methods=['POST'])
     @ExcludeOn(['/link/visits/*','/link/email-track/*'])
     async def dispatch(self, request:Request, call_next:Callable[...,Response]):
 
@@ -219,6 +221,50 @@ class JWTAuthMiddleware(MiddleWare):
         except SessionNotValidatedError as e:
             return JSONResponse(e.detail,status_code=status.HTTP_403_FORBIDDEN)
 
+class ProtectedAuthMiddleware(MiddleWare):
+    priority = MiddlewarePriority.PROTECTED
+
+    def __init__(self, app, dispatch = None):
+        super().__init__(app, dispatch)
+
+        self.regex:dict[str,AuthMechanism] = {
+                    '/admin/*':'userpass',
+                    '/auth/session/':'userpass',
+                    '/auth/recover/':'userpass',
+                    '/auth/me/':'userpass',
+                    '/access/*':'token'
+                    }
+    
+    def compute_required(self,path:str)->AuthMechanism|None:
+        for regex,mechanism in self.regex.items():
+            if path_matcher([regex],path):
+                return mechanism
+        return  None
+
+    @BypassOn(configService.AUTH_MECHANISM != 'both')
+    @ExcludeOn(['/auth/login/','/auth/refresh/'])
+    @ExcludeOn(['/auth/recover/'],methods=['POST'])
+    async def dispatch(self, request:Request, call_next:Callable[...,Response]):
+        try:
+            path = get_url(request)
+            require =  self.compute_required(path)
+
+            clientInfo = get_client_info(request,'call')
+            accessInfo = get_access_info(request,'call')
+
+            if accessInfo == None and clientInfo == None:
+                raise HTTPException(status.HTTP_401_UNAUTHORIZED,f'needs to authenticate with either the "token" or the "userpass" method')
+
+            if require!= None and (auth_mechanism:=request.headers.get(HTTPHeaderConstant.X_AUTH_MECHANISM,None))!=require:
+                raise BadAuthMechanismContextError(require,auth_mechanism,'route')
+
+            return await call_next(request)
+        except HTTPException as e:
+            return JSONResponse(e.detail,e.status_code,)
+
+        except BadAuthMechanismContextError as e:
+            return JSONResponse(e.detail,status.HTTP_401_UNAUTHORIZED)
+    
 class CustomSlowApiMiddleware(SlowAPIMiddleware):
     priority = MiddlewarePriority.LIMITER
 

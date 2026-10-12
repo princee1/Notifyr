@@ -15,7 +15,7 @@ from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, AgentPermission, ClientTypesPermission, JWTRouteHTTPPermission, MCPPermission
 from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe, SanitizePathParameterPipe
 from app.definition._cost import DataCost
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseAccess, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseProtection, UseRoles, LockService
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseAccess, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles, LockService
 from app.definition._service import MiniStateProtocol, StateProtocol
 from app.depends.class_dep import EmbeddingSimilarity
 from app.depends.variables import SourceMode,source_mode_query
@@ -42,8 +42,6 @@ from app.depends.variables import mcp_configuration, source_mode_query
 
 base_attr = {'id','revision_id','created_at','last_modified','version'}
 
-
-@UseProtection()
 @UseRoles([Role.ADMIN])
 @PingService([MongooseService])
 @UsePermission(JWTRouteHTTPPermission)

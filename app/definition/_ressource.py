@@ -559,53 +559,6 @@ def HTTPRessource(prefix: str, routers: list[Type[R]] = [], websockets: list[Typ
 
 ################################################################                           #########################################################
 
-def UseProtection(require:Optional[AuthMechanism],mount=True):
-    if not mount:
-        def decorator(func:Callable):
-            return func
-        return decorator
-    
-    if Get(ConfigService).AUTH_MECHANISM != 'both':
-        def decorator(func:Callable):
-            return func
-        return decorator
-
-    if require!= None and require not in ['userpass','token']:
-        raise ValueError('Here require must be either "userpass" or "token"')
-    
-    def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func,UseProtection,None,require=require,mount=mount)
-        if cls != None:
-            return cls
-
-        class_name = Helper.get_class_name_from_method(func)
-        Helper.add_protected_route_metadata(class_name, func.meta['operation_id'],)
-    
-        def wrapper(function: Callable):
-
-            @functools.wraps(function)
-            async def callback(*args, **kwargs):
-                request:Request = kwargs.get('request',None)
-                if request == None:
-                    raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED,'missing request attributes')
-
-                clientInfo = get_client_info(request,'call')
-                accessInfo = get_access_info(request,'call')
-
-                if accessInfo == None and clientInfo == None:
-                    raise HTTPException(status.HTTP_401_UNAUTHORIZED,f'needs to authenticate with either the "token" or the "userpass" method')
-
-                if require!= None and (auth_mechanism:=request.headers.get(HTTPHeaderConstant.X_AUTH_MECHANISM,None))!=require:
-                    raise BadAuthMechanismContextError(require,auth_mechanism,'route')
-
-                return await function(*args,**kwargs)
-
-            return callback
-        Helper.appends_funcs_callback(func, wrapper, DecoratorPriority.PERMISSION-0.5)
-        return func
-    return decorator
-
-
 def UseAccess(*access_function: Callable[..., bool] | Access | Type[Access],accesses:Dict[ClientTypeLiteral,bool],default_error: HTTPExceptionParams = None,mount=True):
     if not mount:
         def decorator(func:Callable):

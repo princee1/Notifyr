@@ -13,7 +13,7 @@ from app.decorators.handlers import AccessHandler, CostHandler, DataSourceHandle
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.pipes import AccessPathPipe, SanitizePathParameterPipe
 from app.definition._cost import DataCost
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, LockService, PingService, Throttle, UseAccess, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePipe, UseProtection
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, LockService, PingService, Throttle, UseAccess, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePipe
 from app.definition._service import StateProtocol
 from app.depends.dependencies import get_access_info
 from app.depends.funcs_dep import get_access
