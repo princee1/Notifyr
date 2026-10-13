@@ -10,7 +10,7 @@ from app.models.orm.link_model import LinkORM
 from app.models.orm.security_model import BlacklistModel, ClientORM, GroupClientORM, PolicyMappingORM
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService, SecurityService
-from app.depends.dependencies import get_auth_permission, get_client_info, get_query_params, get_request_id, wrapper_auth_permission
+from app.depends.dependencies import get_access_info, get_auth_permission, get_client_info, get_query_params, get_request_id, wrapper_auth_permission
 
 from app.services.vault_service import VaultService
 from app.utils.toolbox import RunInThreadPool
@@ -206,3 +206,6 @@ def get_access(access:str):
 
 def get_issuer(request:Request):
     return ''
+
+def get_session_id(clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    return clientInfo.get('session_id',None)

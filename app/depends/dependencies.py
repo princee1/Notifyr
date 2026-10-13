@@ -5,6 +5,7 @@ Module to easily manage retrieving user information from the request object.
 from typing import Annotated, Any, Callable, Type, TypeVar, Literal
 from fastapi import Depends, HTTPException, Request, Response,status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials,HTTPBearer
+from app.classes.auth_permission import AuthMechanism
 from app.services.config_service import ConfigService
 from app.utils.constant import FastAPIConstant, HTTPHeaderConstant
 from app.utils.helper import parse_value, reverseDict
@@ -64,20 +65,6 @@ def get_bearer_token_from_request(request: Request):
     except KeyError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization header missing")
 
-def get_auth_permission(request: Request):
-
-    match configService.AUTH_MECHANISM:
-        case 'userpass':
-            if not hasattr(request.state, "authPermission") or request.state.authPermission is None:
-                raise HTTPException(status_code=401, detail="Unauthorized")
-            return request.state.authPermission
-        case 'both':
-            return None
-        case 'token':
-            raise HTTPException(status_code=401, detail="Bad Authentication Method required: userpass")
-        case 'none':
-            return None
-
 def wrapper_auth_permission(request:Request):
     try:
         return get_auth_permission(request)
@@ -115,6 +102,13 @@ def get_query_params(name,default=None,parse=False,return_none=False,raise_excep
 def get_contact_token():
     return APIKeyHeader(name=HTTPHeaderConstant.CONTACT_TOKEN)
 
+def get_auth_mechanism(request:Request)-> AuthMechanism | None:
+    auth_mechanism = request.headers.get(HTTPHeaderConstant.X_AUTH_MECHANISM,None)
+    if configService.AUTH_MECHANISM == 'both':
+        if auth_mechanism == None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail='Error while getting the auth mechanism')
+    return auth_mechanism
+        
 def get_client_info(request:Request,context:Annotated[Context,Depends(lambda:'request')]='request'):
     match configService.AUTH_MECHANISM:
         case 'userpass':
@@ -122,12 +116,34 @@ def get_client_info(request:Request,context:Annotated[Context,Depends(lambda:'re
                 raise HTTPException(status_code=401, detail="Unauthorized")
             return request.state.clientInfo       
         case 'both':
+            if request.headers.get(HTTPHeaderConstant.X_AUTH_MECHANISM,None) == 'userpass':
+                if not hasattr(request.state, "clientInfo") or request.state.clientInfo is None:
+                    raise HTTPException(status_code=401, detail="Unauthorized")
+                return request.state.clientInfo       
             return None
         case 'token':
             if context == 'call':
                 raise HTTPException(status_code=401, detail="Bad Authentication Method required: userpass")
             else:
                 return None
+        case 'none':
+            return None
+
+def get_auth_permission(request: Request,context:Annotated[Context,Depends(lambda:'request')]='request'):
+
+    match configService.AUTH_MECHANISM:
+        case 'userpass':
+            if not hasattr(request.state, "authPermission") or request.state.authPermission is None:
+                raise HTTPException(status_code=401, detail="Unauthorized")
+            return request.state.authPermission
+        case 'both':
+            if get_auth_mechanism(request) == 'userpass':
+                if not hasattr(request.state, "authPermission") or request.state.authPermission is None:
+                    raise HTTPException(status_code=401, detail="Unauthorized")
+                return request.state.authPermission
+            return None
+        case 'token':
+            raise HTTPException(status_code=401, detail="Bad Authentication Method required: userpass")
         case 'none':
             return None
 
@@ -138,6 +154,10 @@ def get_access_info(request:Request,context:Annotated[Context,Depends(lambda:'re
                 raise HTTPException(status_code=401, detail="Unauthorized")
             return request.state.accessInfo       
         case 'both':
+            if request.headers.get(HTTPHeaderConstant.X_AUTH_MECHANISM,None) == 'token':
+                if not hasattr(request.state, "access") or request.state.accessInfo is None:
+                    raise HTTPException(status_code=401, detail="Unauthorized")
+                return request.state.accessInfo    
             return None
         case 'userpass':
             if  context == 'call':
@@ -149,3 +169,4 @@ def get_access_info(request:Request,context:Annotated[Context,Depends(lambda:'re
 
 def get_session_id(request: Request):
     ...
+

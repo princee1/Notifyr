@@ -18,9 +18,18 @@ from typing import Callable
 import time
 from app.services.vault_service import VaultService
 from app.utils.constant import HTTPHeaderConstant, MonitorConstant
-from app.depends.dependencies import get_access_info, get_client_info, get_client_ip,get_bearer_token_from_request
+from app.depends.dependencies import  get_auth_mechanism, get_client_ip,get_bearer_token_from_request
     
 configService = Get(ConfigService)
+
+__valid_both_mechanism__:set[AuthMechanism] = {'token','userpass'} 
+
+
+def ensure_auth_mechanism(request:Request,valid_mechanism:AuthMechanism):
+    if (auth_mechanism:=get_auth_mechanism(request)) not in __valid_both_mechanism__:
+        raise BadAuthMechanismContextError(valid_mechanism,auth_mechanism)
+    
+    return auth_mechanism != valid_mechanism
 
 class MetaDataMiddleWare(MiddleWare):
     priority = MiddlewarePriority.METADATA
@@ -70,9 +79,7 @@ class LoadBalancerMiddleWare(MiddleWare):
         return response
 
 class APITokenAuthMiddleware(MiddleWare):
-
     priority = MiddlewarePriority.AUTH
-
 
     def __init__(self, app, dispatch = None):
         super().__init__(app, dispatch)
@@ -87,10 +94,8 @@ class APITokenAuthMiddleware(MiddleWare):
     async def dispatch(self, request:Request, call_next:Callable[...,Response]):
 
         try:
-            if configService.AUTH_MECHANISM == 'none':
-
-                if (auth_mechanism:=request.headers.get(HTTPHeaderConstant.X_AUTH_MECHANISM,None)) != 'token':
-                    raise BadAuthMechanismContextError('token',auth_mechanism)
+            if configService.AUTH_MECHANISM == 'both' and ensure_auth_mechanism(request,'token'):
+                return await call_next(request)
 
             token = get_bearer_token_from_request(request)
             async with self.securityService.lock('reader'):
@@ -139,11 +144,8 @@ class JWTAuthMiddleware(MiddleWare):
     @ExcludeOn(['/link/visits/*','/link/email-track/*'])
     async def dispatch(self,  request: Request, call_next: Callable[..., Response]):
         try:  
-
-            if configService.AUTH_MECHANISM == 'none':
-
-                if (auth_mechanism:=request.headers.get(HTTPHeaderConstant.X_AUTH_MECHANISM,None)) != 'userpass':
-                    raise BadAuthMechanismContextError('userpass',auth_mechanism)
+            if configService.AUTH_MECHANISM == 'both' and ensure_auth_mechanism(request,'userpass'):
+                return await call_next(request)
                 
             token = get_bearer_token_from_request(request)
             if request.headers.get(HTTPHeaderConstant.X_AUTH_TYPE,None) == AuthType.API_TOKEN:
@@ -221,8 +223,8 @@ class JWTAuthMiddleware(MiddleWare):
         except SessionNotValidatedError as e:
             return JSONResponse(e.detail,status_code=status.HTTP_403_FORBIDDEN)
 
-class ProtectedAuthMiddleware(MiddleWare):
-    priority = MiddlewarePriority.PROTECTED
+class RequiredAuthMiddleware(MiddleWare):
+    priority = MiddlewarePriority.REQUIRED
 
     def __init__(self, app, dispatch = None):
         super().__init__(app, dispatch)
@@ -249,18 +251,10 @@ class ProtectedAuthMiddleware(MiddleWare):
             path = get_url(request)
             require =  self.compute_required(path)
 
-            clientInfo = get_client_info(request,'call')
-            accessInfo = get_access_info(request,'call')
-
-            if accessInfo == None and clientInfo == None:
-                raise HTTPException(status.HTTP_401_UNAUTHORIZED,f'needs to authenticate with either the "token" or the "userpass" method')
-
-            if require!= None and (auth_mechanism:=request.headers.get(HTTPHeaderConstant.X_AUTH_MECHANISM,None))!=require:
+            if require!= None and (auth_mechanism:=get_auth_mechanism(request))!=require:
                 raise BadAuthMechanismContextError(require,auth_mechanism,'route')
 
             return await call_next(request)
-        except HTTPException as e:
-            return JSONResponse(e.detail,e.status_code,)
 
         except BadAuthMechanismContextError as e:
             return JSONResponse(e.detail,status.HTTP_401_UNAUTHORIZED)

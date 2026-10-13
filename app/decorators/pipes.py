@@ -13,6 +13,7 @@ from app.cost.ingest_cost import DeleteDocumentIngestCost
 from app.definition._cost import Cost
 from app.definition._service import BaseMiniService, BaseMiniServiceManager
 from app.depends.class_dep import ObjectsSearch,ToPydanticModelInterface
+from app.depends.dependencies import get_auth_mechanism
 from app.errors.contact_error import ContactMissingInfoKeyError, ContactNotExistsError
 from app.errors.service_error import MiniServiceStrictValueNotValidError, ServiceNotAvailableError
 from app.manager.merchant_manager import Merchant
@@ -1036,9 +1037,30 @@ class AccessPathPipe(Pipe):
 
 class ResolveIssuerPipe(Pipe):
     @InjectInMethod()
-    def __init__(self,configService:ConfigService):
+    def __init__(self,configService:ConfigService,append_in_response:bool=True):
         super().__init__(True)
         self.configService = configService
+        self.append_in_response = append_in_response
     
-    def pipe(response:Response,request:Request,clientInfo:ClientAccessInfo,accessInfo:AccessAPIInfo):
-        return {'issuer':...}
+    def pipe(self,response:Response,request:Request,clientInfo:ClientAccessInfo|None,accessInfo:AccessAPIInfo|None,issuer:str=None):
+        if issuer == None:
+            return {}
+
+        match self.configService.AUTH_MECHANISM:
+            case 'none':
+                return {'issuer':'none'}
+            case 'token':
+                issuer = accessInfo['id']
+            case 'userpass':
+                issuer = clientInfo['client_id']
+            case 'both':
+                mechanism = get_auth_mechanism(request)
+                if mechanism == 'token':
+                    issuer = accessInfo['id']
+                else:
+                    issuer =  clientInfo['client_id']
+
+        if self.append_in_response:
+            response.headers[HTTPHeaderConstant.X_ISSUER_ID] = issuer
+        
+        return {'issuer':issuer}

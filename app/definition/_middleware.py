@@ -18,7 +18,7 @@ class MiddlewarePriority(Enum):
     ANALYTICS = 3
     SETUP_GUARD = 4
     AUTH = 5
-    PROTECTED = 6
+    REQUIRED = 6
     LIMITER = 7
     
 
@@ -144,3 +144,20 @@ def BypassOn(bypass=True):
     return decorator
 
 
+def BypassWhen(callback:Callable[[Request],bool],bypass=False):
+
+    def decorator(func:Callable):
+    
+        @functools.wraps(func)
+        async def wrapper(self:MiddleWare,request:Request,call_next:Callable[..., Response]):
+            if bypass:
+                return await call_next(request)
+            else:
+                if callback(request):
+                    return await call_next(request)
+
+            return await func(self,request,call_next)
+        
+        return wrapper
+        
+    return decorator

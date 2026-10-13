@@ -10,7 +10,8 @@ from pydantic import BaseModel
 from app.classes.cost_definition import SimpleTaskCostDefinition
 from app.classes.profiles import ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
 from app.definition._ws import W
-from app.depends.dependencies import get_access_info, get_auth_permission, get_client_info
+from app.depends.dependencies import get_access_info, get_auth_mechanism, get_auth_permission, get_client_info, get_session_id
+from app.depends.limiter import KeyFunc, SecurityKeyFunc, access_info_cost_func, access_type_token_func, client_info_cost_func, client_private_key_func, constant_cost_func, cost_func_by_auth_mechanism, group_private_key_func, private_key_func, session_key_func, type_cost_func
 from app.errors.security_error import BadAuthMechanismContextError
 from app.services.config_service import MODE, ConfigService, WorkerService
 from app.utils.helper import _make_delay_fn, copy_response
@@ -588,8 +589,8 @@ def UseAccess(*access_function: Callable[..., bool] | Access | Type[Access],acce
                 if request == None:
                     raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED,'missing request attributes')
 
-                if configService.AUTH_MECHANISM == 'both' and (request.headers.get(HTTPHeaderConstant.X_AUTH_MECHANISM,None)) != 'token':
-                    return
+                if configService.AUTH_MECHANISM == 'both' and get_auth_mechanism(request) != 'token':
+                    return await function(*args, **kwargs)
                 
                 if (accessInfo:= getattr(request.state,'accessInfo',None))==None:
                     raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED,'missing access attributes')
@@ -662,8 +663,8 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
                 if request == None:
                     raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED,'missing request attributes')
 
-                if configService.AUTH_MECHANISM == 'both' and (request.headers.get(HTTPHeaderConstant.X_AUTH_MECHANISM,None)) != 'userpass':
-                    return
+                if configService.AUTH_MECHANISM == 'both' and get_auth_mechanism(request) != 'userpass':
+                    return await function(*args, **kwargs)
 
                 if empty_decorator:
                     return await function(*args, **kwargs)
@@ -1052,7 +1053,7 @@ def Throttle(fixed: float | None = None,fn: Callable[[], float] | None = None,un
 
     return decorator    
 
-def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]|None|Dict[ClientTypeLiteral,int]=None,key_func:Callable[[Request],str]|Literal['group','client','public','private','default','worker','none','session','ip','subnet','access']='client'):
+def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]|None|int|Dict[ClientTypeLiteral,int]=None,key_func:Callable[[Request],str]|Dict[AuthMechanism,SecurityKeyFunc|KeyFunc]|KeyFunc='client'):
     """
     *Description copied from the slowapi library*
 
@@ -1081,98 +1082,87 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
            return lambda req:1
         elif callable(cost):
             return cost
+        elif isinstance(cost,int):
+            return constant_cost_func(cost)
+        
         elif isinstance(cost,dict):
-            if key_func != 'private':
-                raise ValueError('To add cost based on the client type we must have the client_id as key. HINT: use key_func="private"')
-            
-            if configService.AUTH_MECHANISM == 'userpass':
-                def cost_func(request:Request):
-                    authPermission:AuthPermission =  get_auth_permission(request)
-                    clientInfo:ClientAccessInfo = get_client_info(request)
-                    clientType = clientInfo['client_type']
-                    unit_cost = cost.get(clientType,1)
-                    unit_cost = max(1,unit_cost)
-                    return min(unit_cost,max_limit)
+            if key_func == 'public':
+                raise ValueError('To add cost based on the client type we must have ')
 
-            elif configService.AUTH_MECHANISM == 'token':
-                def cost_func(request:Request):
-                    access_type = request.state.accessInfo['type']
-                    unit_cost = cost.get(access_type,1)
-                    unit_cost = max(1,unit_cost)
-                    return min(unit_cost,max_limit)
-            else:
-                def cost_func(request:Request):
-                    return 1
-            return cost_func
+            match configService.AUTH_MECHANISM:
+                case 'userpass':
+                    return client_info_cost_func(cost,max_limit)
+                case 'token':
+                    return access_info_cost_func(cost,max_limit)
+                case 'both':
+                    cost_func_by_auth_mechanism(cost,max_limit)
+                case _:
+                    return constant_cost_func(1)
         else:
             raise ValueError('Could not parse the cost as a function')
         
     cost_callback = cost_decorator()
 
-    def access_type_token_func(request:Request):
-        return request.state.accessInfo['id']
-
-    def client_private_key_func(request:Request):
-        if configService.AUTH_MECHANISM != 'userpass':
-            return workerService.INSTANCE_ID
-        authPermission:AuthPermission =  get_auth_permission(request)
-        clientInfo:ClientAccessInfo = get_client_info(request)
-        return clientInfo['client_id']
-
-    def group_private_key_func(request:Request):
-        if configService.AUTH_MECHANISM != 'userpass':
-            return workerService.HOSTNAME
-        authPermission:AuthPermission = get_auth_permission(request)
-        clientInfo:ClientAccessInfo = get_client_info(request)
-        if not (group_id:=clientInfo.get('group_id',None)):
-            return client_private_key_func(request)
-        return group_id
-
-    def session_key_func(request:Request)->str:
-        clientInfo:ClientAccessInfo = get_client_info(request)
-        return clientInfo['session_id']
-    
-    def private_key_func(request:Request)->str:
-        clientInfo:ClientAccessInfo = get_client_info(request)
-        authPermission:AuthPermission = get_auth_permission(request)
-        return 'private'
-
-    if configService.AUTH_MECHANISM == 'token':
-        key_func = access_type_token_func
-
-    if isinstance(key_func,str):
-        match key_func:
-            case 'default':
-                key_func = None # use the global key_func
-            case 'subnet':
-                key_func = None
-            case 'ip':
-                key_func = get_ipaddr
-            case 'public':
-                key_func = lambda r: 'public'
-            case 'private':
-                key_func = private_key_func
-            case 'none':
-                key_func = lambda r: 'none'
+    def compute_security_key_func(mode:SecurityKeyFunc):
+        match mode:
+            case 'type':
+                return type_cost_func('token')
             case 'session':
-                key_func = session_key_func
-            case 'worker':
-                key_func = lambda r: workerService.INSTANCE_ID
+                return session_key_func
             case 'client':
-                key_func = client_private_key_func
+                return client_private_key_func
             case 'group':
-                key_func = group_private_key_func
+                return group_private_key_func
             case 'access':
-                key_func = access_type_token_func
+                return access_type_token_func
+            case 'private':
+                return  private_key_func
             case _:
-                key_func = client_private_key_func
+                return client_private_key_func
+
+    def compute_key_func(mode:KeyFunc):
+        match mode:
+            case 'default':
+                return None # use the global key_func
+            case 'subnet':
+                return None
+            case 'ip':
+                return get_ipaddr
+            case 'public':
+                return lambda r: 'public'
+            case 'none':
+                return lambda r: 'none'
+            case 'worker':
+                return lambda r: workerService.INSTANCE_ID
+            case _:
+                return get_ipaddr
+
+    if key_func in get_args(KeyFunc):
+        key_func = compute_key_func(key_func)
+    
+    elif isinstance(key_func,dict):
+
+        match configService.AUTH_MECHANISM:
+            case 'token'|'userpass':
+                security_key_func = key_func.get(configService.AUTH_MECHANISM,{})
+                key_func = compute_security_key_func(security_key_func)
+            case 'both':
+                key_func_cp = key_func.copy()
+                def both_key_func(request:Request):
+                    auth_mechanism = get_auth_mechanism(request)
+                    security_key_func = key_func_cp.get(auth_mechanism,{})
+                    return compute_security_key_func(security_key_func)
+                key_func = both_key_func
+            case 'none':
+                key_func = compute_key_func(key_func)
+
     elif callable(key_func):
         ... # Use the key_func callable provided
     else:
         raise ValueError('Could not parse the key_func')
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, UseLimiter, None, limit_value=limit_value,override_defaults=override_defaults,exempt_when=exempt_when,error_message=error_message)
+        cls = common_class_decorator(func, UseLimiter, None, limit_value=limit_value,scope=scope,exempt=exempt,override_defaults=override_defaults,exempt_when=exempt_when,error_message=error_message,cost=cost_callback,key_func=key_func)
         if cls != None:
             return cls
         meta: FuncMetaData | None = getattr(func, 'meta', None)

@@ -2,21 +2,24 @@ from typing import Any, Callable, Type, get_args
 from fastapi.responses import JSONResponse
 from typing_extensions import Literal
 from fastapi import BackgroundTasks, Request, Response,status
-from app.classes.auth_permission import ClientAccessInfo, ClientType
+from app.classes.auth_permission import ClientAccessInfo, ClientType, FuncMetaData
 from app.classes.cost_definition import CostLessThanZeroError, CostMoreThanZeroError
 from app.container import Get, InjectInMethod
 from app.definition._cost import Cost, DataCost, SimpleTaskCost,Bill
 from app.definition._utils_decorator import Interceptor, InterceptorDefaultException
+from app.depends.dependencies import get_request_id
 from app.depends.orm_cache import WILDCARD, BlacklistClientCache
 from app.depends.res_cache import ResponseCacheInterface
 from app.manager.broker_manager import Broker
 from app.manager.keep_alive_manager import KeepAliveManager
 from app.manager.task_manager import TaskManager
 from app.services.admin_service import ClientMiniService
+from app.services.config_service import ConfigService
 from app.services.cost_service import CostService
 from app.services.database.memcached_service import MemCachedService
 
 from app.services.database.redis_service import RedisService
+from app.services.logger_service import LoggerService
 from app.services.reactive_service import ReactiveService
 from app.utils.constant import CostConstant, RedisConstant
 from app.utils.helper import APIFilterInject, SkipCode, copy_response
@@ -204,3 +207,17 @@ class InvalidBlacklistTokenInterceptor(Interceptor):
           await BlacklistClientCache.Store([client.client_id,''],True,)
 
         return
+
+class LoggerInterceptor(Interceptor):
+
+    def __init__(self,):
+        super().__init__(True,True,True)
+        self.configService = Get(ConfigService)
+        self.loggerService = Get(LoggerService)
+
+    async def intercept_before(self,func_meta:FuncMetaData,request:Request,issuer:str|None=None):
+        request_id:str = get_request_id(request)
+
+    async def intercept_after(self, result:Any,func_meta:FuncMetaData,request:Request,response:Response,issuer:str|None=None):
+        request_id:str = get_request_id(request)
+        

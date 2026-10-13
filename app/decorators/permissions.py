@@ -15,7 +15,7 @@ from app.services.cost_service import CostService
 from app.services.database.redis_service import RedisService
 from app.services.vault_service import VaultService
 from app.services.security_service import SecurityService,JWTAuthService
-from app.classes.auth_permission import AuthPermission, AuthType, ClientAccessInfo, ClientType, ContactPermission, ContactPermissionScope, ClientRefresh, Role, RoutePermission,FuncMetaData, TokensModel, filter_asset_permission
+from app.classes.auth_permission import AuthPermission, AuthType, ClientAccessInfo, ClientType, ClientTypeLiteral, ContactPermission, ContactPermissionScope, ClientRefresh, Role, RoutePermission,FuncMetaData, TokensModel, filter_asset_permission
 from app.utils.constant import HTTPHeaderConstant
 from app.utils.globals import CAPABILITIES
 from app.utils.helper import SliceMode, flatten_dict
@@ -228,9 +228,15 @@ class UserPermission(AbstractClientTypePermission):
 
 class ClientTypesPermission(Permission):
 
-    def __init__(self,client_types:list[ClientType],slice:SliceMode='include'):
+    def __init__(self,client_types:list[ClientType|ClientTypeLiteral],slice:SliceMode='include'):
         super().__init__()
-        self.client_types=set(client_types)
+        temp = []
+        for ct in client_types:
+            if isinstance(ct,ClientTypeLiteral):
+                ct = ClientType(ct)
+            temp.append(ct)
+        
+        self.client_types=set(temp)
         self.slice = slice
 
     async def permission(self,authPermission:AuthPermission,clientInfo:ClientAccessInfo):
