@@ -6,10 +6,12 @@ from app.cost.ingest_cost import DeleteDocumentIngestCost
 from app.decorators.handlers import AgenticHandler, ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, GraphitiHandler, GatewayHandler, RedisHandler, ServiceAvailabilityHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, ClientTypesPermission, JWTRouteHTTPPermission, UserPermission
-from app.decorators.pipes import DeleteDocumentIngestUpdatePipe, MerchantPipe, domain_pipe, update_status_upon_no_metadata_pipe
+from app.decorators.pipes import DeleteDocumentIngestUpdatePipe, MerchantPipe, ResolveIssuerPipe, domain_pipe, update_status_upon_no_metadata_pipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseAccess, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, LockService
 from app.depends.dependencies import get_access_info, get_auth_permission, get_client_info
+from app.depends.funcs_dep import get_issuer
 from app.interface.delete_ingest import DeleteIngestDocumentInterface
+from app.manager.issuer_manager import IssuerManager
 from app.manager.merchant_manager import Merchant
 from app.models.graphiti_model import DeleteDomainModel, GraphitiSearchModel
 from app.services.agent.remote_agent_service import RemoteAgentService
@@ -55,19 +57,19 @@ class KGraphDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
         gateway_body = await self.remoteAgentService.request('GET', AgenticConstant.K_GRAPH_ROUTER(f'/document/{domain}/'))
         return gateway_body
 
-    @UsePipe(MerchantPipe(-1))
+    @UsePipe(ResolveIssuerPipe)
     @Throttle(uniform=(1000,1800))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
-    @UsePipe(DeleteDocumentIngestUpdatePipe('graph'))
     @UseAccess(accesses={'Admin':True,'System':True})
     @UsePermission(JWTRouteHTTPPermission,AdminPermission)
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
+    @UsePipe(MerchantPipe(-1),DeleteDocumentIngestUpdatePipe('graph'))
     @PingService([RedisService,RemoteAgentService,ArqIngestTaskService])
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
     @LockService(RedisService,RemoteAgentService,ArqIngestTaskService,lockType='reader')
     @UseHandler(GraphitiHandler,AgenticHandler,CostHandler,ArqHandler,GatewayHandler,RedisHandler,DataIngestHandler)
     @BaseHTTPRessource.HTTPRoute('/document/{job_id}/',methods=[HTTPMethod.DELETE],response_model=DeleteDomainModel)
-    async def delete_document(self,job_id:str,response:Response,request:Request,cost:Annotated[DeleteDocumentIngestCost,Depends(DeleteDocumentIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],authPermission:AuthPermission = Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def delete_document(self,job_id:str,response:Response,request:Request,cost:Annotated[DeleteDocumentIngestCost,Depends(DeleteDocumentIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],issuer:IssuerManager=Depends(get_issuer), authPermission:AuthPermission = Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         
         meta,domain = await self.delete_single_document(job_id,'graph_config','graph','domain')
         gateway_body = await self.remoteAgentService.request('DELETE', AgenticConstant.K_GRAPH_ROUTER(f'/document/{job_id}'))
@@ -80,19 +82,20 @@ class KGraphDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
         
         return DeleteDomainModel(metadata=[meta],errors={},domain=domain,gateway_body=gateway_body,job_dequeued=[],job_deleted=[job_id])
 
+
+    @UsePipe(ResolveIssuerPipe)
     @Throttle(uniform=(1500,2500))
-    @UsePipe(domain_pipe,MerchantPipe(-1))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
-    @UsePipe(DeleteDocumentIngestUpdatePipe('graph'))
     @UseAccess(accesses={'Admin':True,'System':True})
     @UsePermission(JWTRouteHTTPPermission,AdminPermission)
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @PingService([RedisService,RemoteAgentService,ArqIngestTaskService])
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
+    @UsePipe(domain_pipe,MerchantPipe(-1),DeleteDocumentIngestUpdatePipe('graph'))
     @LockService(RedisService,RemoteAgentService,ArqIngestTaskService,lockType='reader')
     @UseHandler(GraphitiHandler,AgenticHandler,CostHandler,ArqHandler,GatewayHandler,RedisHandler,DataIngestHandler)
     @BaseHTTPRessource.HTTPRoute('/domain/{domain}/',methods=[HTTPMethod.DELETE],response_model=DeleteDomainModel)
-    async def delete_domain(self,domain:str,response:Response,request:Request,cost:Annotated[DeleteDocumentIngestCost,Depends(DeleteDocumentIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],authPermission:AuthPermission = Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def delete_domain(self,domain:str,response:Response,request:Request,cost:Annotated[DeleteDocumentIngestCost,Depends(DeleteDocumentIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],issuer:IssuerManager=Depends(get_issuer),authPermission:AuthPermission = Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         
         meta,jobs_done,jobs_queue,errors =  await self.delete_section('graph_config','domain',domain)
         gateway_body = await self.remoteAgentService.request('DELETE', AgenticConstant.K_GRAPH_ROUTER(f'/domain/{domain}'))
@@ -115,6 +118,7 @@ class KGraphDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
         
         return DeleteDomainModel(metadata=meta,gateway_body=gateway_body,job_dequeued=jobs_queue,jod_deleted=jobs_done,domain=domain,errors=errors)
 
+    @UsePipe(ResolveIssuerPipe)
     @Throttle(uniform=(200,500))
     @PingService([RemoteAgentService])
     @HTTPStatusCode(status.HTTP_200_OK)
@@ -124,5 +128,5 @@ class KGraphDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @UseAccess(accesses={'Admin':True,'System':True,'User':True,'App':True})
     @UsePermission(JWTRouteHTTPPermission,ClientTypesPermission([ClientType.Service,ClientType.Twilio],'exclude'))
     @BaseHTTPRessource.HTTPRoute('/playground/',methods=[HTTPMethod.POST])
-    async def playground(self,response:Response,request:Request,search:GraphitiSearchModel,authPermission:AuthPermission= Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def playground(self,response:Response,request:Request,search:GraphitiSearchModel,issuer:IssuerManager=Depends(get_issuer),authPermission:AuthPermission= Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         ...

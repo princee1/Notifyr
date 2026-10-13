@@ -10,7 +10,7 @@ from app.decorators.guards import CeleryBrokerGuard, CeleryTaskGuard, Registered
 from app.decorators.handlers import AsyncIOHandler, CeleryTaskHandler, ContactsHandler, CostHandler, MiniServiceHandler, ReactiveHandler, RedisHandler, ServiceAvailabilityHandler, StreamDataParserHandler, TemplateHandler, TwilioHandler
 from app.decorators.interceptors import KeepAliveResponseInterceptor, RegisterBackgroundTaskInterceptor, TaskCostInterceptor
 from app.decorators.permissions import MCPPermission, ProfilePermission, TaskCostPermission, JWTRouteHTTPPermission, TwilioPermission
-from app.decorators.pipes import CeleryTaskPipe, ContactToInfoPipe, ContentIndexPipe, MiniServiceInjectorPipe, OffloadedTaskResponsePipe, TwilioPhoneNumberPipe, TwilioResponseStatusPipe, RegisterSchedulerPipe, to_otp_path, force_task_manager_attributes_pipe
+from app.decorators.pipes import CeleryTaskPipe, ContactToInfoPipe, ContentIndexPipe, MiniServiceInjectorPipe, OffloadedTaskResponsePipe, ResolveIssuerPipe, TwilioPhoneNumberPipe, TwilioResponseStatusPipe, RegisterSchedulerPipe, to_otp_path, force_task_manager_attributes_pipe
 from app.definition._cost import SimpleTaskCost
 from app.manager.broker_manager import Broker
 from app.manager.keep_alive_manager import KeepAliveManager
@@ -30,7 +30,7 @@ from app.services.ntfr.twilio_service import CallService, TwilioAccountMiniServi
 from app.definition._ressource import BaseHTTPRessource, BaseHTTPRessource, HTTPMethod, HTTPRessource, IncludeRessource, PingService, UseAccess, UseInterceptor, LockService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
 from app.container import Get, InjectInMethod
 from app.depends.dependencies import get_access_info, get_auth_permission, get_client_info
-from app.depends.funcs_dep import Get_Contact,get_template,wait_timeout_query,get_profile
+from app.depends.funcs_dep import Get_Contact, get_issuer,get_template,wait_timeout_query,get_profile
 from app.depends.class_dep import SubjectParams, TwilioTracker
 from app.utils.constant import CostConstant, StreamConstant
 from app.utils.helper import uuid_v1_mc
@@ -248,6 +248,7 @@ if CAPABILITIES['chat']:
 
 @UsePermission(TwilioPermission)
 @UseAccess(accesses={'Twilio':True})
+@UsePipe(ResolveIssuerPipe(to_object=False))
 @UseHandler(ServiceAvailabilityHandler, TwilioHandler)
 @HTTPRessource(CALL_INCOMING_PREFIX)
 class IncomingCallRessources(BaseHTTPRessource):
@@ -264,36 +265,36 @@ class IncomingCallRessources(BaseHTTPRessource):
     if CAPABILITIES['chat']:
 
         @BaseHTTPRessource.HTTPRoute('/menu/', methods=[HTTPMethod.POST])
-        async def voice_menu(self, authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+        async def voice_menu(self,issuer:str=Depends(get_issuer), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
             chatService = Get(ChatService)
 
         @UseRoles([Role.CHAT])
         @BaseHTTPRessource.HTTPRoute('/live-chat/', methods=[HTTPMethod.POST])
-        async def voice_live_chat(self, authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+        async def voice_live_chat(self,issuer:str=Depends(get_issuer), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
             chatService = Get(ChatService)
             
         @BaseHTTPRessource.HTTPRoute('/automate-response/', methods=[HTTPMethod.POST])
-        async def voice_automate_response(self, authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+        async def voice_automate_response(self,issuer:str=Depends(get_issuer), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
             chatService = Get(ChatService)
             pass
 
         @BaseHTTPRessource.HTTPRoute('/partial-result/', methods=[HTTPMethod.POST])
-        async def partial_result(self,authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+        async def partial_result(self,issuer:str=Depends(get_issuer),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
             chatService = Get(ChatService)
             ...
         
         @BaseHTTPRessource.HTTPRoute('/handler_fail/', methods=[HTTPMethod.POST])
-        async def voice_primary_handler_fail(self, authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+        async def voice_primary_handler_fail(self,issuer:str=Depends(get_issuer), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
             pass
 
         @BaseHTTPRessource.HTTPRoute('/error/', methods=[HTTPMethod.POST])
-        async def voice_error(self, authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+        async def voice_error(self,issuer:str=Depends(get_issuer), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
             pass
     
     @UseHandler(ReactiveHandler)
     @UsePipe(TwilioResponseStatusPipe,before=False)
     @BaseHTTPRessource.HTTPRoute('/status/', methods=[HTTPMethod.POST])
-    async def voice_call_status(self, status: CallStatusModel, response:Response,broker:Annotated[Broker,Depends(Broker)],subject_params:Annotated[SubjectParams,Depends(SubjectParams)], authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ,):
+    async def voice_call_status(self, status: CallStatusModel, response:Response,broker:Annotated[Broker,Depends(Broker)],subject_params:Annotated[SubjectParams,Depends(SubjectParams)],issuer:str=Depends(get_issuer), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ,):
         print(status)
         subject_id = subject_params.subject_id
         value = {
@@ -323,7 +324,7 @@ class IncomingCallRessources(BaseHTTPRessource):
         
     @UseHandler(ReactiveHandler)
     @BaseHTTPRessource.HTTPRoute('/gather-result/', methods=[HTTPMethod.POST])
-    async def gather_result(self,gatherResult:GatherResultModel, response:Response,broker:Annotated[Broker,Depends(Broker)],subject_params:Annotated[SubjectParams,Depends(SubjectParams)],authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def gather_result(self,gatherResult:GatherResultModel, response:Response,broker:Annotated[Broker,Depends(Broker)],subject_params:Annotated[SubjectParams,Depends(SubjectParams)],issuer:str=Depends(get_issuer),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         value =gatherResult.model_dump(include=('data','state'))
         broker.publish(StreamConstant.TWILIO_REACTIVE,'plain',subject_params.subject_id,value,)
 

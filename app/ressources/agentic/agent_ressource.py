@@ -13,11 +13,12 @@ from app.decorators.guards import LLMProviderGuard
 from app.decorators.handlers import AgentHandler, AgenticHandler, DataSourceHandler, LLMHandler, AsyncIOHandler, CostHandler, GrpcHandler, MiniServiceHandler, MongooseHandler, MotorErrorHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, AgentPermission, ClientTypesPermission, JWTRouteHTTPPermission, MCPPermission, UserPermission
-from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe, SanitizePathParameterPipe
+from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe, ResolveIssuerPipe, SanitizePathParameterPipe
 from app.definition._cost import DataCost
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseAccess, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles, LockService
 from app.definition._service import MiniStateProtocol, StateProtocol
 from app.depends.class_dep import EmbeddingSimilarity
+from app.depends.funcs_dep import get_issuer
 from app.depends.variables import SourceMode,source_mode_query
 from app.errors.agent_error import AgentDependencyError, AgentToolDoesNotExistError, SemanticAgentAlreadyExistError, SubAgentContainsSubAgentError
 from app.errors.depends_error import DataSourceNotSupportedError
@@ -38,6 +39,7 @@ from app.utils.constant import AgenticConstant, CostConstant, LLMProviderConstan
 from app.utils.helper import subset_model
 from app.services  import RemoteAgentService
 from app.depends.variables import mcp_configuration, source_mode_query
+from app.manager.issuer_manager import IssuerManager
 
 
 base_attr = {'id','revision_id','created_at','last_modified','version'}
@@ -140,13 +142,13 @@ class AgentsRessource(BaseHTTPRessource):
     @UsePipe(DocumentFriendlyPipe,before=False)
     @UseHandler(MiniServiceHandler,DataSourceHandler)
     @LockService(LLMService,lockType='reader',as_manager=False)
-    @UsePipe(SanitizePathParameterPipe({},profile=True,agent=True))
     @LockService(RemoteAgentService,lockType='reader',as_manager=False)
     @UseAccess(accesses={'Admin':True,'App':True,'User':True,'System':True})
     @UseRoles([Role.PUBLIC],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
+    @UsePipe(ResolveIssuerPipe(to_object=False),SanitizePathParameterPipe({},profile=True,agent=True))
     @UsePermission(JWTRouteHTTPPermission,ClientTypesPermission([ClientType.Service,ClientType.Twilio],'exclude'),AgentPermission(True),MCPPermission)
     @BaseHTTPRessource.HTTPRoute('/{agent:path}/',methods=[HTTPMethod.GET],to_mcp_tool=True,operation_id='read_agent_information')
-    async def read_agent(self,agent:str,request:Request,response:Response,mongoFilter:Optional[MongoFindFilter],profile:str=Depends(get_agent),source:SourceMode=Depends(source_mode_query), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def read_agent(self,agent:str,request:Request,response:Response,mongoFilter:Optional[MongoFindFilter],profile:str=Depends(get_agent),source:SourceMode=Depends(source_mode_query),issuer:str=Depends(get_issuer), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         match source:
             case 'database':
                 if agent != '':
@@ -168,16 +170,16 @@ class AgentsRessource(BaseHTTPRessource):
                 raise DataSourceNotSupportedError(source,['database','memory'])
 
     @UseLimiter('10/hours')
-    @UsePipe(MerchantPipe(-1))
     @Throttle(normal=(100,40))
     @UsePipe(DocumentFriendlyPipe,before=False)
+    @UsePipe(ResolveIssuerPipe,MerchantPipe(-1))
     @UseAccess(accesses={'Admin':True,'System':True})
     @UseHandler(CostHandler,RedisHandler,AgentHandler)
     @UsePermission(JWTRouteHTTPPermission,AdminPermission)
     @LockService(LLMService,lockType='reader',as_manager=False)
     @UseInterceptor(DataCostInterceptor(CostConstant.AGENT_CREDIT,'refund'))
     @BaseHTTPRessource.HTTPRoute('/{agent}/',methods=[HTTPMethod.DELETE])
-    async def delete_agent(self,agent:str,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],profile:str=Depends(get_agent),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def delete_agent(self,agent:str,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],profile:str=Depends(get_agent),issuer:IssuerManager=Depends(get_issuer),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         agentModel = await self.mongooseService.get(AgentModel,agent,True)
 
         agentModels = await self.mongooseService.find_all(AgentModel)
@@ -204,6 +206,7 @@ class AgentsRessource(BaseHTTPRessource):
         return agentModel
 
     @UseLimiter('10/hours')
+    @UsePipe(ResolveIssuerPipe)
     @Throttle(uniform=(100,200))
     @UsePipe(DocumentFriendlyPipe,before=False)
     @UseAccess(accesses={'Admin':True,'System':True})
@@ -211,7 +214,7 @@ class AgentsRessource(BaseHTTPRessource):
     @UsePermission(JWTRouteHTTPPermission,AdminPermission)
     @LockService(LLMService,lockType='reader',as_manager=False)
     @BaseHTTPRessource.HTTPRoute('/{agent}/',methods=[HTTPMethod.PUT])
-    async def update_agent(self,agent:str,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],embeddingLookup:Annotated[EmbeddingSimilarity,Depends(EmbeddingSimilarity)],body: dict = Body(...),request_id:str=Depends(get_request_id),profile:str=Depends(get_agent),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def update_agent(self,agent:str,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],embeddingLookup:Annotated[EmbeddingSimilarity,Depends(EmbeddingSimilarity)],body: dict = Body(...),request_id:str=Depends(get_request_id),profile:str=Depends(get_agent),issuer:IssuerManager=Depends(get_issuer),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         
         agentModel = await self.mongooseService.get(AgentModel,agent,True)
         agentUpdateModel = self.UpdateAgentModel.model_validate(body)
@@ -236,15 +239,15 @@ class AgentsRessource(BaseHTTPRessource):
     @Throttle(uniform=(30,60))
     @UseRoles([Role.AGENT,Role.ADMIN])
     @LockService(LLMService,lockType='reader',as_manager=False)
-    @UsePipe(MiniServiceInjectorPipe(RemoteAgentService,'agent'))
     @UseHandler(LLMHandler,AgenticHandler,GrpcHandler,AgentHandler)
     @UseAccess(accesses={'Admin':True,'App':True,'User':True,'System':True})
     @UseLimiter('100/hour',cost={'Admin':1,'User':3,'System':1,'App':5},key_func={})
     @LockService(RemoteAgentService,lockType='reader',as_manager=True,miniLockType='reader')
     @UsePermission(ClientTypesPermission(['Service','Twilio'],slice='exclude'),AgentPermission)
+    @UsePipe(ResolveIssuerPipe(to_object=False),MiniServiceInjectorPipe(RemoteAgentService,'agent'))
     @PingService([{'cls':RemoteAgentService,'kwargs':{'grpc':True}}],is_manager=True,infinite_wait=True)
     @BaseHTTPRessource.HTTPRoute('/prompt/{agent}/',methods=[HTTPMethod.POST],mount=False,response_model=Reply)
-    async def prompt_playground(self,request:Request,agent:Annotated[RemoteAgentMiniService,Depends(get_agent)],prompt:PromptPlaygroundModel, response:Response,profile:str=Depends(get_agent),request_id:str = Depends(get_request_id),authPermission:AuthPermission= Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def prompt_playground(self,request:Request,agent:Annotated[RemoteAgentMiniService,Depends(get_agent)],prompt:PromptPlaygroundModel, response:Response,profile:str=Depends(get_agent),request_id:str = Depends(get_request_id),issuer:str=Depends(get_issuer),authPermission:AuthPermission= Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         message = Message(agent=agent,thread=clientInfo['client_id'],**prompt.model_dump(exclude_none=True))
         user = User(clientInfo['client_id'],'guest',None)
         session = Session(request_id,...,'live-chat',[])
@@ -257,14 +260,14 @@ class AgentsRessource(BaseHTTPRessource):
     @Throttle(uniform=(30,60))
     @UseRoles([Role.AGENT,Role.ADMIN])
     @UseAccess(accesses={'Admin':True,'App':True,'User':True})
-    @UsePipe(MiniServiceInjectorPipe(RemoteAgentService,'agent'))
     @UseHandler(LLMHandler,AgenticHandler,GrpcHandler,AgentHandler)
     @UseLimiter('100/hour',cost={'Admin':1,'User':3,'System':1,'App':5},key_func={})
     @LockService(RemoteAgentService,lockType='reader',as_manager=True,miniLockType='reader')
     @UsePermission(ClientTypesPermission(['Service','Twilio'],slice='exclude'),AgentPermission)
+    @UsePipe(ResolveIssuerPipe(to_object=False),MiniServiceInjectorPipe(RemoteAgentService,'agent'))
     @PingService([{'cls':RemoteAgentService,'kwargs':{'grpc':True}}],is_manager=True,infinite_wait=True)
     @BaseHTTPRessource.HTTPRoute('/stream/prompt/{agent}/',methods=[HTTPMethod.POST],mount=False,response_class=EventSourceResponse)
-    async def stream_prompt_playground(self,request:Request,response:Response,prompt:PromptPlaygroundModel,agent:Annotated[RemoteAgentMiniService,Depends(get_agent)],profile:str=Depends(get_agent),request_id:str = Depends(get_request_id),last_event_id: Annotated[int | None, Header()] = None,authPermission:AuthPermission= Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) )->AsyncIterable[ServerSentEvent]:
+    async def stream_prompt_playground(self,request:Request,response:Response,prompt:PromptPlaygroundModel,agent:Annotated[RemoteAgentMiniService,Depends(get_agent)],profile:str=Depends(get_agent),request_id:str = Depends(get_request_id),last_event_id: Annotated[int | None, Header()] = None,issuer:str=Depends(get_issuer),authPermission:AuthPermission= Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) )->AsyncIterable[ServerSentEvent]:
         message = Message(agent=agent,thread=clientInfo['client_id'],**prompt.model_dump(exclude_none=True))
         user = User(clientInfo['client_id'],'guest',None)
         session = Session(request_id,...,'live-chat',[])
