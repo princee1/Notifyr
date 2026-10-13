@@ -16,6 +16,7 @@ from app.depends.class_dep import ObjectsSearch,ToPydanticModelInterface
 from app.depends.dependencies import get_auth_mechanism
 from app.errors.contact_error import ContactMissingInfoKeyError, ContactNotExistsError
 from app.errors.service_error import MiniServiceStrictValueNotValidError, ServiceNotAvailableError
+from app.manager.issuer_manager import IssuerManager
 from app.manager.merchant_manager import Merchant
 from app.manager.session_manager import AuthSessionManager
 from app.manager.state_manager import StateManager
@@ -1036,11 +1037,12 @@ class AccessPathPipe(Pipe):
                 return {'access':path}
 
 class ResolveIssuerPipe(Pipe):
-    @InjectInMethod()
-    def __init__(self,configService:ConfigService,append_in_response:bool=True):
+    def __init__(self,append_in_response:bool=True,to_object=True):
         super().__init__(True)
-        self.configService = configService
+
+        self.configService = Get(ConfigService)
         self.append_in_response = append_in_response
+        self.to_object = to_object
     
     def pipe(self,response:Response,request:Request,clientInfo:ClientAccessInfo|None,accessInfo:AccessAPIInfo|None,issuer:str=None):
         if issuer == None:
@@ -1048,7 +1050,7 @@ class ResolveIssuerPipe(Pipe):
 
         match self.configService.AUTH_MECHANISM:
             case 'none':
-                return {'issuer':'none'}
+                issuer = 'none'
             case 'token':
                 issuer = accessInfo['id']
             case 'userpass':
@@ -1062,5 +1064,8 @@ class ResolveIssuerPipe(Pipe):
 
         if self.append_in_response:
             response.headers[HTTPHeaderConstant.X_ISSUER_ID] = issuer
+
+        if self.to_object:
+            issuer = IssuerManager(issuer)
         
         return {'issuer':issuer}

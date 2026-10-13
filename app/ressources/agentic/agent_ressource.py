@@ -135,6 +135,8 @@ class AgentsRessource(BaseHTTPRessource):
         broker.propagate(StateProtocol(name=RemoteAgentService,to_build=True,to_destroy=True))
         return agentModel
 
+    @Throttle(normal=(60,20))
+    @UseLimiter('20/minutes',cost={'App':2})
     @UsePipe(DocumentFriendlyPipe,before=False)
     @UseHandler(MiniServiceHandler,DataSourceHandler)
     @LockService(LLMService,lockType='reader',as_manager=False)
@@ -164,9 +166,10 @@ class AgentsRessource(BaseHTTPRessource):
                     return agents
             case _:
                 raise DataSourceNotSupportedError(source,['database','memory'])
-         
+
+    @UseLimiter('10/hours')
     @UsePipe(MerchantPipe(-1))
-    @Throttle(normal=(200,80))
+    @Throttle(normal=(100,40))
     @UsePipe(DocumentFriendlyPipe,before=False)
     @UseAccess(accesses={'Admin':True,'System':True})
     @UseHandler(CostHandler,RedisHandler,AgentHandler)
@@ -200,6 +203,7 @@ class AgentsRessource(BaseHTTPRessource):
         broker.propagate(StateProtocol(name=RemoteAgentService,to_build=True,to_destroy=True))
         return agentModel
 
+    @UseLimiter('10/hours')
     @Throttle(uniform=(100,200))
     @UsePipe(DocumentFriendlyPipe,before=False)
     @UseAccess(accesses={'Admin':True,'System':True})
@@ -235,7 +239,7 @@ class AgentsRessource(BaseHTTPRessource):
     @UsePipe(MiniServiceInjectorPipe(RemoteAgentService,'agent'))
     @UseHandler(LLMHandler,AgenticHandler,GrpcHandler,AgentHandler)
     @UseAccess(accesses={'Admin':True,'App':True,'User':True,'System':True})
-    @UseLimiter('100/hour',cost={'Admin':1,'User':3,'System':1,'App':5},key_func='private')
+    @UseLimiter('100/hour',cost={'Admin':1,'User':3,'System':1,'App':5},key_func={})
     @LockService(RemoteAgentService,lockType='reader',as_manager=True,miniLockType='reader')
     @UsePermission(ClientTypesPermission(['Service','Twilio'],slice='exclude'),AgentPermission)
     @PingService([{'cls':RemoteAgentService,'kwargs':{'grpc':True}}],is_manager=True,infinite_wait=True)
@@ -255,7 +259,7 @@ class AgentsRessource(BaseHTTPRessource):
     @UseAccess(accesses={'Admin':True,'App':True,'User':True})
     @UsePipe(MiniServiceInjectorPipe(RemoteAgentService,'agent'))
     @UseHandler(LLMHandler,AgenticHandler,GrpcHandler,AgentHandler)
-    @UseLimiter('100/hour',cost={'Admin':1,'User':3,'System':1,'App':5},key_func='private')
+    @UseLimiter('100/hour',cost={'Admin':1,'User':3,'System':1,'App':5},key_func={})
     @LockService(RemoteAgentService,lockType='reader',as_manager=True,miniLockType='reader')
     @UsePermission(ClientTypesPermission(['Service','Twilio'],slice='exclude'),AgentPermission)
     @PingService([{'cls':RemoteAgentService,'kwargs':{'grpc':True}}],is_manager=True,infinite_wait=True)

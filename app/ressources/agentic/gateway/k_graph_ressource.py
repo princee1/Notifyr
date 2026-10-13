@@ -118,7 +118,7 @@ class KGraphDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @Throttle(uniform=(200,500))
     @PingService([RemoteAgentService])
     @HTTPStatusCode(status.HTTP_200_OK)
-    @UseLimiter('20/hour',cost={'App':3,'User':2})
+    @UseLimiter('24/hour',cost={'App':3,'User':2})
     @LockService(RemoteAgentService,lockType='reader')
     @UseHandler(AgenticHandler,GraphitiHandler,GatewayHandler)
     @UseAccess(accesses={'Admin':True,'System':True,'User':True,'App':True})

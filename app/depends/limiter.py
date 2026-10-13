@@ -8,7 +8,7 @@ from app.services.config_service import ConfigService, WorkerService
 configService = Get(ConfigService)
 workerService = Get(WorkerService)
 
-KeyFunc = Literal['default','worker','none','ip','subnet']
+KeyFunc = Literal['default','worker','none','ip','subnet','balancer']
 SecurityKeyFunc = Literal['group','client','session','access','type','issuer',]
 
 def constant_cost_func(cost:int):

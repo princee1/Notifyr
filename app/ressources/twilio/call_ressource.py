@@ -46,7 +46,7 @@ if CAPABILITIES['object']:
     from app.decorators.permissions import JWTAssetObjectPermission
     from app.decorators.pipes import FilterAllowedSchemaPipe, TemplateParamsPipe, TemplateValidationInjectionPipe
 
-@UsePermission(JWTRouteHTTPPermission)
+@UsePermission(JWTRouteHTTPPermission,)
 @UseHandler(ServiceAvailabilityHandler, TwilioHandler)
 @UseAccess(accesses={'Admin':True,'App':True,'Service':True,'User':True})
 @HTTPRessource(CALL_ONGOING_PREFIX)
@@ -65,9 +65,9 @@ class OnGoingCallRessource(BaseHTTPRessource):
       
     if CAPABILITIES['object']:
 
-        @UseLimiter(limit_value='100/day')
         @LockService(AssetService,lockType='reader')
         @UsePipe(OffloadedTaskResponsePipe,before=False)
+        @UseLimiter(limit_value='100/day',cost={'App':4,'User':2,})
         @UseHandler(AsyncIOHandler,TemplateHandler,CostHandler,RedisHandler)
         @UseInterceptor(RegisterBackgroundTaskInterceptor,TaskCostInterceptor)
         @PingService([ProfileService,TwilioService,CallService],is_manager=True)
@@ -84,8 +84,8 @@ class OnGoingCallRessource(BaseHTTPRessource):
 
             return taskManager.results
 
-        @UseLimiter(limit_value='100/day')
         @UsePipe(OffloadedTaskResponsePipe, before=False)
+        @UseLimiter(limit_value='100/day',cost={'App':4,'User':2,})
         @UseInterceptor(RegisterBackgroundTaskInterceptor,TaskCostInterceptor)
         @UseGuard(CeleryTaskGuard(['task_send_template_voice_call']),TrackGuard,CeleryBrokerGuard)
         @PingService([ProfileService,TwilioService,CallService,CeleryService,TaskService],is_manager=True)
@@ -113,11 +113,11 @@ class OnGoingCallRessource(BaseHTTPRessource):
                 await taskManager.offload_task(weight,0, index, self.callService.send_template_voice_call, result, content,None,twilio_ids,twilio.miniService_id)
             return taskManager.results
 
-        @UseLimiter(limit_value="10/minutes")
         @UseHandler(AsyncIOHandler,TemplateHandler)
         @LockService(AssetService,lockType='reader')
         @UsePipe(FilterAllowedSchemaPipe,before=False)
         @UsePipe(TemplateParamsPipe('phone','xml',True))
+        @UseLimiter(limit_value="10/minutes",cost={'App':4,'User':2,})
         @UsePermission(MCPPermission,JWTAssetObjectPermission('sms','xml',accept_none_template=True))
         @UseRoles([Role.ADMIN,Role.TWILIO],options=[BypassRole(Role.ADMIN),MustHave(Role.ASSETS),MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
         @BaseHTTPRessource.HTTPRoute('/template/{template:path}',methods=[HTTPMethod.OPTIONS],mcp_operation_id=mcp_operation_id,to_mcp_tool=True)
@@ -129,8 +129,8 @@ class OnGoingCallRessource(BaseHTTPRessource):
             return schemas
 
         @UseRoles([Role.MFA_OTP])
-        @UseLimiter(limit_value='100/day')
         @UsePermission(TaskCostPermission)
+        @UseLimiter(limit_value='100/day',cost={'App':4,'User':2,})
         @UseInterceptor(TaskCostInterceptor,KeepAliveResponseInterceptor)
         @PingService([ProfileService,TwilioService,CallService],is_manager=True)
         @LockService(AssetService,ProfileService,TwilioService,lockType='reader',check_status=False)
@@ -149,10 +149,10 @@ class OnGoingCallRessource(BaseHTTPRessource):
 
             return await keepAliveConn.wait_for(call_results, 'otp_result')
         
-        @UseLimiter(limit_value='50/day')
         @UseGuard(RegisteredContactsGuard)
         @UsePermission(TaskCostPermission)
         @UseRoles([Role.MFA_OTP,Role.TWILIO])
+        @UseLimiter(limit_value='50/day',cost={'App':2,'User':2})
         @PingService([ProfileService,TwilioService,CallService],is_manager=True)
         @UseInterceptor(TaskCostInterceptor,KeepAliveResponseInterceptor)
         @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio','main'),TwilioPhoneNumberPipe('default'))
@@ -246,11 +246,9 @@ CALL_INCOMING_PREFIX = "incoming"
 if CAPABILITIES['chat']:
     from app.services.chat_service import ChatService
 
-@UseRoles([Role.TWILIO])
+@UsePermission(TwilioPermission)
 @UseAccess(accesses={'Twilio':True})
 @UseHandler(ServiceAvailabilityHandler, TwilioHandler)
-@UsePermission(TwilioPermission)
-@UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource(CALL_INCOMING_PREFIX)
 class IncomingCallRessources(BaseHTTPRessource):
     @InjectInMethod()

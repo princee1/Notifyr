@@ -1053,7 +1053,7 @@ def Throttle(fixed: float | None = None,fn: Callable[[], float] | None = None,un
 
     return decorator    
 
-def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]|None|int|Dict[ClientTypeLiteral,int]=None,key_func:Callable[[Request],str]|Dict[AuthMechanism,SecurityKeyFunc|KeyFunc]|KeyFunc='client'):
+def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]|None|int|Dict[ClientTypeLiteral,int]=None,key_func:Callable[[Request],str]|Dict[AuthMechanism,SecurityKeyFunc|KeyFunc]|KeyFunc={}):
     """
     *Description copied from the slowapi library*
 
@@ -1084,11 +1084,9 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
             return cost
         elif isinstance(cost,int):
             return constant_cost_func(cost)
-        
         elif isinstance(cost,dict):
             if key_func == 'public':
                 raise ValueError('To add cost based on the client type we must have ')
-
             match configService.AUTH_MECHANISM:
                 case 'userpass':
                     return client_info_cost_func(cost,max_limit)
@@ -1141,16 +1139,17 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
         key_func = compute_key_func(key_func)
     
     elif isinstance(key_func,dict):
+        default:dict[AuthMechanism,SecurityKeyFunc|KeyFunc] = {'token':'access','userpass':'client','none':'worker'}
 
         match configService.AUTH_MECHANISM:
             case 'token'|'userpass':
-                security_key_func = key_func.get(configService.AUTH_MECHANISM,{})
+                security_key_func = key_func.get(configService.AUTH_MECHANISM,default[configService.AUTH_MECHANISM])
                 key_func = compute_security_key_func(security_key_func)
             case 'both':
                 key_func_cp = key_func.copy()
                 def both_key_func(request:Request):
                     auth_mechanism = get_auth_mechanism(request)
-                    security_key_func = key_func_cp.get(auth_mechanism,{})
+                    security_key_func = key_func_cp.get(auth_mechanism,default[configService.AUTH_MECHANISM])
                     return compute_security_key_func(security_key_func)
                 key_func = both_key_func
             case 'none':

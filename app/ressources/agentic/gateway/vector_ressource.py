@@ -34,7 +34,8 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
         self.remoteAgentService = remoteAgentService
         self.configService = configService
     
-    @UseLimiter('1/minutes')
+    @UseLimiter('2/minutes')
+    @Throttle(normal=(80,20))
     @PingService([RemoteAgentService])
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @UseHandler(AgenticHandler,GatewayHandler)
@@ -50,8 +51,9 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
         return {'collection': collection}
 
     @UseLimiter('30/minutes')
-    @HTTPStatusCode(status.HTTP_200_OK)
+    @Throttle(normal=(60,15))
     @PingService([RemoteAgentService])
+    @HTTPStatusCode(status.HTTP_200_OK)
     @UseHandler(AgenticHandler,GatewayHandler)
     @LockService(RemoteAgentService,lockType='reader')
     @UseAccess(accesses={'Admin':True,'System':True,'User':True})
@@ -64,8 +66,8 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
         gateway_body = await self.remoteAgentService.request('GET', path, expected_status=status.HTTP_200_OK)
         return gateway_body
     
-    @UseLimiter('1/minutes')
-    @Throttle(uniform=(800,1500))
+    @UseLimiter('20/hours')
+    @Throttle(uniform=(80,150))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UseAccess(accesses={'Admin':True,'System':True})
     @UsePipe(DeleteDocumentIngestUpdatePipe('vector'))
@@ -102,8 +104,8 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
         
         return DeleteCollectionModel(metadata=meta,gateway_body=gateway_body,job_dequeued=jobs_queue,jod_deleted=jobs_done,collection_name=collection_name,errors=errors)
             
-    @UseLimiter('1/minutes')
-    @Throttle(uniform=(800,1500))
+    @UseLimiter('20/hours')
+    @Throttle(uniform=(80,150))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UseAccess(accesses={'Admin':True,'System':True})
     @UsePipe(DeleteDocumentIngestUpdatePipe('vector'))
@@ -129,7 +131,7 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
             'vector_config'
             )
         return DeleteCollectionModel(metadata=[meta],gateway_body=gateway_body,job_dequeued=[],jod_deleted=[job_id],collection_name=collection_name)
-       
+
     @Throttle(uniform=(200,500))
     @PingService([RemoteAgentService])
     @HTTPStatusCode(status.HTTP_200_OK)
