@@ -182,8 +182,7 @@ class TwilioService(_service.BaseMiniServiceManager[TwilioAccountMiniService],Tw
             raise _service.BuildFailureError
     
         super().build(state_counter)
-
-        
+   
     async def phone_lookup(self, phone_number, carrier=True, caller_name=False):
         return await self.main.phone_lookup(phone_number,carrier,caller_name)
 
@@ -212,6 +211,9 @@ class BaseTwilioCommunication(_service.BaseService,ProfileEventInterface):
         if twilio_tracking != None:
             url+=f'twilio_tracking_id={twilio_tracking}'
         return url
+
+    async def pingService(self, infinite_wait, data, profile = None, as_manager = False, **kwargs):
+        return await self.twilioService.pingService(infinite_wait, data, profile, as_manager, **kwargs)
 
     @classmethod
     def response_extractor(cls, res) -> dict:

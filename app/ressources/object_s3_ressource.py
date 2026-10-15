@@ -7,7 +7,9 @@ from fastapi.responses import StreamingResponse
 from app.classes.auth_permission import AccessAPIInfo, AuthPermission, ClientAccessInfo, MustHaveWhen,Role, filter_asset_permission
 from app.cost.file_cost import FileCost
 from app.cost.object_cost import ObjectCost
+from app.depends.funcs_dep import get_issuer
 from app.errors.depends_error import DataSourceNotSupportedError
+from app.manager.issuer_manager import IssuerManager
 from app.manager.merchant_manager import Merchant
 from app.models.file_model import FileResponseUploadModel, UriMetadata
 from app.models.object_model import ObjectResponseUploadModel, ObjectS3ResponseModel
@@ -16,8 +18,8 @@ from app.container import Get, InjectInMethod
 from app.decorators.guards import GlobalsTemplateGuard, UploadFilesGuard
 from app.decorators.handlers import AsyncIOHandler, CostHandler, FileHandler, FileNamingHandler, RedisHandler, S3Handler, ServiceAvailabilityHandler, TemplateHandler, UploadFileHandler, VaultHandler
 from app.decorators.interceptors import DataCostInterceptor, ResponseCacheInterceptor
-from app.decorators.permissions import AdminPermission, JWTAssetObjectPermission, JWTRouteHTTPPermission
-from app.decorators.pipes import MerchantPipe, ObjectS3OperationResponsePipe, SanitizePathParameterPipe, TemplateParamsPipe, ValidFreeInputTemplatePipe
+from app.decorators.permissions import AdminPermission, ClientTypesPermission, JWTAssetObjectPermission, JWTRouteHTTPPermission
+from app.decorators.pipes import MerchantPipe, ObjectS3OperationResponsePipe, ResolveIssuerPipe, SanitizePathParameterPipe, TemplateParamsPipe, ValidFreeInputTemplatePipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, Throttle, UseAccess, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, LockService
 from app.definition._service import StateProtocol
 from app.depends.class_dep import ObjectsSearch
@@ -107,18 +109,18 @@ class S3ObjectRessource(BaseHTTPRessource):
             metadata = {MinioConstant.ENCRYPTED_KEY:True}
         await self.objectS3Service.upload_object(filename,file_bytes,metadata=metadata)
 
-    @UsePipe(MerchantPipe)
     @Throttle(normal=(200,60))
-    @UsePermission(AdminPermission)
     @PingService([ObjectS3Service])
-    @UseAccess(accesses={'Admin':True})
+    @UsePermission(AdminPermission())
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
+    @UseAccess(accesses={'Admin':True,'System':True})
     @UseGuard(GlobalsTemplateGuard,UploadFilesGuard())
+    @UsePipe(ResolveIssuerPipe(to_object=False),MerchantPipe)
     @UseInterceptor(DataCostInterceptor(CostConstant.OBJECT_CREDIT,'purchase'))
     @UseHandler(FileNamingHandler,S3Handler,VaultHandler,UploadFileHandler,FileHandler,CostHandler,RedisHandler)
     @LockService(VaultService,ObjectS3Service,AssetService,lockType='reader',check_status=False)
     @BaseHTTPRessource.HTTPRoute('/upload/',methods=[HTTPMethod.POST],response_model=ObjectResponseUploadModel ,mount=False)
-    async def upload_stream(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[FileCost,Depends(FileCost)],merchant:Annotated[Merchant,Depends(Merchant)],files: List[UploadFile] = File(...),force:bool= Depends(force_update_query),encrypt:bool=Query(False), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def upload_stream(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[FileCost,Depends(FileCost)],merchant:Annotated[Merchant,Depends(Merchant)],files: List[UploadFile] = File(...),force:bool= Depends(force_update_query),encrypt:bool=Query(False),issuer:str=Depends(get_issuer), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         
         errors = {}
         upload_files = []
@@ -157,14 +159,14 @@ class S3ObjectRessource(BaseHTTPRessource):
         return ObjectResponseUploadModel(metadata=metadata,uploaded_files=upload_files,errors=errors)
 
 
-    @UsePipe(ValidFreeInputTemplatePipe)
     @PingService([ObjectS3Service,VaultService])
-    @UseAccess(accesses={'Admin':True,'User':True})
     @UseHandler(S3Handler,VaultHandler,FileNamingHandler)
-    @UsePermission(JWTAssetObjectPermission(accept_none_template=True))
+    @UsePipe(ResolveIssuerPipe(),ValidFreeInputTemplatePipe)
+    @UseAccess(accesses={'Admin':True,'User':True,'System':True})
     @LockService(VaultService,ObjectS3Service,AssetService,lockType='reader',check_status=False)
+    @UsePermission(ClientTypesPermission(['Admin','User','System']),JWTAssetObjectPermission(accept_none_template=True))
     @BaseHTTPRessource.HTTPRoute('/download/{template:path}',methods=[HTTPMethod.GET],mount=False)
-    async def download_stream(self,request:Request,template:str,objectSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ): # type: ignore
+    async def download_stream(self,request:Request,template:str,objectSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],issuer:IssuerManager=Depends(get_issuer),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ): # type: ignore
 
         if objectSearch.is_file:
             objects = await RunInThreadPool(self.objectS3Service.read_object)(template,objectSearch.version_id)
@@ -188,14 +190,14 @@ class S3ObjectRessource(BaseHTTPRessource):
     @UsePermission(AdminPermission)
     @PingService([ObjectS3Service])
     @UseGuard(GlobalsTemplateGuard)
-    @UseAccess(accesses={'Admin':True})
+    @UseAccess(accesses={'Admin':True,'System':True})
+    @UsePipe(ObjectS3OperationResponsePipe,before=False)
     @UseHandler(S3Handler,FileHandler,CostHandler,RedisHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.OBJECT_CREDIT,'refund'))
-    @UsePipe(ObjectS3OperationResponsePipe,before=False)
-    @UsePipe(ValidFreeInputTemplatePipe(False,True),MerchantPipe(-1))
     @LockService(ObjectS3Service,AssetService,lockType='reader',check_status=False)
+    @UsePipe(ResolveIssuerPipe,ValidFreeInputTemplatePipe(False,True),MerchantPipe(-1))
     @BaseHTTPRessource.HTTPRoute('/delete/{template:path}',methods=[HTTPMethod.DELETE],response_model=ObjectS3ResponseModel)
-    async def delete_object(self,template:str,response:Response,request:Request,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[ObjectCost,Depends(ObjectCost)],merchant:Annotated[Merchant,Depends(Merchant)],objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],force:bool=Query(False),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def delete_object(self,template:str,response:Response,request:Request,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[ObjectCost,Depends(ObjectCost)],merchant:Annotated[Merchant,Depends(Merchant)],objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],force:bool=Query(False),issuer:IssuerManager=Depends(get_issuer), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         
         if objectsSearch.version_id:
             meta:list[Object]|Object = await self.objectS3Service.stat_objet(template,version_id=objectsSearch.version_id,buckets=MinioConstant.ASSETS_BUCKET)
@@ -230,16 +232,16 @@ class S3ObjectRessource(BaseHTTPRessource):
 
     @PingService([ObjectS3Service,VaultService])
     @UsePipe(ObjectS3OperationResponsePipe,before=False)
-    @UsePipe(SanitizePathParameterPipe({},template=True))
     @UseAccess(accesses={'Admin':True,'User':True,'App':True})
-    @UsePermission(JWTAssetObjectPermission(accept_none_template=True))
     @UseHandler(S3Handler,VaultHandler,FileNamingHandler,TemplateHandler)
+    @UsePipe(ResolveIssuerPipe(),SanitizePathParameterPipe({},template=True))
     @UseRoles([Role.PUBLIC],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
     @LockService(VaultService,ObjectS3Service,AssetService,lockType='reader',check_status=False)
     @UseInterceptor(ResponseCacheInterceptor('cache',MinioResponseCache,raise_default_exception=False),mount=False)
+    @UsePermission(ClientTypesPermission(['Admin','User','App']),JWTAssetObjectPermission(accept_none_template=True))
     @UseGuard(GlobalsTemplateGuard('We cannot read the object globals.json at this route please use refer to properties/global route'))
     @BaseHTTPRessource.HTTPRoute('/{template:path}/',methods=[HTTPMethod.GET],response_model=ObjectS3ResponseModel,operation_id='read_template_content_and_information',to_mcp_tool=True)
-    async def read_object(self,request:Request,response:Response,backgroundTasks:BackgroundTasks,objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],source:SourceMode=Depends(source_mode_query),template='',is_mcp:bool=Depends(is_mcp_request),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def read_object(self,request:Request,response:Response,backgroundTasks:BackgroundTasks,objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],source:SourceMode=Depends(source_mode_query),template='',is_mcp:bool=Depends(is_mcp_request),issuer:IssuerManager=Depends(get_issuer),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
 
         match source:
             case 'memory':
@@ -279,15 +281,15 @@ class S3ObjectRessource(BaseHTTPRessource):
                 
     @Throttle(normal=(300,200))
     @UsePermission(AdminPermission)
-    @UseAccess(accesses={'Admin':True})
     @PingService([ObjectS3Service,VaultService])
+    @UseAccess(accesses={'Admin':True,'System':True})
     @UseInterceptor(DataCostInterceptor(CostConstant.OBJECT_CREDIT,'purchase'))
     @LockService(VaultService,ObjectS3Service,AssetService,lockType='reader',check_status=False)
     @UseGuard(GlobalsTemplateGuard,UploadFilesGuard(1,allowed_extensions=['.xml','.html','.css','.scss']))
     @UseHandler(S3Handler,VaultHandler,TemplateHandler,FileNamingHandler,CostHandler,UploadFileHandler,RedisHandler)
-    @UsePipe(ValidFreeInputTemplatePipe(False,False,{'.xml','.html','.css','.scss'},{'email','phone','sms'}),MerchantPipe())
+    @UsePipe(ResolveIssuerPipe,ValidFreeInputTemplatePipe(False,False,{'.xml','.html','.css','.scss'},{'email','phone','sms'}),MerchantPipe())
     @BaseHTTPRessource.HTTPRoute('/{template:path}',methods=[HTTPMethod.PUT],response_model=ObjectResponseUploadModel,mount=False)
-    async def modify_object(self,template:str,request:Request,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[FileCost,Depends(FileCost)],merchant:Annotated[Merchant,Depends(Merchant)], objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],files:List[UploadFile]=File(...),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def modify_object(self,template:str,request:Request,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[FileCost,Depends(FileCost)],merchant:Annotated[Merchant,Depends(Merchant)], objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],files:List[UploadFile]=File(...),issuer:IssuerManager=Depends(get_issuer),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         meta:Object = await self.objectS3Service.stat_objet(template,objectsSearch.version_id,True)
         encrypted = meta.metadata.get(MinioConstant.ENCRYPTED_KEY,False) if meta.metadata else False
         assetType = template.split('/')[0]
@@ -317,15 +319,15 @@ class S3ObjectRessource(BaseHTTPRessource):
     
 
     @PingService([ObjectS3Service])
-    @UsePermission(AdminPermission)
     @UseGuard(GlobalsTemplateGuard)
-    @UseAccess(accesses={'Admin':True})
+    @UsePermission(AdminPermission())
+    @UseAccess(accesses={'Admin':True,'System':True})
     @UsePipe(ObjectS3OperationResponsePipe,before=False)
     @UseHandler(S3Handler,FileNamingHandler,CostHandler,RedisHandler)
-    @UsePipe(ValidFreeInputTemplatePipe(False,False),pipe_restore,MerchantPipe())
     @LockService(ObjectS3Service,AssetService,lockType='reader',check_status=False)
+    @UsePipe(ResolveIssuerPipe,ValidFreeInputTemplatePipe(False,False),pipe_restore,MerchantPipe())
     @BaseHTTPRessource.HTTPRoute('/{template:path}/to/{destination_template:path}/',methods=[HTTPMethod.PATCH],response_model=ObjectS3ResponseModel,mount=False)
-    async def copy_object(self,template:str,request:Request,response:Response,destination_template:str,cost:Annotated[ObjectCost,Depends(ObjectCost)],merchant:Annotated[Merchant,Depends(Merchant)],broker:Annotated[Broker,Depends(Broker)],objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],move:bool = Query(False),restore:bool = Query(False),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def copy_object(self,template:str,request:Request,response:Response,destination_template:str,cost:Annotated[ObjectCost,Depends(ObjectCost)],merchant:Annotated[Merchant,Depends(Merchant)],broker:Annotated[Broker,Depends(Broker)],objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],move:bool = Query(False),restore:bool = Query(False),issuer:IssuerManager=Depends(get_issuer),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
 
         self.free_input_pipe.pipe(destination_template,objectsSearch)
         if objectsSearch.is_file:

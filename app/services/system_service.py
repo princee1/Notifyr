@@ -2,6 +2,7 @@ from app.definition._service import BaseService, Service
 from app.services.config_service import ConfigService
 from app.services.database.redis_service import RedisService
 from app.services.database.tortoise_service import TortoiseConnectionService
+
 @Service()
 class SystemService(BaseService):
     

@@ -5,9 +5,9 @@ from app.classes.auth_permission import AccessAPIInfo, ClientAccessInfo, Role
 from app.container import Get, InjectInMethod
 from app.decorators.guards import MongooseHardLimitGuard
 from app.decorators.handlers import AsyncIOHandler, GlobalVarHandler, MongooseHandler, MotorErrorHandler, PydanticHandler, ServiceAvailabilityHandler, TemplateHandler
-from app.decorators.permissions import JWTRouteHTTPPermission
+from app.decorators.permissions import AdminPermission, ClientTypesPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import DocumentFriendlyPipe, GlobalPointerIteratorPipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, LockService, UseRoles
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseAccess, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, LockService, UseRoles
 from app.definition._service import StateProtocol, ServiceStatus
 from app.depends.dependencies import get_access_info, get_auth_permission, get_client_info, get_query_params
 from app.errors.properties_error import GlobalKeyDoesNotExistsError
@@ -56,9 +56,11 @@ class SettingsRessource(BaseHTTPRessource):
     async def get_settings(self,response: Response,request:Request,authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         return self.settingService.data
     
-    @PingService([VaultService],infinite_wait=True)
     @UseRoles([Role.ADMIN])
+    @UsePermission(AdminPermission)
     @UseLimiter(limit_value='1/minutes')
+    @PingService([VaultService],infinite_wait=True)
+    @UseAccess(accesses={'Admin':True,'System':True})
     @LockService(VaultService,SettingService,lockType='writer')
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.POST, HTTPMethod.PUT],)
     async def modify_settings(self,response: Response,request:Request, settingsModel:SettingsModel, broker: Annotated[Broker, Depends(Broker)], authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ,default = Query(False)):
@@ -133,6 +135,8 @@ if CAPABILITIES['object']:
         @LockService(AssetService, lockType='writer')
         @HTTPStatusCode(status.HTTP_200_OK)
         @UseRoles([Role.ADMIN])
+        @UsePermission(AdminPermission)
+        @UseAccess(accesses={'Admin':True,'System':True})
         @UsePipe(GlobalPointerIteratorPipe(PARAMS_KEY_SEPARATOR))
         @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.DELETE],mount=to_mount_modify_obj)
         async def delete_global(self, response: Response, request: Request, broker: Annotated[Broker, Depends(Broker)], wait_timeout: int | float = Depends(wait_timeout_query), globalIter: PointerIterator = Depends(global_var_key[GLOBAL_KEY_RAISE]), authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
@@ -158,6 +162,8 @@ if CAPABILITIES['object']:
         @LockService(AssetService,lockType= 'writer')
         @HTTPStatusCode(status.HTTP_201_CREATED)
         @UseRoles([Role.ADMIN])
+        @UsePermission(AdminPermission)
+        @UseAccess(accesses={'Admin':True,'System':True})
         @UsePipe(GlobalPointerIteratorPipe(PARAMS_KEY_SEPARATOR))
         @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.POST, HTTPMethod.PUT],mount=to_mount_modify_obj)
         async def upsert_global(self, response: Response, request: Request, broker: Annotated[Broker, Depends(Broker)], globalModel: GlobalVarModel, wait_timeout: int | float = Depends(wait_timeout_query), globalIter: PointerIterator = Depends(global_var_key[GLOBAL_KEY]), force: bool = Depends(force_update_query), authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
@@ -212,6 +218,8 @@ if CAPABILITIES['agentic']:
         @UseGuard(MongooseHardLimitGuard(200,CustomModel))
         @UseHandler(TemplateHandler,PydanticHandler)
         @LockService(CustomService,lockType='reader')
+        @UsePermission(AdminPermission)
+        @UseAccess(accesses={'Admin':True,'System':True})
         @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
         async def add_custom_model(self,custom:CustomModel,response: Response,request:Request,broker: Annotated[Broker, Depends(Broker)],authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
             
@@ -235,6 +243,8 @@ if CAPABILITIES['agentic']:
         @UsePipe(DocumentFriendlyPipe,before=False)
         @UseHandler(TemplateHandler,PydanticHandler)
         @LockService(CustomService,lockType='reader')
+        @UsePermission(AdminPermission)
+        @UseAccess(accesses={'Admin':True,'System':True})
         @BaseHTTPRessource.HTTPRoute('/{model}/',methods=[HTTPMethod.PUT])
         async def update_custom_model(self,model:str,custom:UpdateCustomModel, response: Response,request:Request,broker: Annotated[Broker, Depends(Broker)],authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
 
@@ -260,6 +270,8 @@ if CAPABILITIES['agentic']:
         @Throttle(uniform=(50,200))
         @UsePipe(DocumentFriendlyPipe,before=False)
         @LockService(CustomService,lockType='reader')
+        @UsePermission(ClientTypesPermission(['Admin','System','User']))
+        @UseAccess(accesses={'Admin':True,'System':True,'User':True})
         @BaseHTTPRessource.HTTPRoute('/s/{model}',methods=[HTTPMethod.GET])
         async def fetch_custom_model(self,model:str,response: Response,request:Request,authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
             model:CustomModel = await self.mongooseService.get(CustomModel,model,True)
@@ -268,6 +280,9 @@ if CAPABILITIES['agentic']:
         @Throttle(uniform=(50,200))
         @UsePipe(DocumentFriendlyPipe,before=False)
         @LockService(CustomService,lockType='reader')
+        @UsePermission(ClientTypesPermission(['Admin','System','User']))
+        @UseAccess(accesses={'Admin':True,'System':True,'User':True})
+
         @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.GET])
         async def fetch_all(self,response: Response,request:Request,authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
             models = await self.mongooseService.find_all(CustomModel)
@@ -276,6 +291,8 @@ if CAPABILITIES['agentic']:
         @UseLimiter('5/minutes')
         @UseRoles([Role.ADMIN])
         @LockService(CustomService,lockType='reader')
+        @UsePermission(ClientTypesPermission(['Admin','System','User']))
+        @UseAccess(accesses={'Admin':True,'System':True,'User':True})
         @BaseHTTPRessource.HTTPRoute('/{model}',methods=[HTTPMethod.DELETE])
         async def delete_custom_model(self,model:str,response: Response,request:Request,broker: Annotated[Broker, Depends(Broker)],authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
             model:CustomModel = await self.mongooseService.get(CustomModel,model,True)

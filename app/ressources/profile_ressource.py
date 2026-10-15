@@ -7,17 +7,18 @@ from app.classes.mongo import MongoFindFilter
 from app.container import InjectInMethod,Get
 from app.decorators.handlers import AsyncIOHandler, CostHandler, DataSourceHandler, MiniServiceHandler, MongooseHandler, MotorErrorHandler, ProfileHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler, VaultHandler,CeleryControlHandler
 from app.decorators.interceptors import DataCostInterceptor
-from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, MCPPermission, ProfilePermission
-from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe, SanitizePathParameterPipe
+from app.decorators.permissions import AdminPermission, ClientTypesPermission, JWTRouteHTTPPermission, MCPPermission, ProfilePermission
+from app.decorators.pipes import DocumentFriendlyPipe, MerchantPipe, MiniServiceInjectorPipe, ResolveIssuerPipe, SanitizePathParameterPipe
 from app.definition._cost import DataCost
 from app.definition._ressource import BaseHTTPRessource, ClassMetaData, HTTPMethod,HTTPRessource, HTTPStatusCode, PingService, Throttle, UseAccess, UseInterceptor, UseLimiter, LockService, UseHandler, UsePermission, UsePipe, UseRoles
 from app.definition._service import MiniStateProtocol, StateProtocol
 from app.depends.dependencies import get_access_info, get_auth_permission, get_client_info
-from app.depends.funcs_dep import get_profile
+from app.depends.funcs_dep import get_issuer, get_profile
 from app.classes.profiles import ErrorProfileMap, ProfilModelValues, BaseProfileModel, ErrorProfileModel
 from app.errors.db_error import DocumentSingletonLimitReachedError
 from app.errors.depends_error import DataSourceNotSupportedError
 from app.manager.broker_manager import Broker
+from app.manager.issuer_manager import IssuerManager
 from app.manager.merchant_manager import Merchant
 from app.services.worker.celery_service import CeleryService, ChannelMiniService
 from app.services.config_service import ConfigService
@@ -35,7 +36,6 @@ from app.depends.variables import mcp_configuration
 
 
 PROFILE_PREFIX = 'profile'
-
 
 @UseRoles([Role.ADMIN])
 @PingService([MongooseService])
@@ -63,17 +63,17 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         self.configService = Get(ConfigService)
         self.rabbitmqService = Get(RabbitMQService)
 
-    @UsePipe(MerchantPipe())
     @Throttle(normal=(200,75))
     @PingService([VaultService])
     @UsePermission(AdminPermission)
-    @UseAccess(accesses={'Admin':True})
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @LockService(VaultService,lockType='reader')
+    @UseAccess(accesses={'Admin':True,'System':True})
+    @UsePipe(ResolveIssuerPipe(to_object=False),MerchantPipe())
     @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT))
     @UseHandler(VaultHandler,MiniServiceHandler,PydanticHandler,CostHandler,CeleryControlHandler,RedisHandler)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
-    async def create_profile(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def create_profile(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],issuer:str=Depends(get_issuer),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         profileModel = await self.pipe_profil_model(request,'model')
         
         if self.Model._singleton:
@@ -109,15 +109,15 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @Throttle(normal=(200,75))
     @PingService([VaultService])
     @UsePermission(AdminPermission)
-    @UseAccess(accesses={'Admin':True})
     @UsePipe(DocumentFriendlyPipe,before=False)
+    @UseAccess(accesses={'Admin':True,'System':True})
     @UseHandler(VaultHandler,MiniServiceHandler,CostHandler,CeleryControlHandler,RedisHandler)
     @LockService(VaultService,lockType='reader',check_status=False,infinite_wait=True)
     @LockService(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
     @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT,'refund'))
-    @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),MerchantPipe(-1))
+    @UsePipe(ResolveIssuerPipe(),MiniServiceInjectorPipe(CeleryService,'channel'),MerchantPipe(-1))
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.DELETE])
-    async def delete_profile(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def delete_profile(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],issuer:IssuerManager=Depends(get_issuer),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         profileModel = await self.mongooseService.get(self.Model,profile,True)
         creds = await self.profileService._read_encrypted_creds(profileModel.profile_id)
 
@@ -142,11 +142,11 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UseLimiter('10/minutes')
     @Throttle(uniform=(50,100))
     @UsePermission(AdminPermission)
-    @UseAccess(accesses={'Admin':True})
     @HTTPStatusCode(status.HTTP_200_OK)
     @UsePipe(DocumentFriendlyPipe,before=False)
+    @UseAccess(accesses={'Admin':True,'System':True})
     @UseHandler(PydanticHandler,CeleryControlHandler)
-    @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
+    @UsePipe(ResolveIssuerPipe(),MiniServiceInjectorPipe(CeleryService,'channel'),)
     @LockService(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PUT])
     async def update_profile(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
@@ -166,14 +166,14 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     
     @PingService([VaultService])
     @UsePermission(AdminPermission)
-    @UseAccess(accesses={'Admin':True})
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
-    @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
+    @UseAccess(accesses={'Admin':True,'System':True})
     @UseHandler(VaultHandler,PydanticHandler,CeleryControlHandler)
     @LockService(VaultService,lockType='reader',check_status=False)
+    @UsePipe(ResolveIssuerPipe(),MiniServiceInjectorPipe(CeleryService,'channel'))
     @LockService(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
-    @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PATCH])
-    async def set_credentials(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)], authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PUT])
+    async def set_credentials(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],issuer:IssuerManager=Depends(get_issuer), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         
         profileModel:BaseProfileModel = await self.mongooseService.get(self.Model,profile,True)
         modelCreds = await self.pipe_profil_model(request,'model_creds')
@@ -191,13 +191,13 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
     @UsePipe(DocumentFriendlyPipe,before=False)
     @UseHandler(MiniServiceHandler,DataSourceHandler)
-    @UsePipe(SanitizePathParameterPipe({},profile=True))
-    @UsePermission(ProfilePermission(True),MCPPermission)
-    @UseAccess(accesses={'Admin':True,'User':True,'App':True})
+    @UseAccess(accesses={'Admin':True,'User':True,'App':True,'System':True})
+    @UsePipe(ResolveIssuerPipe,SanitizePathParameterPipe({},profile=True))
     @LockService(ProfileService,lockType='reader',as_manager=False,motor_fallback=True)
     @UseRoles([Role.PUBLIC],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
+    @UsePermission(ClientTypesPermission(['Service','Twilio'],'exclude'),ProfilePermission(True),MCPPermission)
     @BaseHTTPRessource.HTTPRoute('/{profile:path}',methods=[HTTPMethod.GET],to_mcp_tool=True,operation_id='get_profile_information')
-    async def read_profile(self,profile:str,request:Request, response:Response,mongoFilter:Optional[MongoFindFilter],source:SourceMode=Depends(source_mode_query), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def read_profile(self,profile:str,request:Request, response:Response,mongoFilter:Optional[MongoFindFilter],source:SourceMode=Depends(source_mode_query),issuer:IssuerManager=Depends(get_issuer), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         match source:
             case 'database':
                 if profile != '':
@@ -220,27 +220,27 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
     @UseRoles([Role.PUBLIC])
     @Throttle(normal=(400,120))
-    @UsePermission(ProfilePermission)
-    @UseAccess(accesses={'Admin':True})
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
+    @UseAccess(accesses={'Admin':True,'System':True})
     @UseHandler(MiniServiceHandler,CeleryControlHandler)
-    @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
+    @UsePermission(ClientTypesPermission(['Admin','System']),ProfilePermission)
+    @UsePipe(ResolveIssuerPipe,MiniServiceInjectorPipe(CeleryService,'channel'),)
     @LockService(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
     @BaseHTTPRessource.HTTPRoute('/refresh/{profile}/',methods=[HTTPMethod.PATCH])
-    async def refresh_memory_state(self,profile:str,request:Request,channel:Annotated[ChannelMiniService,Depends(get_profile)],broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def refresh_memory_state(self,profile:str,request:Request,channel:Annotated[ChannelMiniService,Depends(get_profile)],broker:Annotated[Broker,Depends(Broker)],issuer:IssuerManager=Depends(get_issuer),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         await channel.refresh_worker_state()
         broker.propagate(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
 
     @Throttle(normal=(400,120))
     @UseHandler(MiniServiceHandler,RedisHandler)
     @UsePipe(DocumentFriendlyPipe(),before=False)
-    @UseAccess(accesses={'Admin':True,'User':True})
-    @UsePermission(ProfilePermission(),MCPPermission())
-    @UsePipe(MiniServiceInjectorPipe(CeleryService,'service'),)
+    @UseAccess(accesses={'Admin':True,'User':True,'System':True})
     @LockService(ProfileService,'reader',as_manager=True,miniLockType='reader')
+    @UsePipe(ResolveIssuerPipe(),MiniServiceInjectorPipe(CeleryService,'service'),)
     @UseRoles([Role.PUBLIC],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
+    @UsePermission(ClientTypesPermission(['Admin','User','System'],),ProfilePermission(),MCPPermission())
     @BaseHTTPRessource.HTTPRoute('/errors/{profile}/',methods=[HTTPMethod.GET],to_mcp_tool=True,operation_id='get_profile_errors')
-    async def read_error(self,profile:str,error:ErrorProfileMap,service:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def read_error(self,profile:str,error:ErrorProfileMap,service:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response,issuer:IssuerManager=Depends(get_issuer), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         return await service.fetch_errors(**error.model_dump())
 
     @classmethod
