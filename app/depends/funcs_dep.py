@@ -205,16 +205,13 @@ def get_credentials(credentials: Annotated[HTTPBasicCredentials, Depends(HTTPBas
 def get_access(access:str):
     return access
 
-def get_issuer(request:Request,ownership:OwnershipMode=Depends(ownership_mode_query),clientInfo:ClientAccessInfo=Depends(get_client_info),accessInfo:AccessAPIInfo=Depends(get_access_info))->IssuerInfo:
+def get_issuer(request:Request,ownership:OwnershipMode=Depends(ownership_mode_query),clientInfo:ClientAccessInfo=Depends(get_client_info),accessInfo:AccessAPIInfo=Depends(get_access_info))->IssuerInfo|None:
     group = None
     mechanism = configService.AUTH_MECHANISM
     while True:
         match mechanism:
             case 'none':
-                issuer = 'none'
-                ownership = 'public'
-                _type = 'User'
-                break
+                return None
             case 'token':
                 issuer = accessInfo['id']
                 _type = accessInfo['type']

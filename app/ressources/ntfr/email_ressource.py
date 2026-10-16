@@ -152,7 +152,7 @@ class EmailRessource(BaseHTTPRessource):
                     mail_content.meta._Message_ID = tracker.make_msgid
 
                 meta = mail_content.meta.model_dump(mode='python',exclude=self.exclude_meta)
-                await taskManager.offload_task(len(To),0,index,email.sendTemplateEmail,datas, meta, template.images,email_profile=email.miniService_id)
+                await taskManager.offload_task(len(To),0,index,email.sendTemplateEmail,datas, meta, template.images,email_profile=email.miniService_id,issuer=issuer.export())
 
             return taskManager.results
 

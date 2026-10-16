@@ -106,7 +106,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
 
                         twilio_ids.append(tid)
 
-                await taskManager.offload_task(weight,0,content.index,self.smsService.send_template_sms,message,twilio_tracking_id=twilio_ids,twilio_profile=twilio.miniService_id)
+                await taskManager.offload_task(weight,0,content.index,self.smsService.send_template_sms,message,twilio_tracking_id=twilio_ids,twilio_profile=twilio.miniService_id,issuer=issuer.export())
             return taskManager.results
 
         @UsePipe(OffloadedTaskResponsePipe,before=False)
@@ -124,7 +124,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
             
             _,body= template.build(otpModel.content,...,True)
             taskManager.set_algorithm('route')
-            await taskManager.offload_task(1,10,None,self.smsService.send_otp,otpModel,body,twilio_profile=twilio.miniService_id,_s=s(TaskHeaviness.LIGHT))
+            await taskManager.offload_task(1,10,None,self.smsService.send_otp,otpModel,body,twilio_profile=twilio.miniService_id,_s=s(TaskHeaviness.LIGHT),issuer=issuer.export())
             return taskManager.results
         
     @UsePipe(OffloadedTaskResponsePipe,before=False)
@@ -152,7 +152,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
 
                     twilio_ids.append(tid)
             
-            await taskManager.offload_task(weight,0,content.index,self.smsService.send_custom_sms,message,twilio_tracking_id = twilio_ids,twilio_profile=twilio.miniService_id)
+            await taskManager.offload_task(weight,0,content.index,self.smsService.send_custom_sms,message,twilio_tracking_id = twilio_ids,twilio_profile=twilio.miniService_id,issuer=issuer.export())
         return taskManager.results
         
     @BaseHTTPRessource.HTTPRoute('/simple/{profile}/',methods=[HTTPMethod.POST],mount=False,operation_id=mcp_operation_id,to_mcp_tool=True)

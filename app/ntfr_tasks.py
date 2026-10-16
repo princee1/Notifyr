@@ -113,10 +113,10 @@ if APP_MODE == ApplicationMode.worker:
 
 def RegisterTask(heaviness: TaskHeaviness, retry_policy=None,rate_limit:str=None,acks_late:bool=False):
     def decorator(task: Callable):
-        kwargs = {}
-        kwargs['bind'] =True
-        kwargs['retry_policy'] = retry_policy
-        kwargs['rate_limit'] = rate_limit
+        task_options = {}
+        task_options['bind'] =True
+        task_options['retry_policy'] = retry_policy
+        task_options['rate_limit'] = rate_limit
         #kwargs['acks_late'] = acks_late
 
         name = task_name(task.__qualname__)
@@ -127,7 +127,7 @@ def RegisterTask(heaviness: TaskHeaviness, retry_policy=None,rate_limit:str=None
 
         TASK_REGISTRY[name] = {
             'heaviness': heaviness,
-            'task': celery_app.task(**kwargs)(wrapper),
+            'task': celery_app.task(**task_options)(wrapper),
             'raw_task':task,
         }
 

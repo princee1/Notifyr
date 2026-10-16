@@ -84,6 +84,8 @@ class BaseProfilModelRessource(BaseHTTPRessource):
             await self.mongooseService.primary_key_constraint(profileModel,True)
             await self.mongooseService.exists_unique(profileModel,True)
             await self.mongooseService.condition_satisfaction(profileModel)
+
+        profileModel.issuer = issuer.export()
         
         async def rollback():
             return await self.profileService._delete_encrypted_creds(profileModel.profile_id,profileModel._vault)

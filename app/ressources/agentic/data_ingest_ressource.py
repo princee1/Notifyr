@@ -1,7 +1,7 @@
 from typing import Annotated, List
 from fastapi import Depends, File, HTTPException, Request, Response, UploadFile,status
 from validators.uri import uri
-from app.classes.auth_permission import AccessAPIInfo, AuthPermission, ClientAccessInfo, Role
+from app.classes.auth_permission import AccessAPIInfo, AuthPermission, ClientAccessInfo, IssuerInfo, Role
 from app.classes.embeddings import ComparableEmbeddings, EmbeddingWrapper, EmbeddingModel
 from app.container import Get, InjectInMethod
 from app.cost.ingest_cost import DeleteDocumentIngestCost, FileIngestCost, CrawlMarkdownIngestCost, ResearchMarkdownIngestCost
@@ -27,7 +27,7 @@ from app.services.file.file_service import FileService
 from app.services.profile_service import ProfileMiniService, ProfileService
 from app.services.setting_service import SettingService
 from app.services.vault_service import VaultService
-from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, ProfilePermission, UserPermission
+from app.decorators.permissions import AdminPermission, ClientTypesPermission, JWTRouteHTTPPermission, ProfilePermission, UserPermission
 from app.definition._ressource import UseLimiter
 from app.services.worker.arq_service import ArqIngestTaskService, JobAlreadyExistsError, JobInProgressError,JobStatus, UnexpectedJobStatusError
 from app.models.ingest_model import AbortedJobResponse,CrawlingComparableURL,DeleteIngestUriMetadata,ResearchDataIngestModel,ResearchIngestDataResponse
@@ -60,7 +60,8 @@ class JobArqRessource(BaseHTTPRessource):
     @UseAccess(accesses={'Admin':True,'User':True,'System':True})
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.GET])
     async def get_queued_jobs(self, request: Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],autPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
-        return await self.arqService.get_queued_jobs()
+        jobs = await self.arqService.get_queued_jobs()
+        return [j for j in jobs if issuer.verify_ownership(j.kwargs.get('issuer',None),__raise__=False)]
 
     @UseHandler(AsyncIOHandler)
     @UsePermission(UserPermission)
@@ -70,7 +71,9 @@ class JobArqRessource(BaseHTTPRessource):
     @UseAccess(accesses={'Admin':True,'User':True,'System':True})
     @BaseHTTPRessource.HTTPRoute('/results/', methods=[HTTPMethod.GET])
     async def get_jobs_result(self, request: Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],autPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
-        return await self.arqService.get_jobs_results()
+        jobs = await self.arqService.get_jobs_results()
+        return [j for j in jobs if issuer.verify_ownership(j.kwargs.get('issuer',None),__raise__=False)]
+
 
     @UseHandler(AsyncIOHandler)    
     @UsePermission(UserPermission)
@@ -82,6 +85,9 @@ class JobArqRessource(BaseHTTPRessource):
     async def get_job_info(self, job_id: str, request: Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],autPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         job = await self.arqService.exists(job_id, raise_on_exist=False)
         info  = await self.arqService.info(job)
+        
+        provided_issuer:IssuerInfo|None =info.kwargs('issuer',None)
+        issuer.verify_ownership(provided_issuer)
         return info
 
     @UseHandler(AsyncIOHandler)
@@ -94,23 +100,29 @@ class JobArqRessource(BaseHTTPRessource):
     async def get_job_result(self, job_id: str, request: Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],autPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         job = await self.arqService.exists(job_id, raise_on_exist=False)
         result = await self.arqService.get_result(job)
+
+        provided_issuer:IssuerInfo|None =result.kwargs('issuer',None)
+        issuer.verify_ownership(provided_issuer)
         return result
 
     @UseLimiter('5/hour')
     @Throttle(uniform=(100,300))
-    @UsePermission(AdminPermission)
     @PingService([ArqIngestTaskService])
-    @UseAccess(accesses={'Admin':True,'System':True})
     @LockService(ArqIngestTaskService,lockType='reader')
+    @UseAccess(accesses={'Admin':True,'System':True,'User':True})
+    @UsePermission(ClientTypesPermission(['Admin','System','User']))
     @UseHandler(CostHandler,AsyncIOHandler,FileHandler,RedisHandler,ArqHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
     @BaseHTTPRessource.HTTPRoute('/{job_id}/', methods=[HTTPMethod.DELETE],response_model=AbortedJobResponse)
     async def abort_job(self, job_id: str, request: Request,response:Response,cost:Annotated[DeleteDocumentIngestCost,Depends(DeleteDocumentIngestCost)],broker:Annotated[Broker,Depends(Broker)],issuer:Annotated[IssuerManager,Depends(IssuerManager)],force:bool = Depends(force_update_query),autPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         job,status = await self.arqService.exists(job_id, raise_on_exist=False,return_status=True)
+        info = await self.arqService.info(job)
+
+        provided_issuer:IssuerInfo = info.kwargs.get('issuer',None)
+        issuer.verify_ownership(provided_issuer)
 
         match status:
             case JobStatus.queued | JobStatus.deferred:
-                info = await self.arqService.info(job)
                 size,uri,task = info.kwargs.get('size',0),info.kwargs.get('uri',None),info.kwargs.get('_nickname',None)
                 await self.arqService.dequeue_job(job_id)
 
@@ -138,12 +150,12 @@ class JobArqRessource(BaseHTTPRessource):
             case _:
                 raise UnexpectedJobStatusError(job_id,status)
 
-@UseRoles([Role.ADMIN])
 @UsePipe(GraphRelationshipPipe)
 @IncludeRessource(JobArqRessource)
+@UseRoles([Role.ADMIN,Role.INGEST],)
 @PingService([ArqIngestTaskService])
-@UseAccess(accesses={'Admin':True,'System':True})
-@UsePermission(JWTRouteHTTPPermission,AdminPermission)
+@UsePermission(JWTRouteHTTPPermission,ClientTypesPermission(['Admin','System','User']))
+@UseAccess(accesses={'Admin':True,'System':True,'User':True})
 @UseHandler(ServiceAvailabilityHandler,CostHandler,DataIngestHandler,CustomSchemaHandler)
 @HTTPRessource('data-ingest')
 class DataIngestRessource(BaseHTTPRessource):
@@ -219,6 +231,7 @@ class DataIngestRessource(BaseHTTPRessource):
                     kwargs={**ingestTask.model_dump(mode='json',exclude=('expires','defer_by')),
                             **meta.model_dump(),
                             'request_id':request_id,
+                            'issuer':issuer.export(),
                             '_nickname':ArqDataTaskConstant.FILE_DATA_TASK,
                             'state':dict(),
                             'step':None
@@ -288,6 +301,7 @@ class DataIngestRessource(BaseHTTPRessource):
                     **metadata.model_dump(include=('uri','size')),
                     'subject':embedding,
                     'request_id':request_id,
+                    'issuer':issuer.export(),
                     '_nickname':ArqDataTaskConstant.CRAWL_DATA_TASK,
                     'state':dict(),
                     'step':None
@@ -337,6 +351,7 @@ class DataIngestRessource(BaseHTTPRessource):
                     **metadata.model_dump(include=('uri','size')),
                     'query':embedding,
                     'request_id':request_id,
+                    'issuer':issuer.export(),
                     '_nickname':ArqDataTaskConstant.RESEARCH_DATA_TASK,
                     'state':dict(),
                     'step':None

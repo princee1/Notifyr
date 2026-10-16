@@ -44,7 +44,7 @@ from app.manager.issuer_manager import IssuerManager
 
 base_attr = {'id','revision_id','created_at','last_modified','version'}
 
-@UseRoles([Role.ADMIN])
+@UseRoles([Role.ADMIN,Role.AGENT])
 @PingService([MongooseService])
 @LockService(MongooseService,lockType='reader',check_status=False)
 @UseHandler(ServiceAvailabilityHandler,AsyncIOHandler,MongooseHandler,MotorErrorHandler)
@@ -109,13 +109,13 @@ class AgentsRessource(BaseHTTPRessource):
     @Throttle(normal=(200,80))
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @UsePipe(DocumentFriendlyPipe,before=False)
-    @UseAccess(accesses={'Admin':True,'System':True})
     @UsePermission(JWTRouteHTTPPermission,AdminPermission)
     @LockService(LLMService,lockType='reader',as_manager=False)
+    @UseAccess(accesses={'Admin':True,'System':True,'User':True})
     @UseHandler(LLMHandler,RedisHandler,CostHandler,AgentHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.AGENT_CREDIT))
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
-    async def create_agent(self,agentModel:AgentModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],similarity:Annotated[EmbeddingSimilarity,Depends(EmbeddingSimilarity)], profile:str=Depends(get_agent), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def create_agent(self,agentModel:AgentModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],similarity:Annotated[EmbeddingSimilarity,Depends(EmbeddingSimilarity)],issuer:Annotated[IssuerManager,Depends(IssuerManager)], profile:str=Depends(get_agent), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         await self.mongooseService.primary_key_constraint(agentModel,True)
         await self.mongooseService.exists_unique(agentModel,True)
         
@@ -128,6 +128,8 @@ class AgentsRessource(BaseHTTPRessource):
         if similarity.mode == 'hard':
             embedding = await self.semantic_lookup(cost.request_id,cost.issuer,agentModel,similarity.threshold,agentModels)
             agentModel.embeddings = embedding
+
+        agentModel.issuer = issuer.export(mode='model')
 
         merchant.safe_payment(
             None,
@@ -173,11 +175,11 @@ class AgentsRessource(BaseHTTPRessource):
     @Throttle(normal=(100,40))
     @UsePipe(DocumentFriendlyPipe,before=False)
     @UsePipe(IssuerModifierPipe,MerchantPipe(-1))
-    @UseAccess(accesses={'Admin':True,'System':True})
     @UseHandler(CostHandler,RedisHandler,AgentHandler)
-    @UsePermission(JWTRouteHTTPPermission,AdminPermission)
     @LockService(LLMService,lockType='reader',as_manager=False)
+    @UseAccess(accesses={'Admin':True,'System':True,'User':True})
     @UseInterceptor(DataCostInterceptor(CostConstant.AGENT_CREDIT,'refund'))
+    @UsePermission(JWTRouteHTTPPermission,ClientTypesPermission(['Admin','System','User']))
     @BaseHTTPRessource.HTTPRoute('/{agent}/',methods=[HTTPMethod.DELETE])
     async def delete_agent(self,agent:str,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],issuer:Annotated[IssuerManager,Depends(IssuerManager)],profile:str=Depends(get_agent),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         agentModel = await self.mongooseService.get(AgentModel,agent,True)
@@ -208,14 +210,16 @@ class AgentsRessource(BaseHTTPRessource):
     @UseLimiter('10/hours')
     @Throttle(uniform=(100,200))
     @UsePipe(DocumentFriendlyPipe,before=False)
-    @UseAccess(accesses={'Admin':True,'System':True})
     @UseHandler(PydanticHandler,LLMHandler,AgentHandler)
-    @UsePermission(JWTRouteHTTPPermission,AdminPermission)
     @LockService(LLMService,lockType='reader',as_manager=False)
+    @UseAccess(accesses={'Admin':True,'System':True,'User':True})
+    @UsePermission(JWTRouteHTTPPermission,ClientTypesPermission(['Admin','User','System']))
     @BaseHTTPRessource.HTTPRoute('/{agent}/',methods=[HTTPMethod.PUT])
     async def update_agent(self,agent:str,request:Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],broker:Annotated[Broker,Depends(Broker)],embeddingLookup:Annotated[EmbeddingSimilarity,Depends(EmbeddingSimilarity)],body: dict = Body(...),request_id:str=Depends(get_request_id),profile:str=Depends(get_agent),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         
         agentModel = await self.mongooseService.get(AgentModel,agent,True)
+        issuer.verify_ownership(agentModel.issuer)
+
         agentUpdateModel = self.UpdateAgentModel.model_validate(body)
         await agentModel.update_content(agentUpdateModel)
 

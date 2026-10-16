@@ -21,7 +21,7 @@ ClientTypeLiteral = Literal['User','Admin','Twilio','App','Service','System']
 PolicyUpdateMode = Literal['set','merge','delete']
 AuthMechanism = Literal['userpass','token','none','both']
 SessionMechanism =Literal['redis+sync','vault+sync','redis','none']
-OwnershipMode = Literal['public','private','protected']
+OwnershipMode = Literal['public','private','protected','exclusive']
 
 EXTENSION = [f".{ext}" for ext in Extension._value2member_map_.keys()]
 
@@ -68,6 +68,8 @@ class Role(Enum):
     PROFILE ="PROFILE"
     MCP = "MCP"
     AGENT = "AGENT"
+    INGEST = "INGEST"
+    CELERY = "CELERY"
 
 class Scope(Enum):
     SoloDolo = 'SoloDolo'
@@ -110,6 +112,18 @@ class IssuerInfo(TypedDict):
     type:ClientTypeLiteral |ClientType
     ownership:OwnershipMode
     group:str
+
+class IssuerInfoModel(BaseModel):
+    issuer:str = Field(max_length=60)
+    ownership:OwnershipMode
+    group:Optional[str] = Field(default=None,max_length=60)
+
+    @model_validator(mode='after')
+    def validate_group(self)->Self:
+        if self.ownership == 'protected' and self.group == None:
+            raise ValueError
+        return self
+
 
 
 API_TOKEN_CLIENT_TYPE_SET = {ClientType.Twilio,ClientType.App,ClientType.Service}

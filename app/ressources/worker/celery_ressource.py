@@ -1,10 +1,10 @@
 from typing import Annotated, Callable, get_args
 from aiohttp_retry import List
 from fastapi import Depends, HTTPException, Request, Response,status
-from app.classes.auth_permission import AccessAPIInfo, AuthPermission, ClientAccessInfo, Role
+from app.classes.auth_permission import AccessAPIInfo, AuthPermission, ClientAccessInfo, IssuerInfoModel, Role
 from app.container import InjectInMethod
 from app.decorators.handlers import AsyncIOHandler, CeleryControlHandler, MiniServiceHandler, ProfileHandler, ServiceAvailabilityHandler
-from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, UserPermission
+from app.decorators.permissions import AdminPermission, ClientTypesPermission, JWTRouteHTTPPermission, UserPermission
 from app.decorators.pipes import MiniServiceInjectorPipe, IssuerModifierPipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseAccess, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles, LockService
 from app.depends.dependencies import get_access_info, get_auth_permission, get_client_info, get_query_params
@@ -32,9 +32,9 @@ class CeleryRessource(BaseHTTPRessource):
     
     @UseLimiter('1/seconds')
     @UseRoles([Role.PUBLIC])
-    @UsePermission(UserPermission)
     @UseHandler(CeleryControlHandler)
     @UseAccess(accesses={'Admin':True,'User':True,'System':True})
+    @UsePermission(ClientTypesPermission(['Admin','User','System']))
     @LockService(CeleryService,lockType='reader',check_status=False)
     @PingService([{"cls":CeleryService,"kwargs":{"__celery_availability__":True}}])
     @BaseHTTPRessource.HTTPRoute('/ping/',methods=[HTTPMethod.GET])
@@ -43,9 +43,9 @@ class CeleryRessource(BaseHTTPRessource):
     
     @UseLimiter('1/minutes')
     @UseRoles([Role.PUBLIC])
-    @UsePermission(UserPermission)
     @UseHandler(CeleryControlHandler)
     @UseAccess(accesses={'Admin':True,'User':True,'System':True})
+    @UsePermission(ClientTypesPermission(['Admin','User','System']))
     @LockService(CeleryService,lockType='reader',check_status=False)
     @PingService([{"cls":CeleryService,"kwargs":{"__celery_availability__":True}}])
     @BaseHTTPRessource.HTTPRoute('/inspect/',methods=[HTTPMethod.GET])
@@ -53,34 +53,46 @@ class CeleryRessource(BaseHTTPRessource):
         return await self.celeryService.inspect(mode)
 
     @UseLimiter('10/minutes')
-    @UsePermission(AdminPermission)
-    @UseAccess(accesses={'Admin':True,'System':True})
+    @UseRoles([Role.CELERY,Role.ADMIN,Role.PROFILE])
     @UseHandler(MiniServiceHandler,CeleryControlHandler)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
+    @UseAccess(accesses={'Admin':True,'System':True,'User':True})
+    @UsePermission(ClientTypesPermission(['Admin','User','System']))
     @LockService(CeleryService,lockType='reader',check_status=False,as_manager=True)
     @PingService([{"cls":CeleryService,"kwargs":{"__celery_availability__":True,"__verify_celery__":True}}])
     @BaseHTTPRessource.HTTPRoute('/purge/{profile}/',methods=[HTTPMethod.DELETE])
     async def purge_queue(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)], request:Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+        provided_issuer:IssuerInfoModel|None = channel.depService.model.issuer
+        issuer.verify_ownership(provided_issuer)
+
         return await channel.purge_queue()
 
     @UseLimiter('1/minutes')
-    @UsePermission(AdminPermission)
-    @UseAccess(accesses={'Admin':True,'System':True})
+    @UseRoles([Role.CELERY,Role.ADMIN,Role.PROFILE])
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
+    @UseAccess(accesses={'Admin':True,'System':True,'User':True})
+    @UsePermission(ClientTypesPermission(['Admin','User','System']))
     @LockService(CeleryService,lockType='reader',check_status=False,as_manager=True)
     @PingService([{"cls":CeleryService,"kwargs":{"__celery_availability__":True,"__verify_celery__":True}}])
     @BaseHTTPRessource.HTTPRoute('/pause/{profile}/',methods=[HTTPMethod.DELETE])
     async def pause_queue(self,channel:Annotated[ChannelMiniService,Depends(get_profile)], request:Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+        provided_issuer:IssuerInfoModel|None = channel.depService.model.issuer
+        issuer.verify_ownership(provided_issuer)
+
         await channel.pause_worker()
 
     @UseLimiter('1/minutes')
-    @UsePermission(AdminPermission)
-    @UseAccess(accesses={'Admin':True,'System':True})
+    @UseRoles([Role.CELERY,Role.ADMIN,Role.PROFILE])
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
+    @UseAccess(accesses={'Admin':True,'System':True,'User':True})
+    @UsePermission(ClientTypesPermission(['Admin','User','System']))
     @LockService(CeleryService,lockType='reader',check_status=False,as_manager=True)
     @PingService([{"cls":CeleryService,"kwargs":{"__celery_availability__":True,"__verify_celery__":True}}])
     @BaseHTTPRessource.HTTPRoute('/resume/{profile}/',methods=[HTTPMethod.PATCH])
     async def resume_queue(self,channel:Annotated[ChannelMiniService,Depends(get_profile)], request:Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+        provided_issuer:IssuerInfoModel|None = channel.depService.model.issuer
+        issuer.verify_ownership(provided_issuer)
+        
         await channel.resume_worker()
 
     ################################################################        ############################################################

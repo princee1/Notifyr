@@ -81,7 +81,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
             
             _, body = template.build(otpModel.content, ...,True)
             taskManager.set_algorithm('route')
-            await taskManager.offload_task(1,0,None,self.callService.send_otp_voice_call,body, otpModel,twilio.miniService_id,_s=s(TaskHeaviness.LIGHT))
+            await taskManager.offload_task(1,0,None,self.callService.send_otp_voice_call,body, otpModel,twilio.miniService_id,_s=s(TaskHeaviness.LIGHT),issuer=issuer.export())
 
             return taskManager.results
 
@@ -111,7 +111,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
                         broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,event)
                         twilio_ids.append(tid)
 
-                await taskManager.offload_task(weight,0, index, self.callService.send_template_voice_call, result, content,None,twilio_ids,twilio.miniService_id)
+                await taskManager.offload_task(weight,0, index, self.callService.send_template_voice_call, result, content,None,twilio_ids,twilio.miniService_id,issuer=issuer.export())
             return taskManager.results
 
         @UseHandler(AsyncIOHandler,TemplateHandler)
@@ -146,7 +146,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
             
             result = self.callService.gather_dtmf(otpModel, rx_id, keepAliveConn.x_request_id)
             call_details = otpModel.model_dump(exclude={'otp', 'content','service','instruction'})
-            call_results = await self.callService.send_template_voice_call(result, call_details,subject_id=keepAliveConn.rx_subject.subject_id,twilio_tracking=None,twilio_profile=twilio.miniService_id)
+            call_results = await self.callService.send_template_voice_call(result, call_details,subject_id=keepAliveConn.rx_subject.subject_id,twilio_tracking=None,twilio_profile=twilio.miniService_id,issuer=issuer.export())
 
             return await keepAliveConn.wait_for(call_results, 'otp_result')
         
@@ -174,7 +174,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
             call_details['record'] = True
             
             result = self.callService.gather_speech(otpModel,rx_id,keepAliveConn.x_request_id)
-            call_results = await self.callService.send_template_voice_call(result, call_details,rx_id,twilio_profile=twilio.miniService_id)
+            call_results = await self.callService.send_template_voice_call(result, call_details,rx_id,twilio_profile=twilio.miniService_id,issuer=issuer.export())
 
             return await keepAliveConn.wait_for(call_results,'otp_result')
 
@@ -205,7 +205,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
                     broker.stream(StreamConstant.TWILIO_EVENT_STREAM_CALL,event)
                     twilio_ids.append(tid)
 
-            await taskManager.offload_task(weight, 0, content.index, self.callService.send_twiml_voice_call, url, details,twilio_tracking_id = twilio_ids,twilio_profile=twilio.miniService_id)
+            await taskManager.offload_task(weight, 0, content.index, self.callService.send_twiml_voice_call, url, details,twilio_tracking_id = twilio_ids,twilio_profile=twilio.miniService_id,issuer=issuer.export())
         return taskManager.results
 
     @UseLimiter(limit_value='50/day')
@@ -219,7 +219,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
     @UseRoles([Role.RELAY,Role.TWILIO],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
     @UsePipe(MiniServiceInjectorPipe(TwilioService,'twilio'),MiniServiceInjectorPipe(CeleryService,'channel'),CeleryTaskPipe,ContentIndexPipe,ContactToInfoPipe('phone','to'),TwilioPhoneNumberPipe('default'))
     @BaseHTTPRessource.HTTPRoute('/custom/{profile}/', methods=[HTTPMethod.POST], cost_definition=CostConstant.phone_custom,to_mcp_tool=True,operation_id=mcp_operation_id)
-    async def voice_custom(self,profile:str,twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],channel:Annotated[ChannelMiniService,Depends(get_profile)], scheduler: CallCustomSchedulerModel, request: Request, response: Response,cost:Annotated[CallCost,Depends(CallCost)], broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager: Annotated[TaskManager, Depends(TaskManager)], authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def voice_custom(self,profile:str,twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],channel:Annotated[ChannelMiniService,Depends(get_profile)], scheduler: CallCustomSchedulerModel, request: Request, response: Response,cost:Annotated[CallCost,Depends(CallCost)],issuer:Annotated[IssuerManager,Depends(IssuerManager)], broker:Annotated[Broker,Depends(Broker)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)],taskManager: Annotated[TaskManager, Depends(TaskManager)], authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         for content in scheduler.content:
             details = content.model_dump(
                 exclude={'body', 'voice', 'language', 'loop','as_contact','index','will_track','sender_type'})
@@ -238,7 +238,7 @@ class OnGoingCallRessource(BaseHTTPRessource):
 
                     twilio_id.append(tid)
 
-            await taskManager.offload_task(weight,0, content.index, self.callService.send_custom_voice_call, body, voice, lang, loop, details,twilio_tracking_id = twilio_id,twilio_profile=twilio.miniService_id)
+            await taskManager.offload_task(weight,0, content.index, self.callService.send_custom_voice_call, body, voice, lang, loop, details,twilio_tracking_id = twilio_id,twilio_profile=twilio.miniService_id,issuer=issuer.export())
         return taskManager.results
 
 
