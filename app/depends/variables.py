@@ -1,6 +1,7 @@
 
 from typing import Callable, Literal,get_args
 from fastapi import Depends, Query, Request, Response
+from app.classes.auth_permission import OwnershipMode
 from app.container import GetDependsFunc,Get
 from app.services import ConfigService
 from app.depends.dependencies import get_query_params
@@ -63,6 +64,12 @@ source_mode_query:Callable[[Request],SourceMode] = get_query_params('source','me
 ScopeMode = Literal['all','single']
 scope_choices = list(get_args(ScopeMode))
 scope_mode_query:Callable[[Request],ScopeMode] = get_query_params('scope','single',False,raise_except=True,checker=_wrap_checker('scope',lambda v: v in scope_choices,choices=scope_choices))
+
+
+# ----------------------------------------------                                    ---------------------------------- #
+
+ownership_choices = list(get_args(OwnershipMode))
+ownership_mode_query:Callable[[Request],OwnershipMode] = get_query_params('ownership','public',False,raise_except=True,checker=_wrap_checker('ownership',lambda v: v in scope_choices,choices=scope_choices))
 
 # ----------------------------------------------                                    ---------------------------------- #
 

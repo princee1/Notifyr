@@ -21,6 +21,7 @@ ClientTypeLiteral = Literal['User','Admin','Twilio','App','Service','System']
 PolicyUpdateMode = Literal['set','merge','delete']
 AuthMechanism = Literal['userpass','token','none','both']
 SessionMechanism =Literal['redis+sync','vault+sync','redis','none']
+OwnershipMode = Literal['public','private','protected']
 
 EXTENSION = [f".{ext}" for ext in Extension._value2member_map_.keys()]
 
@@ -104,7 +105,15 @@ class AuthSignature(TypedDict):
     last_login:float
     device_name:str
 
+class IssuerInfo(TypedDict):
+    issuer:str
+    type:ClientTypeLiteral |ClientType
+    ownership:OwnershipMode
+    group:str
+
     
+
+
 API_TOKEN_CLIENT_TYPE_SET = {ClientType.Twilio,ClientType.App,ClientType.Service}
 
 class FuncMetaData(TypedDict):
@@ -148,6 +157,7 @@ class ClientAccessInfo(TypedDict):
     client_id: str
     salt:str
 
+    group_id:str # NOTE computed value
     status:PermissionStatus= 'active' # NOTE Computed value
     auth_type:AuthType # NOTE Computed value
     client_type:ClientType # NOTE computed value

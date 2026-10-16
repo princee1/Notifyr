@@ -2,7 +2,7 @@ import functools
 from typing import Annotated, Callable
 from fastapi import Depends, HTTPException, Header, Query, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from app.classes.auth_permission import AuthPermission, ClientAccessInfo, ClientType, ContactPermission, PolicyModel, Role, filter_asset_permission
+from app.classes.auth_permission import AccessAPIInfo, AuthPermission, ClientAccessInfo, ClientType, ContactPermission, IssuerInfo, PolicyModel, Role, filter_asset_permission
 from app.container import Get
 from app.definition._error import ServerFileError
 from app.models.orm.contacts_model import ContactORM, ContentSubscriptionORM
@@ -10,9 +10,10 @@ from app.models.orm.link_model import LinkORM
 from app.models.orm.security_model import BlacklistModel, ClientORM, GroupClientORM, PolicyMappingORM
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService, SecurityService
-from app.depends.dependencies import get_access_info, get_auth_permission, get_client_info, get_query_params, get_request_id, wrapper_auth_permission
+from app.depends.dependencies import get_access_info, get_auth_mechanism, get_auth_permission, get_client_info, get_query_params, get_request_id, wrapper_auth_permission
 
 from app.services.vault_service import VaultService
+from app.utils.constant import FastAPIConstant
 from app.utils.toolbox import RunInThreadPool
 from .variables import *
 
@@ -204,8 +205,33 @@ def get_credentials(credentials: Annotated[HTTPBasicCredentials, Depends(HTTPBas
 def get_access(access:str):
     return access
 
-def get_issuer(request:Request):
-    return ''
+def get_issuer(request:Request,ownership:OwnershipMode=Depends(ownership_mode_query),clientInfo:ClientAccessInfo=Depends(get_client_info),accessInfo:AccessAPIInfo=Depends(get_access_info))->IssuerInfo:
+    group = None
+    mechanism = configService.AUTH_MECHANISM
+    while True:
+        match mechanism:
+            case 'none':
+                issuer = 'none'
+                ownership = 'public'
+                _type = 'User'
+                break
+            case 'token':
+                issuer = accessInfo['id']
+                _type = accessInfo['type']
+                if ownership == 'protected':
+                    raise HTTPException(status.HTTP_400_BAD_REQUEST,'access does not have group value',headers=FastAPIConstant.OO_SCOPE_HEADERS)
+                break
+            case 'userpass':
+                issuer = clientInfo['client_id']
+                _type = clientInfo['type']
+                if ownership == 'protected' and (group:=clientInfo.get('group_id',None))==None :
+                    raise HTTPException(status.HTTP_400_BAD_REQUEST,'current client not associated with a group',headers=FastAPIConstant.OO_SCOPE_HEADERS)
+                break
+            case 'both':
+                mechanism = get_auth_mechanism(request)
+                continue
+
+    return {'issuer':issuer,'type':_type,'ownership':ownership,'group':group}
 
 def get_session_id(clientInfo:ClientAccessInfo = Depends(get_client_info)):
     return clientInfo.get('session_id',None)

@@ -163,6 +163,7 @@ class JWTAuthMiddleware(MiddleWare):
             async with self.adminService.lock('reader',client_id) as clientService:
                 clientInfo['client_type'] = clientService.client.client_type
                 clientInfo['auth_type'] = clientService.client.auth_type
+                clientInfo['group_id'] = str(clientService.client.group.group_id)
                 
                 client_ip = get_client_ip(request) #TODO : check wether we must use the scope to verify the client
                 
