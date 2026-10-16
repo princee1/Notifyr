@@ -5,10 +5,11 @@ from app.classes.auth_permission import AccessAPIInfo, AuthPermission, ClientAcc
 from app.container import InjectInMethod
 from app.decorators.handlers import AsyncIOHandler, CeleryControlHandler, MiniServiceHandler, ProfileHandler, ServiceAvailabilityHandler
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission, UserPermission
-from app.decorators.pipes import MiniServiceInjectorPipe, ResolveIssuerPipe
+from app.decorators.pipes import MiniServiceInjectorPipe, IssuerModifierPipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, UseAccess, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles, LockService
 from app.depends.dependencies import get_access_info, get_auth_permission, get_client_info, get_query_params
 from app.depends.funcs_dep import get_issuer, get_profile
+from app.manager.issuer_manager import IssuerManager
 from app.services.worker.celery_service import CeleryService, ChannelMiniService, InspectMode
 from app.services.config_service import ConfigService
 from app.services.worker.task_service import TaskService
@@ -21,7 +22,6 @@ from app.depends.variables import _wrap_checker
 class CeleryRessource(BaseHTTPRessource):
 
     celery_inspect_mode_query:Callable[[Request],str] = get_query_params('mode','stats',False,raise_except=True,checker=_wrap_checker('mode',lambda m:m in get_args(InspectMode),choices=list(get_args(InspectMode))))
-
 
     @InjectInMethod()
     def __init__(self,celeryService:CeleryService,configService:ConfigService,taskService:TaskService):
@@ -56,31 +56,31 @@ class CeleryRessource(BaseHTTPRessource):
     @UsePermission(AdminPermission)
     @UseAccess(accesses={'Admin':True,'System':True})
     @UseHandler(MiniServiceHandler,CeleryControlHandler)
+    @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
     @LockService(CeleryService,lockType='reader',check_status=False,as_manager=True)
-    @UsePipe(ResolveIssuerPipe(to_object=False),MiniServiceInjectorPipe(CeleryService,'channel'))
     @PingService([{"cls":CeleryService,"kwargs":{"__celery_availability__":True,"__verify_celery__":True}}])
     @BaseHTTPRessource.HTTPRoute('/purge/{profile}/',methods=[HTTPMethod.DELETE])
-    async def purge_queue(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)], request:Request,response:Response,issuer:str=Depends(get_issuer),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def purge_queue(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)], request:Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         return await channel.purge_queue()
 
     @UseLimiter('1/minutes')
     @UsePermission(AdminPermission)
     @UseAccess(accesses={'Admin':True,'System':True})
+    @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
     @LockService(CeleryService,lockType='reader',check_status=False,as_manager=True)
-    @UsePipe(ResolveIssuerPipe(to_object=False),MiniServiceInjectorPipe(CeleryService,'channel'))
     @PingService([{"cls":CeleryService,"kwargs":{"__celery_availability__":True,"__verify_celery__":True}}])
     @BaseHTTPRessource.HTTPRoute('/pause/{profile}/',methods=[HTTPMethod.DELETE])
-    async def pause_queue(self,channel:Annotated[ChannelMiniService,Depends(get_profile)], request:Request,response:Response,issuer:str=Depends(get_issuer),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def pause_queue(self,channel:Annotated[ChannelMiniService,Depends(get_profile)], request:Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         await channel.pause_worker()
 
     @UseLimiter('1/minutes')
     @UsePermission(AdminPermission)
     @UseAccess(accesses={'Admin':True,'System':True})
+    @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
     @LockService(CeleryService,lockType='reader',check_status=False,as_manager=True)
-    @UsePipe(ResolveIssuerPipe(to_object=False),MiniServiceInjectorPipe(CeleryService,'channel'))
     @PingService([{"cls":CeleryService,"kwargs":{"__celery_availability__":True,"__verify_celery__":True}}])
     @BaseHTTPRessource.HTTPRoute('/resume/{profile}/',methods=[HTTPMethod.PATCH])
-    async def resume_queue(self,channel:Annotated[ChannelMiniService,Depends(get_profile)], request:Request,response:Response,issuer:str=Depends(get_issuer),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def resume_queue(self,channel:Annotated[ChannelMiniService,Depends(get_profile)], request:Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         await channel.resume_worker()
 
     ################################################################        ############################################################
@@ -89,21 +89,19 @@ class CeleryRessource(BaseHTTPRessource):
 
     @UseLimiter('1/hours')
     @UsePermission(AdminPermission)
-    @UsePipe(ResolveIssuerPipe(to_object=False))
     @UseAccess(accesses={'Admin':True,'System':True})
     @LockService(CeleryService,lockType='reader',check_status=False)
     @PingService([{"cls":CeleryService,"kwargs":{"__celery_availability__":True}}])
     @BaseHTTPRessource.HTTPRoute('/shutdown/',methods=[HTTPMethod.PATCH],deprecated=True,mount=False)
-    async def shutdown_workers(self,destination:List[str], request:Request,response:Response,issuer:str=Depends(get_issuer),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def shutdown_workers(self,destination:List[str], request:Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         return await self.celeryService.shutdown()
 
     @UseRoles([Role.ADMIN])
     @UseLimiter('100/minutes')
     @UsePermission(AdminPermission)
-    @UsePipe(ResolveIssuerPipe(to_object=False))
     @UseAccess(accesses={'Admin':True,'System':True})
     @LockService(CeleryService,lockType='reader',check_status=False)
     @PingService([{"cls":CeleryService,"kwargs":{"__celery_availability__":True}}])
     @BaseHTTPRessource.HTTPRoute('/revoke/',methods=[HTTPMethod.DELETE],deprecated=True,mount=False)
-    async def revoke(self,task_ids:List[str],request:Request,response:Response,issuer:str=Depends(get_issuer),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def revoke(self,task_ids:List[str],request:Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         ...

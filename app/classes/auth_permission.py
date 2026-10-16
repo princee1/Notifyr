@@ -111,8 +111,6 @@ class IssuerInfo(TypedDict):
     ownership:OwnershipMode
     group:str
 
-    
-
 
 API_TOKEN_CLIENT_TYPE_SET = {ClientType.Twilio,ClientType.App,ClientType.Service}
 

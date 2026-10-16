@@ -3,7 +3,7 @@ import json
 from typing import Any, Callable, Coroutine, Iterable, Literal, Optional, Type, TypedDict, get_args
 from beanie import Document
 from fastapi import HTTPException, Request, Response,status
-from app.classes.auth_permission import AccessAPIInfo, AccessDoesNotExistsError, AccessTypeAPIModel, AuthPermission, ClientAccessInfo, TokensModel
+from app.classes.auth_permission import AccessAPIInfo, AccessDoesNotExistsError, AccessTypeAPIModel, AuthPermission, ClientAccessInfo, OwnershipMode, TokensModel
 from app.classes.broker import exception_to_json
 from app.classes.celery import AlgorithmType, SchedulerModel,TaskType
 from app.classes.email import EmailInvalidFormatError
@@ -1036,13 +1036,13 @@ class AccessPathPipe(Pipe):
             else:
                 return {'access':path}
 
-class ResolveIssuerPipe(Pipe):
-    def __init__(self,append_in_response:bool=True,to_object=True):
-        super().__init__(True)
+class IssuerModifierPipe(Pipe):
 
+    def __init__(self,disable_headers=False,ownership:OwnershipMode=None):
+        super().__init__(True)
         self.configService = Get(ConfigService)
-        self.append_in_response = append_in_response
-        self.to_object = to_object
+        self.disable_headers = disable_headers
+        self.ownership = ownership
     
-    def pipe(self,response:Response,request:Request,clientInfo:ClientAccessInfo|None,accessInfo:AccessAPIInfo|None,issuer:str=None):
-        ...
+    def pipe(self,response:Response,request:Request,issuer:IssuerManager):
+        return {}
