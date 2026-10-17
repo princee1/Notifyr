@@ -52,7 +52,6 @@ class Role(Enum):
     STATIC = 'STATIC'
     ADMIN = 'ADMIN'
     RELAY = 'RELAY'
-    CUSTOM ='CUSTOM'
     MFA_OTP ='MFA_OTP'
     CHAT = 'CHAT'
     EMAIL = 'EMAIL'
@@ -61,7 +60,9 @@ class Role(Enum):
     REFRESH = 'REFRESH'
     CONTACTS = 'CONTACTS'
     TWILIO = 'TWILIO'
-    SUBSCRIPTION = 'SUBSCRIPTION'
+    SECRETS = 'SECRETS'
+    NOTIFICATION = 'NOTIFICATION'
+    SUBSCRIPTION = 'SUBSCRIPTION' # NOTE why?
     CLIENT = "CLIENT"
     LINK = "LINK"
     ASSETS = "ASSETS"
@@ -123,7 +124,6 @@ class IssuerInfoModel(BaseModel):
         if self.ownership == 'protected' and self.group == None:
             raise ValueError
         return self
-
 
 
 API_TOKEN_CLIENT_TYPE_SET = {ClientType.Twilio,ClientType.App,ClientType.Service}

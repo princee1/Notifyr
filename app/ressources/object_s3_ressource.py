@@ -52,7 +52,7 @@ class S3ObjectWebhookRessource(BaseHTTPRessource):
     def webhooks(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)]):
         ...
 
-@UseRoles([Role.ASSETS])
+@UseRoles([Role.ASSETS,Role.ADMIN])
 @UseHandler(ServiceAvailabilityHandler,AsyncIOHandler)
 @UsePermission(JWTRouteHTTPPermission)
 @IncludeRessource(S3ObjectWebhookRessource)
@@ -110,7 +110,6 @@ class S3ObjectRessource(BaseHTTPRessource):
         await self.objectS3Service.upload_object(filename,file_bytes,metadata=metadata)
 
     @UsePipe(MerchantPipe)
-    @UseRoles([Role.ADMIN])
     @Throttle(normal=(200,60))
     @PingService([ObjectS3Service])
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
@@ -189,7 +188,7 @@ class S3ObjectRessource(BaseHTTPRessource):
             headers={"Content-Disposition": f"attachment; filename={attachment_name}"}
         )
 
-    @UseRoles([Role.ADMIN])
+    
     @Throttle(uniform=(100,180))
     @PingService([ObjectS3Service])
     @UseGuard(GlobalsTemplateGuard)
@@ -239,12 +238,12 @@ class S3ObjectRessource(BaseHTTPRessource):
     @PingService([ObjectS3Service,VaultService])
     @UsePipe(ObjectS3OperationResponsePipe,before=False)
     @UsePipe(SanitizePathParameterPipe({},template=True))
-    @UseAccess(accesses={'Admin':True,'User':True,'App':True})
     @UseHandler(S3Handler,VaultHandler,FileNamingHandler,TemplateHandler)
-    @UseRoles([Role.PUBLIC],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
+    @UseAccess(accesses={'Admin':True,'User':True,'App':True,'System':True})
     @LockService(VaultService,ObjectS3Service,AssetService,lockType='reader',check_status=False)
+    @UseRoles([Role.PUBLIC],options=[MustHaveWhen(Role.MCP,configuration=mcp_configuration)])
     @UseInterceptor(ResponseCacheInterceptor('cache',MinioResponseCache,raise_default_exception=False),mount=False)
-    @UsePermission(ClientTypesPermission(['Admin','User','App']),JWTAssetObjectPermission(accept_none_template=True))
+    @UsePermission(ClientTypesPermission(['Admin','User','App','System']),JWTAssetObjectPermission(accept_none_template=True))
     @UseGuard(GlobalsTemplateGuard('We cannot read the object globals.json at this route please use refer to properties/global route'))
     @BaseHTTPRessource.HTTPRoute('/{template:path}/',methods=[HTTPMethod.GET],response_model=ObjectS3ResponseModel,operation_id='read_template_content_and_information',to_mcp_tool=True)
     async def read_object(self,request:Request,response:Response,backgroundTasks:BackgroundTasks,objectsSearch:Annotated[ObjectsSearch,Depends(ObjectsSearch)],issuer:Annotated[IssuerManager,Depends(IssuerManager)],source:SourceMode=Depends(source_mode_query),template='',is_mcp:bool=Depends(is_mcp_request),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
@@ -286,7 +285,6 @@ class S3ObjectRessource(BaseHTTPRessource):
 
                 
     @Throttle(normal=(300,200))
-    @UseRoles(roles=[Role.ADMIN])
     @PingService([ObjectS3Service,VaultService])
     @UseAccess(accesses={'Admin':True,'System':True,'User':True})
     @UsePermission(ClientTypesPermission(['Admin','System','User']))
@@ -300,6 +298,8 @@ class S3ObjectRessource(BaseHTTPRessource):
         meta:Object = await self.objectS3Service.stat_objet(template,objectsSearch.version_id,True)
         provided_issuer:IssuerInfo|None = meta.metadata.get('issuer',None)
         issuer.verify_ownership(provided_issuer)
+        if issuer.update:
+            meta.metadata['issuer'] = issuer.export('dict')
 
         encrypted = meta.metadata.get(MinioConstant.ENCRYPTED_KEY,False) if meta.metadata else False
         assetType = template.split('/')[0]
@@ -328,7 +328,6 @@ class S3ObjectRessource(BaseHTTPRessource):
         return ObjectResponseUploadModel(metadata=[uri],uploaded_files=[file.filename])
     
 
-    @UseRoles([Role.ADMIN])
     @PingService([ObjectS3Service])
     @UseGuard(GlobalsTemplateGuard)
     @UsePipe(ObjectS3OperationResponsePipe,before=False)

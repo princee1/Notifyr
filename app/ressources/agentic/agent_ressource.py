@@ -235,12 +235,14 @@ class AgentsRessource(BaseHTTPRessource):
         if 'tools' in body:
             await self.lookup_tools(agentModel)
 
+        if issuer.update:
+            agentModel.issuer = issuer.export('model')
+
         await agentModel.update_meta()
         broker.propagate(MiniStateProtocol(name=RemoteAgentService,to_build=True,to_destroy=True,id=agent))
         return agentModel
 
     @Throttle(uniform=(30,60))
-    @UseRoles([Role.AGENT,Role.ADMIN])
     @LockService(LLMService,lockType='reader',as_manager=False)
     @UsePipe(MiniServiceInjectorPipe(RemoteAgentService,'agent'))
     @UseHandler(LLMHandler,AgenticHandler,GrpcHandler,AgentHandler)
@@ -261,7 +263,6 @@ class AgentsRessource(BaseHTTPRessource):
         return reply
     
     @Throttle(uniform=(30,60))
-    @UseRoles([Role.AGENT,Role.ADMIN])
     @UseAccess(accesses={'Admin':True,'App':True,'User':True})
     @UsePipe(MiniServiceInjectorPipe(RemoteAgentService,'agent'))
     @UseHandler(LLMHandler,AgenticHandler,GrpcHandler,AgentHandler)

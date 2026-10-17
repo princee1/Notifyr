@@ -1,18 +1,20 @@
 from typing import Literal
-
 from fastapi import Depends, Request, Response
 from app.classes.auth_permission import ClientType, ClientTypeLiteral, IssuerInfo, IssuerInfoModel
 from app.depends.funcs_dep import get_issuer
+from app.depends.variables import bool_query_creator
 from app.utils.constant import HTTPHeaderConstant
 from app.utils.helper import slice_dict
 
-
 __bypass_type__:set[ClientType|ClientTypeLiteral] = {'Admin','System',ClientType.Admin,ClientType.System}
+
+update_issuer_query =  bool_query_creator('update','false')
 class IssuerManager:
 
-    def __init__(self,response:Response,request:Request,issuer:IssuerInfo|None=Depends(get_issuer)):
+    def __init__(self,response:Response,request:Request,update:bool=Depends(update_issuer_query), issuer:IssuerInfo|None=Depends(get_issuer)):
         self.issuerInfo = issuer
         self.request = request
+        self.update = update
         self.response = response
         response.headers[HTTPHeaderConstant.X_ISSUER_ID] = issuer['issuer']
 
@@ -48,7 +50,7 @@ class IssuerManager:
                         if __raise__:
                             ...
                         else:
-                            ...
+                            return False
                     else:
                         return True
                 case 'private':
@@ -64,6 +66,6 @@ class IssuerManager:
                         if __raise__:
                             ...
                         else:
-                            ...
+                            return False
                     else:
                         return True

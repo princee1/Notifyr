@@ -1,13 +1,13 @@
 from typing import Annotated
 from fastapi import Depends, Request, Response, status
-from app.classes.auth_permission import AccessAPIInfo, AuthPermission, ClientAccessInfo, ClientType
+from app.classes.auth_permission import AccessAPIInfo, AuthPermission, ClientAccessInfo, ClientType, Role
 from app.container import InjectInMethod
 from app.cost.ingest_cost import DeleteDocumentIngestCost
 from app.decorators.handlers import AgenticHandler, ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, GatewayHandler, RedisHandler, ServiceAvailabilityHandler
 from app.decorators.interceptors import DataCostInterceptor
 from app.decorators.permissions import AdminPermission, ClientTypesPermission, ClientTypesPermission, JWTRouteHTTPPermission, UserPermission
 from app.decorators.pipes import DeleteDocumentIngestUpdatePipe,  update_status_upon_no_metadata_pipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseAccess, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe,LockService
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseAccess, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe,LockService, UseRoles
 from app.depends.dependencies import get_access_info, get_auth_permission, get_client_info
 from app.depends.funcs_dep import get_issuer
 from app.depends.variables import DeleteMode,source_mode_query
@@ -57,6 +57,7 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @PingService([RemoteAgentService])
     @HTTPStatusCode(status.HTTP_200_OK)
     @UseHandler(AgenticHandler,GatewayHandler)
+    @UseRoles([Role.AGENT,Role.ADMIN,Role.INGEST])
     @LockService(RemoteAgentService,lockType='reader')
     @UseAccess(accesses={'Admin':True,'System':True,'User':True})
     @UsePermission(JWTRouteHTTPPermission,ClientTypesPermission(['Admin','System','User']))
@@ -70,20 +71,21 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     
     @UseLimiter('20/hours')
     @Throttle(uniform=(80,150))
+    @UseRoles([Role.INGEST,Role.ADMIN])
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
-    @UseAccess(accesses={'Admin':True,'System':True})
     @UsePipe(DeleteDocumentIngestUpdatePipe('vector'),)
-    @UsePermission(JWTRouteHTTPPermission,AdminPermission)
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
+    @UseAccess(accesses={'Admin':True,'System':True,'User':True})
     @PingService([RedisService,RemoteAgentService,ArqIngestTaskService])
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
     @LockService(RedisService,RemoteAgentService,ArqIngestTaskService,lockType='reader')
+    @UsePermission(JWTRouteHTTPPermission,ClientTypesPermission(['Admin','System','User']))
     @UseHandler(AgenticHandler,CostHandler,ArqHandler,GatewayHandler,RedisHandler,DataIngestHandler)
     @BaseHTTPRessource.HTTPRoute('/{collection_name}/',methods=[HTTPMethod.DELETE],response_model=DeleteCollectionModel)
     async def delete_collection(self, request:Request,response:Response,collection_name:str,cost:Annotated[DeleteDocumentIngestCost,Depends(DeleteDocumentIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],issuer:Annotated[IssuerManager,Depends(IssuerManager)],broker:Annotated[Broker,Depends(Broker)],mode:DeleteMode = Depends(source_mode_query), autPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         """Delete all results and delete all enqueued job matching the collection_name filtered by the task_name """
 
-        meta,jobs_done,jobs_queue,errors =  await self.delete_section('vector_config','collection_name',collection_name)
+        meta,jobs_done,jobs_queue,errors =  await self.delete_section('vector_config','collection_name',collection_name,issuer.verify_ownership)
         gateway_body = await self.remoteAgentService.request('DELETE',
                                                         AgenticConstant.VECTOR_ROUTER(f'/{collection_name}'),
                                                         params={"mode": mode},
@@ -108,20 +110,21 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
             
     @UseLimiter('20/hours')
     @Throttle(uniform=(80,150))
+    @UseRoles([Role.INGEST,Role.ADMIN])
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
-    @UseAccess(accesses={'Admin':True,'System':True})
     @UsePipe(DeleteDocumentIngestUpdatePipe('vector'),)
-    @UsePermission(JWTRouteHTTPPermission,AdminPermission)
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
+    @UseAccess(accesses={'Admin':True,'System':True,'User':True})
     @PingService([RedisService,RemoteAgentService,ArqIngestTaskService])
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
     @LockService(RedisService,RemoteAgentService,ArqIngestTaskService,lockType='reader')
+    @UsePermission(JWTRouteHTTPPermission,ClientTypesPermission(['Admin','User','System']))
     @UseHandler(AgenticHandler,CostHandler,ArqHandler,GatewayHandler,RedisHandler,DataIngestHandler)
     @BaseHTTPRessource.HTTPRoute('/docs/{job_id}/',methods=[HTTPMethod.DELETE],response_model=DeleteCollectionModel)
     async def delete_documents(self,job_id:str, request:Request,response:Response,cost:Annotated[DeleteDocumentIngestCost,Depends(DeleteDocumentIngestCost)],broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],issuer:Annotated[IssuerManager,Depends(IssuerManager)],autPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         """Delete result and the point associated with the job_id filtered by the task_name """
 
-        meta,collection_name = await self.delete_single_document(job_id,'vector_config','vector','collection_name')
+        meta,collection_name = await self.delete_single_document(job_id,'vector_config','vector','collection_name',issuer.verify_ownership)
 
         gateway_body = await self.remoteAgentService.request('DELETE',
                                                         AgenticConstant.VECTOR_ROUTER(f'/docs/{collection_name}/{job_id}'),
@@ -137,6 +140,7 @@ class VectorDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @Throttle(uniform=(200,500))
     @PingService([RemoteAgentService])
     @HTTPStatusCode(status.HTTP_200_OK)
+    @UseRoles([Role.AGENT,Role.ADMIN,Role.INGEST])
     @UseLimiter('20/hour',cost={'App':3,'User':2})
     @LockService(RedisService,RemoteAgentService,lockType='reader')
     @UseAccess(accesses={'Admin':True,'System':True,'User':True,'App':True})

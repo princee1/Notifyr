@@ -165,6 +165,7 @@ class OnGoingSMSRessource(BaseHTTPRessource):
     async def sms_prompt_message(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],twilio:Annotated[TwilioAccountMiniService,Depends(get_profile)],agent:Annotated[RemoteAgentMiniService,Depends(get_profile)],scheduler: SMSCustomSchedulerModel,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],issuer:Annotated[IssuerManager,Depends(IssuerManager)],cost:Annotated[SMSCost,Depends(SMSCost)],taskManager:Annotated[TaskManager,Depends(TaskManager)],tracker:Annotated[TwilioTracker,Depends(TwilioTracker)], authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ,):
         ...
 
+
 SMS_INCOMING_PREFIX = "incoming"
 
 if CAPABILITIES['chat']:

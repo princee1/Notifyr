@@ -73,6 +73,7 @@ class CRUDLinkRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.POST])
     async def add_link(self, request: Request, linkModel: LinkModel,cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)], response: Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         link = linkModel.model_dump()
+        link['issuer'] = issuer.export('model')
 
         async def transaction():
             async with in_transaction():
@@ -106,6 +107,8 @@ class CRUDLinkRessource(BaseHTTPRessource):
     async def delete_link(self,response:Response,request:Request,cost:Annotated[DataCost,Depends(DataCost)],issuer:Annotated[IssuerManager,Depends(IssuerManager)],merchant:Annotated[Merchant,Depends(Merchant)], link: Annotated[LinkORM, Depends(get_link)], archive: bool = Query(False),authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         link_data = link.to_json.copy()
 
+        issuer.verify_ownership(link.issuer)
+
         if not archive:
             response.status_code = status.HTTP_200_OK
             async def transaction():
@@ -134,6 +137,8 @@ class CRUDLinkRessource(BaseHTTPRessource):
     @UsePermission(ClientTypesPermission(['Admin','User','System']))
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.PUT])
     async def update_link(self, link: Annotated[LinkORM, Depends(get_link)], linkUpdateModel: UpdateLinkModel,request:Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+        issuer.verify_ownership(link.issuer)
+        
         if linkUpdateModel.archived != None:
             link.archived = linkUpdateModel.archived
         
@@ -142,6 +147,9 @@ class CRUDLinkRessource(BaseHTTPRessource):
         
         if linkUpdateModel.link_name:
             link.link_name = linkUpdateModel.link_name
+
+        if issuer.update:
+            link.issuer = issuer.export('model')
 
         await link.save()
         await LinkORMCache.Invalid(link.link_short_id)

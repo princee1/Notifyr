@@ -2,6 +2,7 @@ from datetime import datetime,timedelta
 from typing import Self
 from urllib.parse import urlparse
 from tortoise import Tortoise, fields, models
+from app.classes.auth_permission import IssuerInfoModel
 from app.utils.constant import PostgresConstant
 from app.utils.helper import uuid_v1_mc,generateId
 from tortoise.contrib.pydantic import pydantic_model_creator
@@ -23,6 +24,7 @@ class LinkORM(models.Model):
     total_session_count = fields.IntField(default=0,null=True)
     verified = fields.BooleanField(default=False)
     archived = fields.BooleanField(default=False)
+    issuer = fields.JSONField(field_type=IssuerInfoModel,null=True,default=None)
     created_at = fields.DatetimeField(auto_now_add=True,use_tz=True)
     updated_at = fields.DatetimeField(auto_now=True,use_tz=True)
 

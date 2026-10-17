@@ -37,7 +37,7 @@ from app.depends.variables import mcp_configuration
 
 PROFILE_PREFIX = 'profile'
 
-@UseRoles([Role.ADMIN])
+@UseRoles([Role.ADMIN,Role.PROFILE])
 @PingService([MongooseService])
 @LockService(MongooseService,lockType='reader',check_status=False)
 @UseHandler(ServiceAvailabilityHandler,AsyncIOHandler,MongooseHandler,MotorErrorHandler,ProfileHandler)
@@ -66,10 +66,10 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UsePipe(MerchantPipe())
     @Throttle(normal=(200,75))
     @PingService([VaultService])
-    @UsePermission(AdminPermission)
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @LockService(VaultService,lockType='reader')
-    @UseAccess(accesses={'Admin':True,'System':True})
+    @UseAccess(accesses={'Admin':True,'System':True,'User':True})
+    @UsePermission(ClientTypesPermission(['Admin','System','User']))
     @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT))
     @UseHandler(VaultHandler,MiniServiceHandler,PydanticHandler,CostHandler,CeleryControlHandler,RedisHandler)
     @BaseHTTPRessource.HTTPRoute('/',methods=[HTTPMethod.POST])
@@ -85,7 +85,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
             await self.mongooseService.exists_unique(profileModel,True)
             await self.mongooseService.condition_satisfaction(profileModel)
 
-        profileModel.issuer = issuer.export()
+        profileModel.issuer = issuer.export('model')
         
         async def rollback():
             return await self.profileService._delete_encrypted_creds(profileModel.profile_id,profileModel._vault)
@@ -110,9 +110,9 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
     @Throttle(normal=(200,75))
     @PingService([VaultService])
-    @UsePermission(AdminPermission)
     @UsePipe(DocumentFriendlyPipe,before=False)
-    @UseAccess(accesses={'Admin':True,'System':True})
+    @UseAccess(accesses={'Admin':True,'System':True,'User':True})
+    @UsePermission(ClientTypesPermission(['Admin','System','User']))
     @UseInterceptor(DataCostInterceptor(CostConstant.PROFILE_CREDIT,'refund'))
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),MerchantPipe(-1))
     @LockService(VaultService,lockType='reader',check_status=False,infinite_wait=True)
@@ -121,6 +121,8 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.DELETE])
     async def delete_profile(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)],issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         profileModel = await self.mongooseService.get(self.Model,profile,True)
+        issuer.verify_ownership(profileModel.issuer)
+
         creds = await self.profileService._read_encrypted_creds(profileModel.profile_id)
 
         async def rollback():
@@ -143,23 +145,29 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     
     @UseLimiter('10/minutes')
     @Throttle(uniform=(50,100))
-    @UsePermission(AdminPermission)
     @HTTPStatusCode(status.HTTP_200_OK)
     @UsePipe(DocumentFriendlyPipe,before=False)
-    @UseAccess(accesses={'Admin':True,'System':True})
     @UseHandler(PydanticHandler,CeleryControlHandler)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
+    @UseAccess(accesses={'Admin':True,'System':True,'User':True})
+    @UsePermission(ClientTypesPermission(['Admin','System','User']))
     @LockService(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PUT])
-    async def update_profile(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,broker:Annotated[Broker,Depends(Broker)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+    async def update_profile(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,broker:Annotated[Broker,Depends(Broker)],issuer:Annotated[IssuerManager,Depends(IssuerManager)], authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         
         profileModel = await self.mongooseService.get(self.Model,profile,True)
+        issuer.verify_ownership(profileModel.issuer)
+
         modelUpdate = await self.pipe_profil_model(request,'model_update')
 
         await profileModel.update_content(modelUpdate)
 
         await self.mongooseService.primary_key_constraint(profileModel,True)
         await self.mongooseService.exists_unique(profileModel,True)
+
+        if issuer.update:
+            profileModel.issuer = issuer.export('model')
+
         await profileModel.update_meta()
 
         await channel.refresh_worker_state()
@@ -167,17 +175,19 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         return profileModel
     
     @PingService([VaultService])
-    @UsePermission(AdminPermission)
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
-    @UseAccess(accesses={'Admin':True,'System':True})
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
+    @UseAccess(accesses={'Admin':True,'System':True,'User':True})
     @UseHandler(VaultHandler,PydanticHandler,CeleryControlHandler)
     @LockService(VaultService,lockType='reader',check_status=False)
+    @UsePermission(ClientTypesPermission(['Admin','System','User']))
     @LockService(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
     @BaseHTTPRessource.HTTPRoute('/{profile}/',methods=[HTTPMethod.PUT])
     async def set_credentials(self,profile:str,channel:Annotated[ChannelMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],issuer:Annotated[IssuerManager,Depends(IssuerManager)], authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         
         profileModel:BaseProfileModel = await self.mongooseService.get(self.Model,profile,True)
+        issuer.verify_ownership(profileModel.issuer)
+
         modelCreds = await self.pipe_profil_model(request,'model_creds')
 
         modelCreds = modelCreds.model_dump()
@@ -220,16 +230,17 @@ class BaseProfilModelRessource(BaseHTTPRessource):
             case _:
                 raise DataSourceNotSupportedError(source,['database','memory'])
 
-    @UseRoles([Role.PUBLIC])
+    @UseRoles([Role.CELERY])
     @Throttle(normal=(400,120))
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
-    @UseAccess(accesses={'Admin':True,'System':True})
     @UseHandler(MiniServiceHandler,CeleryControlHandler)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
-    @UsePermission(ClientTypesPermission(['Admin','System']),ProfilePermission)
+    @UseAccess(accesses={'Admin':True,'System':True,'User':True})
+    @UsePermission(ClientTypesPermission(['Admin','System','User']),ProfilePermission)
     @LockService(ProfileService,CeleryService,lockType='reader',as_manager=True,motor_fallback=True)
     @BaseHTTPRessource.HTTPRoute('/refresh/{profile}/',methods=[HTTPMethod.PATCH])
     async def refresh_memory_state(self,profile:str,request:Request,channel:Annotated[ChannelMiniService,Depends(get_profile)],broker:Annotated[Broker,Depends(Broker)],issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+        issuer.verify_ownership(channel.depService.model.issuer)
         await channel.refresh_worker_state()
         broker.propagate(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
 

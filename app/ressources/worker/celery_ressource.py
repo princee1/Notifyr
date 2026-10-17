@@ -108,7 +108,6 @@ class CeleryRessource(BaseHTTPRessource):
     async def shutdown_workers(self,destination:List[str], request:Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         return await self.celeryService.shutdown()
 
-    @UseRoles([Role.ADMIN])
     @UseLimiter('100/minutes')
     @UsePermission(AdminPermission)
     @UseAccess(accesses={'Admin':True,'System':True})

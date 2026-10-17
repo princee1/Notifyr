@@ -1,5 +1,3 @@
-
-
 from typing import Annotated
 from fastapi import Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
@@ -14,7 +12,6 @@ from app.depends.orm_cache import ContactORMCache,ContactSummaryORMCache
 from app.models.orm.contacts_model import AppRegisteredContactModel, ContactORM,ContactModel, ContentSubscriptionModel, ContentTypeSubsModel, Status, ContentSubscriptionORM, SubscriptionORM, SubscriptionStatus, UpdateContactModel, get_all_contact_summary, get_contact_summary
 from app.services.contacts_service import MAX_OPT_IN_CODE, MIN_OPT_IN_CODE, ContactsService, SubscriptionService
 from app.services.database.tortoise_service import TortoiseConnectionService
-from app.services.ntfr.email_service import EmailSenderService
 from app.services.security_service import JWTAuthService, SecurityService
 from app.depends.dependencies import get_auth_permission, get_contact_token
 from app.decorators.pipes import ContactStatusPipe, RelayPipe

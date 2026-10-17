@@ -38,7 +38,7 @@ from app.utils.constant import AgenticConstant, ArqDataTaskConstant, CostConstan
 from app.utils.toolbox import RunInThreadPool
 from app.depends.variables import force_update_query
 
-
+@UseRoles([Role.INGEST,Role.ADMIN])
 @UseHandler(ArqHandler,ServiceAvailabilityHandler)
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource('jobs',)

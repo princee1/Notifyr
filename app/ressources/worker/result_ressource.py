@@ -26,7 +26,7 @@ CELERY_PREFIX= 'celery'
 BACKGROUND_PREFIX  = 'background'
 APS_SCHEDULER='aps'
 
-@UseRoles([Role.RESULT])
+@UseRoles([Role.RESULT,Role.ADMIN])
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(ServiceAvailabilityHandler)
 @PingService([{"cls":CeleryService,"kwargs":{"__celery_availability__":True}}])
@@ -74,7 +74,7 @@ class CeleryResultRessource(BaseHTTPRessource):
         """
         return
     
-@UseRoles([Role.RESULT])
+@UseRoles([Role.RESULT,Role.ADMIN])
 @UseHandler(ServiceAvailabilityHandler)
 @UsePermission(JWTRouteHTTPPermission)
 @PingService([RedisService])
