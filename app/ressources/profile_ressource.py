@@ -66,6 +66,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
     @UsePipe(MerchantPipe())
     @Throttle(normal=(200,75))
     @PingService([VaultService])
+    @UseLimiter('20/hours',cost={'User':2})
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @LockService(VaultService,lockType='reader')
     @UseAccess(accesses={'Admin':True,'System':True,'User':True})
@@ -110,6 +111,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
     @Throttle(normal=(200,75))
     @PingService([VaultService])
+    @UseLimiter('20/minutes',cost={'User':2})
     @UsePipe(DocumentFriendlyPipe,before=False)
     @UseAccess(accesses={'Admin':True,'System':True,'User':True})
     @UsePermission(ClientTypesPermission(['Admin','System','User']))
@@ -143,9 +145,9 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         broker.propagate(StateProtocol(service=ProfileService,to_build=True,to_destroy=True,bypass_async_verify=False))
         return profileModel
     
-    @UseLimiter('10/minutes')
     @Throttle(uniform=(50,100))
     @HTTPStatusCode(status.HTTP_200_OK)
+    @UseLimiter('20/minutes',cost={'User':2})
     @UsePipe(DocumentFriendlyPipe,before=False)
     @UseHandler(PydanticHandler,CeleryControlHandler)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
@@ -175,6 +177,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         return profileModel
     
     @PingService([VaultService])
+    @UseLimiter('20/minutes',cost={'User':2})
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'))
     @UseAccess(accesses={'Admin':True,'System':True,'User':True})
@@ -202,6 +205,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         return None
 
     @UsePipe(DocumentFriendlyPipe,before=False)
+    @UseLimiter('24/minutes',cost={'User':2,'App':3})
     @UseHandler(MiniServiceHandler,DataSourceHandler)
     @UsePipe(SanitizePathParameterPipe({},profile=True))
     @UseAccess(accesses={'Admin':True,'User':True,'App':True,'System':True})
@@ -232,6 +236,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
 
     @UseRoles([Role.CELERY])
     @Throttle(normal=(400,120))
+    @UseLimiter('24/minutes',cost={'User':2})
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @UseHandler(MiniServiceHandler,CeleryControlHandler)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'channel'),)
@@ -245,6 +250,7 @@ class BaseProfilModelRessource(BaseHTTPRessource):
         broker.propagate(MiniStateProtocol(service=ProfileService,id=profile,to_destroy=True,callback_state_function=self.pms_callback))
 
     @Throttle(normal=(400,120))
+    @UseLimiter('24/minutes',cost={'User':2})
     @UseHandler(MiniServiceHandler,RedisHandler)
     @UsePipe(DocumentFriendlyPipe(),before=False)
     @UsePipe(MiniServiceInjectorPipe(CeleryService,'service'),)

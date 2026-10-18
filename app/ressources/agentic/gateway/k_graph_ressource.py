@@ -34,11 +34,11 @@ class KGraphDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
         self.remoteAgentService = remoteAgentService
 
     @Throttle(normal=(300,40))
-    @UseHandler(AgenticHandler)
     @PingService([RemoteAgentService])
-    @UseHandler(GraphitiHandler,GatewayHandler)
+    @UseLimiter('10/hours',cost={'User':2})
     @UseRoles([Role.AGENT,Role.INGEST,Role.ADMIN])
     @LockService(RemoteAgentService,lockType='reader')
+    @UseHandler(AgenticHandler,GraphitiHandler,GatewayHandler)
     @UseAccess(accesses={'Admin':True,'System':True,'User':True})
     @UsePermission(JWTRouteHTTPPermission,ClientTypesPermission(['Admin','System','User']))
     @BaseHTTPRessource.HTTPRoute('/document/{document_id}/',methods=[HTTPMethod.GET])
@@ -47,11 +47,12 @@ class KGraphDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
         return gateway_body
 
     @UsePipe(domain_pipe)
-    @UseHandler(AgenticHandler)
+    @Throttle(normal=(300,40))
     @PingService([RemoteAgentService])
-    @UseHandler(GraphitiHandler,GatewayHandler)
+    @UseLimiter('10/hours',cost={'User':2})
     @UseRoles([Role.AGENT,Role.INGEST,Role.ADMIN])
     @LockService(RemoteAgentService,lockType='reader')
+    @UseHandler(AgenticHandler,GraphitiHandler,GatewayHandler)
     @UseAccess(accesses={'Admin':True,'System':True,'User':True})
     @UsePermission(JWTRouteHTTPPermission,ClientTypesPermission(['Admin','System','User']))
     @BaseHTTPRessource.HTTPRoute('/domain/{domain}/',methods=[HTTPMethod.GET])
@@ -62,6 +63,7 @@ class KGraphDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
 
     @Throttle(uniform=(1000,1800))
     @UseRoles([Role.INGEST,Role.ADMIN])
+    @UseLimiter('10/hours',cost={'User':2})
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UseAccess(accesses={'Admin':True,'System':True,'User':True})
@@ -85,9 +87,9 @@ class KGraphDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
         
         return DeleteDomainModel(metadata=[meta],errors={},domain=domain,gateway_body=gateway_body,job_dequeued=[],job_deleted=[job_id])
 
-    
     @Throttle(uniform=(1500,2500))
     @UseRoles([Role.INGEST,Role.ADMIN])
+    @UseLimiter('10/hours',cost={'User':2})
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UseAccess(accesses={'Admin':True,'System':True,'User':True})
@@ -126,8 +128,8 @@ class KGraphDBRessource(BaseHTTPRessource,DeleteIngestDocumentInterface):
     @PingService([RemoteAgentService])
     @HTTPStatusCode(status.HTTP_200_OK)
     @UseRoles([Role.AGENT,Role.ADMIN,Role.INGEST])
-    @UseLimiter('24/hour',cost={'App':3,'User':2})
     @LockService(RemoteAgentService,lockType='reader')
+    @UseLimiter('24/hour',cost={'App':3,'User':2,'System':2})
     @UseHandler(AgenticHandler,GraphitiHandler,GatewayHandler)
     @UseAccess(accesses={'Admin':True,'System':True,'User':True,'App':True})
     @UsePermission(JWTRouteHTTPPermission,ClientTypesPermission([ClientType.Service,ClientType.Twilio],'exclude'))

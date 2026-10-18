@@ -20,7 +20,7 @@ from app.decorators.handlers import AsyncIOHandler, CostHandler, FileHandler, Fi
 from app.decorators.interceptors import DataCostInterceptor, ResponseCacheInterceptor
 from app.decorators.permissions import AdminPermission, ClientTypesPermission, JWTAssetObjectPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import MerchantPipe, ObjectS3OperationResponsePipe,  SanitizePathParameterPipe, TemplateParamsPipe, ValidFreeInputTemplatePipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, Throttle, UseAccess, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, LockService
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, Throttle, UseAccess, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles, LockService
 from app.definition._service import StateProtocol
 from app.depends.class_dep import ObjectsSearch
 from app.depends.dependencies import get_access_info, get_auth_permission, get_client_info, is_mcp_request
@@ -112,6 +112,7 @@ class S3ObjectRessource(BaseHTTPRessource):
     @UsePipe(MerchantPipe)
     @Throttle(normal=(200,60))
     @PingService([ObjectS3Service])
+    @UseLimiter('20/hours',cost={'User':2})
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UseGuard(GlobalsTemplateGuard,UploadFilesGuard())
     @UseAccess(accesses={'Admin':True,'System':True,'User':True})
@@ -162,6 +163,7 @@ class S3ObjectRessource(BaseHTTPRessource):
 
     @UseRoles([Role.PUBLIC])
     @UsePipe(ValidFreeInputTemplatePipe)
+    @UseLimiter('20/hours',cost={'User':2})
     @PingService([ObjectS3Service,VaultService])
     @UseHandler(S3Handler,VaultHandler,FileNamingHandler)
     @UseAccess(accesses={'Admin':True,'User':True,'System':True})
@@ -192,6 +194,7 @@ class S3ObjectRessource(BaseHTTPRessource):
     @Throttle(uniform=(100,180))
     @PingService([ObjectS3Service])
     @UseGuard(GlobalsTemplateGuard)
+    @UseLimiter('20/hours',cost={'User':2})
     @UsePipe(ObjectS3OperationResponsePipe,before=False)
     @UseHandler(S3Handler,FileHandler,CostHandler,RedisHandler)
     @UseAccess(accesses={'Admin':True,'System':True,'User':True})
@@ -236,6 +239,7 @@ class S3ObjectRessource(BaseHTTPRessource):
             
 
     @PingService([ObjectS3Service,VaultService])
+    @UseLimiter('24/hours',cost={'User':2,'App':3})
     @UsePipe(ObjectS3OperationResponsePipe,before=False)
     @UsePipe(SanitizePathParameterPipe({},template=True))
     @UseHandler(S3Handler,VaultHandler,FileNamingHandler,TemplateHandler)
@@ -285,6 +289,7 @@ class S3ObjectRessource(BaseHTTPRessource):
 
                 
     @Throttle(normal=(300,200))
+    @UseLimiter('20/hours',cost={'User':2})
     @PingService([ObjectS3Service,VaultService])
     @UseAccess(accesses={'Admin':True,'System':True,'User':True})
     @UsePermission(ClientTypesPermission(['Admin','System','User']))
@@ -330,6 +335,7 @@ class S3ObjectRessource(BaseHTTPRessource):
 
     @PingService([ObjectS3Service])
     @UseGuard(GlobalsTemplateGuard)
+    @UseLimiter('20/hours',cost={'User':2})
     @UsePipe(ObjectS3OperationResponsePipe,before=False)
     @UseAccess(accesses={'Admin':True,'System':True,'User':True})
     @UsePermission(ClientTypesPermission(['Admin','User','System']))
