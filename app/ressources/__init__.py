@@ -14,8 +14,8 @@ from .worker.result_ressource import ResultBackendRessource
 from .contacts_ressources import ContactsRessource
 from .app_ressource import AppRessource
 from .link_ressource import LinkRessource
-from .ping_pong_ressource import PingPongRessource
-from .properties_ressource import PropertiesRessource
+from .internal.ping_pong_ressource import PingPongRessource
+from .internal.properties_ressource import PropertiesRessource
 from .analytics_ressource import AnalyticsRessource
 from .profile_ressource import ProfileRessource
 from .cost_ressource import CostRessource

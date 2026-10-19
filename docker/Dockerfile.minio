@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y pwgen curl && rm -rf /var/lib/apt/lists
 RUN curl -L -o /usr/bin/jq https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux64 \
   && chmod +x /usr/bin/jq
 
-FROM minio/minio:latest
+FROM quay.io/minio/aistor/minio
 
 ARG ASSETS_STORAGE_LIMIT=500MB
 ARG STATIC_STORAGE_LIMIT=500MB
@@ -27,77 +27,6 @@ COPY ./objects/ ./objects/
 # Create policy folder
 RUN mkdir -p ./policy/
 
-# Create empty policy files
-RUN touch ./policy/app-access.json ./policy/vault-admin.json ./policy/dmz-access.json
-
-
-RUN cat <<EOF > ./policy/app-access.json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "s3:GetObject",
-        "s3:PutObject",
-        "s3:DeleteObject",
-        "s3:ListBucket",
-        "s3:GetBucketLocation",
-        "s3:HeadBucket"
-      ],
-      "Resource": [
-        "arn:aws:s3:::assets",
-        "arn:aws:s3:::assets/*",
-        "arn:aws:s3:::static",
-        "arn:aws:s3:::static/*"
-      ]
-    }
-  ]
-}
-EOF
-
-RUN cat <<EOF > ./policy/dmz-access.json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "s3:GetObject",
-        "s3:ListBucket",
-        "s3:GetBucketLocation",
-        "s3:HeadBucket"
-      ],
-      "Resource": [
-        "arn:aws:s3:::static",
-        "arn:aws:s3:::static/*"
-      ]
-    }
-  ]
-}
-EOF
-
-RUN cat <<EOF > ./policy/vault-admin.json
-{ "Version": "2012-10-17",
- "Statement": [
- {
- "Effect": "Allow",
- "Action": [
- "s3:ListAllMyBuckets",
-"s3:GetBucketLocation",
-"admin:ListUsers",
-"admin:GetUser",
-"admin:ListServiceAccounts",
- "admin:AddServiceAccount",
-"admin:UpdateServiceAccount",
-"admin:RemoveServiceAccount",
- "admin:ListPolicies",
-"admin:GetPolicy"
- ],
- "Resource": ["arn:aws:s3:::*"]
- }
-  ]
-}
-EOF
+COPY --chmod=440 ./conf/minio/ ./policy/
 
 COPY --chmod=700 ./scripts/entrypoint/minio-entrypoint.sh .

@@ -211,6 +211,7 @@ class JSONFile(File):
     
     def __setitem__(self,key,value):
         self.data[key] = value
+        self.loaded = True
 
     def export(self,encoding='utf-8'):
         return json.dumps(self.data).encode()

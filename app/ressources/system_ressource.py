@@ -1,13 +1,17 @@
 from fastapi import Depends, Request, Response
 
 from app.classes.auth_permission import AccessAPIInfo,AuthPermission,ClientAccessInfo
-from app.definition._ressource import BaseHTTPRessource, HTTPRessource
+from app.decorators.permissions import JWTRouteHTTPPermission, UserPermission
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, UseAccess, UsePermission
 from app.depends.dependencies import get_access_info, get_auth_permission, get_client_info
 from app.services import SystemService
 from app.services import RedisService
 from app.services import ReactiveService
 from app.services.config_service import ConfigService
 
+
+@UseAccess(accesses={'Admin':True,'User':True})
+@UsePermission(JWTRouteHTTPPermission,UserPermission())
 @HTTPRessource('system')
 class SystemRessource(BaseHTTPRessource):
     
@@ -19,6 +23,7 @@ class SystemRessource(BaseHTTPRessource):
         self.systemService = systemService
 
 
+    @BaseHTTPRessource.HTTPRoute('/notification/live',methods=[HTTPMethod.POST],)
     async def live_notification(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission),clientInfo:ClientAccessInfo=Depends(get_client_info),accessInfo:AccessAPIInfo=Depends(get_access_info)):
         ...
 

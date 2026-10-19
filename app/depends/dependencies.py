@@ -8,7 +8,7 @@ from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials,HTTPBear
 from app.classes.auth_permission import AuthMechanism
 from app.services.config_service import ConfigService
 from app.utils.constant import FastAPIConstant, HTTPHeaderConstant
-from app.utils.helper import parse_value, reverseDict
+from app.utils.helper import parse_value, reverseDict, uuid_v1_mc
 from app.container import Get
 
 configService:ConfigService = Get(ConfigService)
@@ -167,6 +167,6 @@ def get_access_info(request:Request,context:Annotated[Context,Depends(lambda:'re
         case 'none':
             return None
 
-def get_session_id(request: Request):
+def get_session_id(request: Request,default:Annotated[str,Depends(lambda:str(uuid_v1_mc()))]):
     ...
 

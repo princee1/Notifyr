@@ -221,7 +221,7 @@ root-init:
 
 	@trap 'rm -rf ./.admin/ ' EXIT INT TERM; \
 	./scripts/utils/generate-admin.sh $(ADMIN_CREDS_DIR) && \
-	$(DOCKER_COMPOSE_BASE) run -T root-init python /usr/src/root_init.py < $(ADMIN_CREDS_DIR) && \
+	$(DOCKER_COMPOSE_BASE) run --name root-init -T root-init python /usr/src/root_init.py < $(ADMIN_CREDS_DIR) && \
 	$(DOCKER) cp root-init:/tmp/root-credentials.json $(shell dirname $(ROOT_DIR))/ && \
 	$(DOCKER) rm root-init
 	
@@ -308,7 +308,7 @@ monitor-on:
 	@echo "================================================="
 	
 # 	# 1. Stop web-facing/DMZ services from base compose
-	$(call COMPOSE_RUN, Base Services Down, down, traeffik dashboard dmz)
+	$(call COMPOSE_RUN, Base Services Down, down, traefik dashboard dmz)
 	
 	@sleep 3 && clear
 	

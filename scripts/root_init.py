@@ -7,7 +7,7 @@ from pydantic import Secret, ValidationError
 
 import app.models.orm.security_model as security
 from app.services.config_service import ConfigService
-from app.services.security_service import AccessVaultConstant, JWTAuthService, SecurityService
+from app.services.security_service import AccessVaultConstant
 from app.utils.constant import RedisConstant, SetupRootConstant, VaultConstant
 from app.utils.fileIO import JSONFile
 from app.utils.prettyprint import PrettyPrinter_
@@ -41,7 +41,6 @@ except ValidationError as e:
 from app.services import VaultService
 from app.services import TortoiseConnectionService
 from app.services import RedisService
-from app.services import FileService
 
 from app.classes.auth_permission import AccessTypeAPIModel, ClientType
 from app.services.admin_service import ClientMiniService
@@ -61,15 +60,14 @@ class InitStepCallback(StepCallback):
         self.redisService  = redisService
 
     async def before_enter(self,key:str):
-        return await self.redisService.retrieve(RedisConstant.CONFIG_DB,key)
+        return bool(await self.redisService.retrieve(RedisConstant.CONFIG_DB,key))
 
     async def after_exit(self,key:str):
-        await self.redisService.store(RedisConstant.CONFIG_DB,key,1,0)
+        await self.redisService.store(RedisConstant.CONFIG_DB,key,int(True),0)
 
 async def main():
     vaultService:VaultService = Get(VaultService)
     redisService:RedisService = Get(RedisService)
-    configService:ConfigService = Get(ConfigService)
     tortoiseService:TortoiseConnectionService = Get(TortoiseConnectionService)
 
     await tortoiseService.init_connection()
@@ -84,21 +82,22 @@ async def main():
         system_access._path = AccessVaultConstant.ACCESS_PATH('system')
         system_file['access'] = system_access.model_dump(mode='json')
         system_file.save()
-        await RunInThreadPool(vaultService.security_engine.put(VaultConstant.INTERNAL_API_SECRETS,system_access.model_dump(),system_access._path))
+        await RunInThreadPool(vaultService.secrets_engine.put)(VaultConstant.INTERNAL_API_SECRETS,system_access.model_dump(),system_access._path)
 
     async with LambdaStepRunner(callback,SetupRootConstant.SYSTEM_LOGIN_KEY) as skip:
         skip()
         
         systemInfo = {'client_email':'system@noreply-notifyr.ca','client_name':'Notifyr System','client_username' :'notifyr_system',
                         'client_description':'Root Super user account that can login and do Admin operation and super user operation','issued_for':'{COMES FROM ENV}'}
-        systemORM = security.ClientORM(client_type=ClientType.Admin,max_connection=1,can_login=True,**systemInfo)
+        systemORM = security.ClientORM(client_type=ClientType.System,max_connection=1,can_login=True,**systemInfo)
         system_client = InjectInMiniService(ClientMiniService,client=systemORM,policies=[])
         password = generateId(22)
         encrypted_password,salt = await system_client.encrypt_password(password)
 
         async with tortoiseService.transaction(SECURITY_CREDS) as ctx:
             await systemORM.save(ctx)
-            system_file['client'] = {'password':password,**slice_dict(systemInfo,{'client_username','client_email'},'include'),}
+            slice_dict(systemInfo,{'client_username','client_email'},'include')
+            system_file['client'] = {'password':password,**systemInfo,}
             system_file.save()
             await system_client.store_password(encrypted_password,salt)
     
@@ -124,7 +123,7 @@ async def main():
             alias = f'{admin.client_name}@{admin.client_username}'
         )
         admin_access._path = AccessVaultConstant.ACCESS_PATH('admin')
-        await RunInThreadPool(vaultService.security_engine.put(VaultConstant.INTERNAL_API_SECRETS,admin_access.model_dump(),admin_access._path))
+        await RunInThreadPool(vaultService.secrets_engine.put)(VaultConstant.INTERNAL_API_SECRETS,admin_access.model_dump(),admin_access._path)
 
     await redisService.close_connections()
     await tortoiseService.close_connections()

@@ -59,7 +59,7 @@ class AuthRessource(BaseHTTPRessource):
 
     @Throttle(normal=(300,30))
     @UseHandler(MiniServiceHandler)
-    @UseLimiter('2/day',key_func='client')
+    @UseLimiter('5/day',key_func='client')
     @HTTPStatusCode(status.HTTP_201_CREATED)
     @UsePermission(JWTRouteHTTPPermission,UserPermission)
     @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
@@ -208,7 +208,7 @@ class AuthRessource(BaseHTTPRessource):
 
     @Throttle(uniform=(150,200))
     @UsePipe(auth_state_pipe,before=False)
-    @UseLimiter('10/day',key_func='client')
+    @UseLimiter('10/hours',key_func='client')
     @PingService([TortoiseConnectionService])
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @UseInterceptor(InvalidBlacklistTokenInterceptor)
@@ -275,9 +275,11 @@ class AuthRessource(BaseHTTPRessource):
     if Get(ConfigService).SESSION_MECHANISM != 'none':
 
         @UseRoles([Role.ADMIN])
+        @Throttle(uniform=(100,250))
         @UsePipe(SanitizePathParameterPipe({},session=True))
         @UsePermission(JWTRouteHTTPPermission,UserPermission)
         @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
+        @UseLimiter('10/hours',key_func='client',cost={'User':2})
         @LockService(VaultService,SettingService,lockType='reader')
         @UseHandler(MiniServiceHandler,ClientSecurityHandler,ClientHandler)
         @UseGuard(ClientAuthTypeGuard(True,False),BlacklistClientGuard,PrimarySessionGuard)
@@ -314,10 +316,12 @@ class AuthRessource(BaseHTTPRessource):
             return res
 
         @UseRoles([Role.ADMIN])
+        @Throttle(uniform=(100,250))
         @UseInterceptor(InvalidBlacklistTokenInterceptor)
         @UsePipe(SanitizePathParameterPipe({},session=True))
         @UsePermission(JWTRouteHTTPPermission,UserPermission)
         @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
+        @UseLimiter('10/hours',key_func='client',cost={'User':2})
         @UseHandler(MiniServiceHandler,ClientSecurityHandler,ClientHandler)
         @UseGuard(ClientAuthTypeGuard(True, False),BlacklistClientGuard,PrimarySessionGuard(True))
         @LockService(VaultService,SettingService,AdminService,as_manager=True,lockType='reader',miniLockType='reader')

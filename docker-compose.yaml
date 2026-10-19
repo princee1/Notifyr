@@ -423,7 +423,7 @@ services:
   # DATA LAYER
   # ==========================================
   minio:
-    image: minio/minio:latest
+    image: minio/minio
     container_name: minio
     restart: always
     entrypoint: ["./minio-entrypoint.sh"]
@@ -519,7 +519,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.postgres
-    image: postgres:15
+    image: notifyr/postgres
     container_name: postgres
     restart: always
     volumes:

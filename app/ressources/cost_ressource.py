@@ -4,7 +4,7 @@ from app.decorators.guards import CreditPlanGuard
 from app.decorators.handlers import AsyncIOHandler, CostHandler, RedisHandler, ServiceAvailabilityHandler, TortoiseHandler
 from app.decorators.permissions import ClientTypesPermission, JWTRouteHTTPPermission
 from app.decorators.pipes import JSONLoadsPipe
-from app.definition._ressource import BaseHTTPRessource, HTTPRessource, HTTPMethod, PingService, UseAccess, UseGuard, UseHandler, UsePermission, UsePipe, UseRoles, LockService
+from app.definition._ressource import BaseHTTPRessource, HTTPRessource, HTTPMethod, PingService, Throttle, UseAccess, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles, LockService
 from app.definition._utils_decorator import Pipe
 from app.depends.dependencies import get_access_info, get_auth_permission, get_client_info
 from app.services.cost_service import CostService,REDIS_CREDIT_KEY_BUILDER
@@ -32,11 +32,13 @@ class CostRessource(BaseHTTPRessource):
         self.costService = costService
         self.reactiveService = reactiveService
         self.redisService = redisService
-
-    @UseRoles([Role.PUBLIC])
+    
+    @Throttle(normal=(80,30))
     @UseHandler(CostHandler())
-    @UseAccess(accesses={'Admin':True,'User':True,'App':True})
-    @UsePermission(ClientTypesPermission(['Admin','App','User']))
+    @UseRoles([Role.ADMIN,Role.COSTS])
+    @UseLimiter("24/minutes",cost={'User':2})
+    @UseAccess(accesses={'Admin':True,'User':True,'System':True})
+    @UsePermission(ClientTypesPermission(['Admin','User','System']))
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.GET])
     def show_cost_file(self, request: Request, response: Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         """Return a summary of the currently loaded cost definitions.
@@ -53,38 +55,48 @@ class CostRessource(BaseHTTPRessource):
             "rules":self.costService.rules
         }
 
+    
     @UseRoles([Role.PUBLIC])
+    @Throttle(normal=(80,30))
     @LockService(RedisService)
     @PingService([RedisService])
     @UseHandler(RedisHandler,CostHandler)
-    @UseAccess(accesses={'Admin':True,'User':True,'App':True})
-    @UsePermission(ClientTypesPermission(['Admin','App','User']))
+    @UseLimiter("24/minutes",cost={'App':3,'User':2})
+    @UsePermission(ClientTypesPermission(['Admin','App','User','System']))
+    @UseAccess(accesses={'Admin':True,'User':True,'App':True,'System':True})
     @BaseHTTPRessource.HTTPRoute('/credits/', methods=[HTTPMethod.GET])
     async def show_current_credits(self, request: Request,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         """Return current credits for all plan keys. May be restricted in production via permissions in future.
         """
         return await self.costService.get_all_credits_balance()
 
-    @UseRoles([Role.ADMIN])
+
+    @Throttle(normal=(80,30))
     @UseGuard(CreditPlanGuard)
     @PingService([RedisService])
+    @UseRoles([Role.ADMIN,Role.COSTS])
     @UsePipe(JSONLoadsPipe,before=False)
     @UseHandler(CostHandler,RedisHandler)
-    @UseAccess(accesses={'Admin':True,'User':True})
-    @UsePermission(ClientTypesPermission(['Admin','App','User']))
+    @UseLimiter("12/minutes",cost={'App':3,'User':2})
+    @UseAccess(accesses={'Admin':True,'User':True,'System':True})
+    @UsePermission(ClientTypesPermission(['Admin','System','User']))
     @BaseHTTPRessource.HTTPRoute('/bills/{credit}/', methods=[HTTPMethod.GET],)
     async def get_bills(self,credit:CostConstant.Credit, request: Request,start:int = Query(0),stop:int=Query(-1), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         """Placeholder for billing/history endpoint. Implement retrieval from DB/audit store when available."""
         credit = (await self.credit_pipe(credit))['credit']
         bill_key = self.costService.bill_key(credit)
         return await self.redisService.range(RedisConstant.LIMITER_DB,bill_key,start,stop) or []
+
     
-    @UseRoles([Role.ADMIN])
+    @Throttle(normal=(80,30))
     @UseGuard(CreditPlanGuard)
+    @UseRoles([Role.ADMIN,Role.COSTS])
     @UsePipe(JSONLoadsPipe,before=False)
     @UseHandler(CostHandler,RedisHandler)
     @PingService([CostService,RedisService])
-    @UseAccess(accesses={'Admin':True,'User':True})
+    @UseLimiter("12/minutes",cost={'App':3,'User':2})
+    @UseAccess(accesses={'Admin':True,'User':True,'System':True})
+    @UsePermission(ClientTypesPermission(['Admin','System','User']))
     @BaseHTTPRessource.HTTPRoute('/receipts/{credit}/', methods=[HTTPMethod.GET],)
     async def get_receipts(self,credit:CostConstant.Credit, request: Request,start:int = Query(0),stop:int=Query(-1),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         

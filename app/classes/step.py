@@ -72,7 +72,7 @@ class StepRunner:
 
 class StepCallback:
 
-    def before_enter(self,):
+    def before_enter(self,)->bool:
         ...
 
     def after_exit(self,):

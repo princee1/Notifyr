@@ -372,7 +372,7 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         self.create_redis_instance()
 
     @check_db()
-    async def store(self,database:int|str,key:str,value:Any,expiry,nx:bool= False,xx:bool=False,redis:Redis=None):
+    async def store(self,database:int|str,key:str,value:Any,expiry:int,nx:bool= False,xx:bool=False,redis:Redis=None):
         if isinstance(value,(dict,list)):
             value = json.dumps(value)
         if expiry <=0:

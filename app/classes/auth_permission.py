@@ -71,6 +71,8 @@ class Role(Enum):
     AGENT = "AGENT"
     INGEST = "INGEST"
     CELERY = "CELERY"
+    COSTS = 'COSTS'
+    CUSTOM = 'CUSTOM'
 
 class Scope(Enum):
     SoloDolo = 'SoloDolo'

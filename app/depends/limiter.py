@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Dict, Literal
 from fastapi import Request
 from app.classes.auth_permission import AccessAPIInfo, AuthMechanism, ClientAccessInfo, ClientTypeLiteral
@@ -8,8 +9,13 @@ from app.services.config_service import ConfigService, WorkerService
 configService = Get(ConfigService)
 workerService = Get(WorkerService)
 
+@dataclass()
+class Bucket:
+    bucket:str
+
+
 KeyFunc = Literal['default','worker','none','ip','subnet','balancer']
-SecurityKeyFunc = Literal['group','client','session','access','type','issuer',]
+SecurityKeyFunc = Literal['group','client','session','access','type','issuer','private']
 
 def constant_cost_func(cost:int):
     def cost_func(request:Request):
@@ -73,6 +79,13 @@ def private_key_func(request:Request)->str:
     access_info:AccessAPIInfo = get_access_info(request)
     clientInfo:ClientAccessInfo = get_client_info(request)
     return 'private'
+
+def public_bucket_key_func(bucket:Bucket):
+    
+    def public_key_func(request:Request):
+        return bucket
+
+    return public_key_func
 
 def type_cost_func(auth_mechanism:AuthMechanism):
 

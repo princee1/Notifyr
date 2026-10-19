@@ -10,8 +10,8 @@ from pydantic import BaseModel
 from app.classes.cost_definition import SimpleTaskCostDefinition
 from app.classes.profiles import ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
 from app.definition._ws import W
-from app.depends.dependencies import get_access_info, get_auth_mechanism, get_auth_permission, get_client_info, get_session_id
-from app.depends.limiter import KeyFunc, SecurityKeyFunc, access_info_cost_func, access_type_token_func, client_info_cost_func, client_private_key_func, constant_cost_func, cost_func_by_auth_mechanism, group_private_key_func, private_key_func, session_key_func, type_cost_func
+from app.depends.dependencies import get_access_info, get_auth_mechanism
+from app.depends.limiter import Bucket, KeyFunc, SecurityKeyFunc, access_info_cost_func, access_type_token_func, client_info_cost_func, client_private_key_func, constant_cost_func, cost_func_by_auth_mechanism, group_private_key_func, private_key_func, public_bucket_key_func, session_key_func, type_cost_func
 from app.errors.security_error import BadAuthMechanismContextError
 from app.services.config_service import MODE, ConfigService, WorkerService
 from app.utils.helper import _make_delay_fn, copy_response
@@ -1053,7 +1053,7 @@ def Throttle(fixed: float | None = None,fn: Callable[[], float] | None = None,un
 
     return decorator    
 
-def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]|None|int|Dict[ClientTypeLiteral,int]=None,key_func:Callable[[Request],str]|Dict[AuthMechanism,SecurityKeyFunc|KeyFunc]|KeyFunc={}):
+def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]|None|int|Dict[ClientTypeLiteral,int]=None,key_func:Callable[[Request],str]|Dict[AuthMechanism,SecurityKeyFunc|KeyFunc]|KeyFunc|Bucket|Literal['access']={}):
     """
     *Description copied from the slowapi library*
 
@@ -1138,6 +1138,9 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
     if key_func in get_args(KeyFunc):
         key_func = compute_key_func(key_func)
     
+    elif key_func == 'access':
+        key_func = access_info_cost_func
+    
     elif isinstance(key_func,dict):
         default:dict[AuthMechanism,SecurityKeyFunc|KeyFunc] = {'token':'access','userpass':'client','none':'worker'}
 
@@ -1157,6 +1160,8 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
 
     elif callable(key_func):
         ... # Use the key_func callable provided
+    elif isinstance(key_func,Bucket):
+        key_func = public_bucket_key_func(key_func)
     else:
         raise ValueError('Could not parse the key_func')
 

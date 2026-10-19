@@ -1,3 +1,5 @@
+from typing import get_args
+
 from fastapi import HTTPException, Request,status
 from app.classes.celery import SchedulerModel
 from app.classes.cost_definition import SimpleTaskCostDefinition
@@ -227,12 +229,13 @@ class UserPermission(AbstractClientTypePermission):
         return await super().permission(clientInfo)
 
 class ClientTypesPermission(Permission):
+    __client_type_literal__ = get_args(ClientTypeLiteral)
 
     def __init__(self,client_types:list[ClientType|ClientTypeLiteral],slice:SliceMode='include'):
         super().__init__()
         temp = []
         for ct in client_types:
-            if isinstance(ct,ClientTypeLiteral):
+            if ct in self.__client_type_literal__:
                 ct = ClientType(ct)
             temp.append(ct)
         

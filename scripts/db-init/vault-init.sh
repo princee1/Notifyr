@@ -490,7 +490,7 @@ setup_database_config(){
       db_name="redis-notifyr" \
       default_ttl="35d" \
       max_ttl="35d" \
-      creation_statements='["~notifyr/config/*","+@transaction","+@string","+EXISTS","+KEYS","+DEL","+EXPIRE"]'
+      creation_statements='["~notifyr/config/*","+@transaction","+@string","+EXISTS","+KEYS","+DEL","+EXPIRE","+SELECT"]'
     
     vault write notifyr-database/roles/app-redis-ntfr-role \
       db_name="redis-notifyr" \
@@ -661,7 +661,7 @@ database_connection_config(){
         port=6379 \
         username="redis-vaultadmin" \
         password="$VAULTPASS" \
-        allowed_roles="admin-redis-ntfr-role, app-redis-ntfr-role, ncs-redis-ntfr-role, agentic-redis-ntfr-role, app-redis-credit-ntfr-role, app-redis-security-ntfr-role"
+        allowed_roles="admin-redis-ntfr-role, app-redis-ntfr-role, ncs-redis-ntfr-role, agentic-redis-ntfr-role, app-redis-credit-ntfr-role, app-redis-security-ntfr-role, app-redis-config-ntfr-role"
     vault write -f notifyr-database/rotate-root/redis-notifyr
     
     vault write notifyr-database/config/redis \
