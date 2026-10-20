@@ -174,7 +174,7 @@ class AccessRessource(BaseHTTPRessource):
                     path = AccessVaultConstant.ACCESS_PATH()
                     accesses:list[tuple[str,dict]] = list(await RunInThreadPool(self.vaultService.secrets_engine.view)(VaultConstant.INTERNAL_API_SECRETS,path))
                     for (acs_id,a) in accesses:
-                        if a['id'] == 'system' or a['type'] == 'System':
+                        if acs_id == 'system' or a['type'] == 'System':
                             continue
                         res[acs_id] = a
                     return res
@@ -184,7 +184,7 @@ class AccessRessource(BaseHTTPRessource):
             case 'memory':
                 res = {}
                 for _access in self.securityService.API_KEY.values():
-                    if a['id'] == 'system' or a['type'] == 'System':
+                    if _access['id'] == 'system' or _access['type'] == 'System':
                         continue
                     if access == '':
                         res[_access['id']]=_access

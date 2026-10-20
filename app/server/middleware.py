@@ -106,6 +106,8 @@ class APITokenAuthMiddleware(MiddleWare):
             
             request.state.accessInfo = access
 
+            return await call_next(request)
+            
         except HTTPException as e:
             return JSONResponse(e.detail,e.status_code,e.headers)
 
@@ -122,7 +124,6 @@ class APITokenAuthMiddleware(MiddleWare):
         except RequestOriginIsNotValidError as e:
             return JSONResponse(e.detail,status.HTTP_401_UNAUTHORIZED)
 
-        return await call_next(request)
 
 class JWTAuthMiddleware(MiddleWare):
     priority = MiddlewarePriority.AUTH
@@ -247,7 +248,7 @@ class RequiredAuthMiddleware(MiddleWare):
     @BypassOn(configService.AUTH_MECHANISM != 'both')
     @ExcludeOn(['/auth/login/','/auth/refresh/'])
     @ExcludeOn(['/auth/recover/'],methods=['POST'])
-    async def dispatch(self, request:Request, call_next:Callable[...,Response]):
+    async def dispatch(self, request:Request, call_next:Callable[[Request],Response]):
         try:
             path = get_url(request)
             require =  self.compute_required(path)
@@ -255,7 +256,9 @@ class RequiredAuthMiddleware(MiddleWare):
             if require!= None and (auth_mechanism:=get_auth_mechanism(request))!=require:
                 raise BadAuthMechanismContextError(require,auth_mechanism,'route')
 
-            return await call_next(request)
+            response:Response =  await call_next(request)
+            response.headers[HTTPHeaderConstant.X_AUTH_MECHANISM] = auth_mechanism
+            return response
 
         except BadAuthMechanismContextError as e:
             return JSONResponse(e.detail,status.HTTP_401_UNAUTHORIZED)

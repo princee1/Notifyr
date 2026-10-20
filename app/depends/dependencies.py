@@ -110,62 +110,64 @@ def get_auth_mechanism(request:Request)-> AuthMechanism | None:
     return auth_mechanism
         
 def get_client_info(request:Request,context:Annotated[Context,Depends(lambda:'request')]='request'):
-    match configService.AUTH_MECHANISM:
-        case 'userpass':
-            if not hasattr(request.state, "clientInfo") or request.state.clientInfo is None:
-                raise HTTPException(status_code=401, detail="Unauthorized")
-            return request.state.clientInfo       
-        case 'both':
-            if request.headers.get(HTTPHeaderConstant.X_AUTH_MECHANISM,None) == 'userpass':
+    mechanism = configService.AUTH_MECHANISM
+    while True:
+        match mechanism:
+            case 'userpass':
                 if not hasattr(request.state, "clientInfo") or request.state.clientInfo is None:
-                    raise HTTPException(status_code=401, detail="Unauthorized")
+                    raise HTTPException(status_code=401, detail="Unauthorized 'clientInfo' not found")
                 return request.state.clientInfo       
-            return None
-        case 'token':
-            if context == 'call':
-                raise HTTPException(status_code=401, detail="Bad Authentication Method required: userpass")
-            else:
+            case 'both':
+                if request.headers.get(HTTPHeaderConstant.X_AUTH_MECHANISM,None) == 'userpass':
+                    mechanism = 'userpass'
+                    continue
                 return None
-        case 'none':
-            return None
+            case 'token':
+                if context == 'call':
+                    raise HTTPException(status_code=401, detail="Bad Authentication Method required: userpass")
+                else:
+                    return None
+            case 'none':
+                return None
 
 def get_auth_permission(request: Request,context:Annotated[Context,Depends(lambda:'request')]='request'):
-
-    match configService.AUTH_MECHANISM:
-        case 'userpass':
-            if not hasattr(request.state, "authPermission") or request.state.authPermission is None:
-                raise HTTPException(status_code=401, detail="Unauthorized")
-            return request.state.authPermission
-        case 'both':
-            if get_auth_mechanism(request) == 'userpass':
+    mechanism = configService.AUTH_MECHANISM
+    while True:
+        match mechanism:
+            case 'userpass':
                 if not hasattr(request.state, "authPermission") or request.state.authPermission is None:
-                    raise HTTPException(status_code=401, detail="Unauthorized")
+                    raise HTTPException(status_code=401, detail="Unauthorized 'authPermission' not found")
                 return request.state.authPermission
-            return None
-        case 'token':
-            raise HTTPException(status_code=401, detail="Bad Authentication Method required: userpass")
-        case 'none':
-            return None
+            case 'both':
+                if get_auth_mechanism(request) == 'userpass':
+                    mechanism = 'userpass'
+                    continue
+                return None
+            case 'token':
+                raise HTTPException(status_code=401, detail="Bad Authentication Method required: userpass")
+            case 'none':
+                return None
 
 def get_access_info(request:Request,context:Annotated[Context,Depends(lambda:'request')]='request'):
-    match configService.AUTH_MECHANISM:
-        case 'token':
-            if not hasattr(request.state, "access") or request.state.accessInfo is None:
-                raise HTTPException(status_code=401, detail="Unauthorized")
-            return request.state.accessInfo       
-        case 'both':
-            if request.headers.get(HTTPHeaderConstant.X_AUTH_MECHANISM,None) == 'token':
-                if not hasattr(request.state, "access") or request.state.accessInfo is None:
-                    raise HTTPException(status_code=401, detail="Unauthorized")
-                return request.state.accessInfo    
-            return None
-        case 'userpass':
-            if  context == 'call':
-                raise HTTPException(status_code=401, detail="Bad Authentication Method required: token")
-            else:
+    mechanism = configService.AUTH_MECHANISM
+    while True:
+        match mechanism:
+            case 'token':
+                if not hasattr(request.state, "accessInfo") or request.state.accessInfo is None:
+                    raise HTTPException(status_code=401, detail="Unauthorized 'access' not found ")
+                return request.state.accessInfo       
+            case 'both':
+                if request.headers.get(HTTPHeaderConstant.X_AUTH_MECHANISM,None) == 'token':
+                    mechanism = 'token'
+                    continue
                 return None
-        case 'none':
-            return None
+            case 'userpass':
+                if  context == 'call':
+                    raise HTTPException(status_code=401, detail="Bad Authentication Method required: token")
+                else:
+                    return None
+            case 'none':
+                return None
 
 def get_session_id(request: Request,default:Annotated[str,Depends(lambda:str(uuid_v1_mc()))]):
     ...

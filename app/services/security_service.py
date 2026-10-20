@@ -59,7 +59,7 @@ class JWTAuthService(BaseService):
 
     def encode_auth_token(self,signature:str,session_id:str, client_id:str,auth_type:AuthType,)->str:
         try:
-            salt = str(self.salt)
+            salt = str(generate_salt())
             exp = self.settingService.API_EXPIRATION if auth_type == AuthType.API_TOKEN else self.settingService.AUTH_EXPIRATION
             created_time = time.time()
             permission = ClientAccessInfo(generation_id=self.GENERATION_ID, created_at=created_time,expired_at=created_time + exp,
@@ -72,7 +72,7 @@ class JWTAuthService(BaseService):
 
     def encode_refresh_token(self,signature:str,session_id:str,client_id:str):
         try:
-            salt = str(self.salt)
+            salt = str(generate_salt())
             created_time = time.time()
             permission = ClientRefresh(client_id=client_id,auth_signature=signature, generation_id=self.GENERATION_ID, created_at=created_time, salt=salt,
                                            expired_at=created_time + self.settingService.REFRESH_EXPIRATION,session_id=session_id)
@@ -106,7 +106,7 @@ class JWTAuthService(BaseService):
     def encode_ws_token(self, run_id: str, operation_id: str, expiration: float):
         now = time.time()
         expired_at = now + expiration
-        salt = str(self.salt)
+        salt = str(generate_salt())
         permission = WSPermission(
             operation_id=operation_id, expired_at=expired_at, created_at=now, run_id=run_id, salt=salt)
         return self._encode_token(permission, self.vaultService.WS_JWT_SECRET_KEY,False)
@@ -114,7 +114,7 @@ class JWTAuthService(BaseService):
     def encode_contact_token(self, contact_id: str, expiration: float, scope: ContactPermissionScope):
         now = time.time()
         expiration = now + expiration
-        salt = str(self.salt)
+        salt = str(generate_salt())
         permission = ContactPermission(
             expired_at=expiration, create_at=now, scope=scope, contact_id=contact_id, salt=salt)
         return self._encode_token(permission, self.vaultService.CONTACT_JWT_SECRET_KEY,True)

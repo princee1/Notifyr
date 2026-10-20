@@ -13,17 +13,18 @@ workerService = Get(WorkerService)
 class Bucket:
     bucket:str
 
-
 KeyFunc = Literal['default','worker','none','ip','subnet','balancer']
 SecurityKeyFunc = Literal['group','client','session','access','type','issuer','private']
 
 def constant_cost_func(cost:int):
     def cost_func(request:Request):
-        return cost
+        return cost or 1
     
     return cost_func
 
 def client_info_cost_func(cost:Dict[ClientTypeLiteral,int],max_limit:int):
+
+    cost = cost or dict()
     def cost_func(request:Request):
         clientInfo:ClientAccessInfo = get_client_info(request)
         clientType = clientInfo['client_type']
@@ -35,6 +36,7 @@ def client_info_cost_func(cost:Dict[ClientTypeLiteral,int],max_limit:int):
 
 def access_info_cost_func(cost:Dict[ClientTypeLiteral,int],max_limit:int):
 
+    cost = cost or dict()
     def cost_func(request:Request):
         access_type = request.state.accessInfo['type']
         unit_cost = cost.get(access_type,1)

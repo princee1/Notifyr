@@ -601,7 +601,7 @@ def UseAccess(*access_function: Callable[..., bool] | Access | Type[Access],acce
                 for access in access_function:
                     try:
                         if isinstance(access,Access):
-                            flag = access.access(*args,**kwargs)
+                            flag = await access.do(*args,**kwargs)
                         else:
                             flag = await APIFilterInject(access)(*args,**kwargs)
                         if flag:
@@ -674,8 +674,7 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
                         status_code=status.HTTP_501_NOT_IMPLEMENTED)
 
                 if SpecialKeyParameterConstant.META_SPECIAL_KEY_PARAMETER in kwargs or SpecialKeyParameterConstant.CLASS_NAME_SPECIAL_KEY_PARAMETER in kwargs:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
-                                        'message': 'special key used'})
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'message': 'special key used'})
 
                 kwargs_prime = kwargs.copy()
                 kwargs_prime[SpecialKeyParameterConstant.CLASS_NAME_SPECIAL_KEY_PARAMETER] = class_name
@@ -1053,7 +1052,7 @@ def Throttle(fixed: float | None = None,fn: Callable[[], float] | None = None,un
 
     return decorator    
 
-def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]|None|int|Dict[ClientTypeLiteral,int]=None,key_func:Callable[[Request],str]|Dict[AuthMechanism,SecurityKeyFunc|KeyFunc]|KeyFunc|Bucket|Literal['access']={}):
+def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]|None|int|Dict[ClientTypeLiteral,int]=None,key_func:Callable[[Request],str]|Dict[AuthMechanism,SecurityKeyFunc|KeyFunc]|KeyFunc|Bucket={}):
     """
     *Description copied from the slowapi library*
 
@@ -1138,8 +1137,8 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
     if key_func in get_args(KeyFunc):
         key_func = compute_key_func(key_func)
     
-    elif key_func == 'access':
-        key_func = access_info_cost_func
+    elif key_func in get_args(SecurityKeyFunc):
+        key_func = compute_security_key_func(key_func)
     
     elif isinstance(key_func,dict):
         default:dict[AuthMechanism,SecurityKeyFunc|KeyFunc] = {'token':'access','userpass':'client','none':'worker'}
@@ -1160,8 +1159,10 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
 
     elif callable(key_func):
         ... # Use the key_func callable provided
+    
     elif isinstance(key_func,Bucket):
         key_func = public_bucket_key_func(key_func)
+    
     else:
         raise ValueError('Could not parse the key_func')
 

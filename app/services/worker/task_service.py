@@ -11,7 +11,7 @@ from app.interface.timers import SchedulerInterface,MemoryJobStore
 from app.services.config_service import ConfigService, WorkerService
 from app.services.cost_service import CostService
 from app.services.database.mongoose_service import JOBS_CREDS, MongooseService
-from app.services.database.redis_service import RedisService
+from app.services.database.redis_service import RedisService,REDIS_PREFIX_BUILDER
 from app.services.logger_service import LoggerService
 from app.services.vault_service import VaultService
 from app.utils.constant import MongooseDBConstant, RedisConstant, CeleryConstant
@@ -32,7 +32,7 @@ class NotifyrMongoDBJobStore(MongoDBJobStore):
 
 
 # configuration
-LEADER_LOCK_KEY = f"apscheduler@leader_lock"
+LEADER_LOCK_KEY = REDIS_PREFIX_BUILDER['config'](f"apscheduler@leader_lock")
 LEADER_LOCK_TTL = 600
 LEADER_LOCK_TTL_LOWER_BOUND = int(LEADER_LOCK_TTL * 0.50)
 LEADER_LOCK_TTL_UPPER_BOUND = int(LEADER_LOCK_TTL * 5.50)
