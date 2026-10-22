@@ -19,6 +19,10 @@ CREATE DOMAIN ClientType AS VARCHAR(10) CHECK (
     VALUE IN ('User','Admin','Twilio','App','Service','System')
 );
 
+CREATE DOMAIN RecoverResetType AS VARCHAR(8) CHECK (
+    VALUE IN ('Single','All')
+);
+
 CREATE TABLE IF NOT EXISTS GroupClient (
     group_id UUID DEFAULT public.uuid_generate_v1mc (),
     group_name VARCHAR(50) UNIQUE,
@@ -37,12 +41,15 @@ CREATE TABLE IF NOT EXISTS Client (
     client_type ClientType DEFAULT 'User',
     group_id UUID DEFAULT NULL,
     max_connection INT DEFAULT 1,
+    max_refresh INT DEFAULT 0,
+    recovery_reset RecoverResetType DEFAULT 'Single',
     can_login BOOLEAN DEFAULT TRUE,
     issued_for VARCHAR(30) DEFAULT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT cname CHECK (client_name IS NOT NULL),
     CONSTRAINT max_conn CHECK (max_connection BETWEEN 1 AND 15),
+    CONSTRAINT max_reuse CHECK (max_refresh BETWEEN 0 AND 999),
     PRIMARY KEY (client_id),
     FOREIGN KEY (group_id) REFERENCES GroupClient (group_id) ON DELETE SET NULL ON UPDATE CASCADE
 );
@@ -203,6 +210,14 @@ BEGIN
 
     IF OLD.max_connection IS DISTINCT FROM NEW.max_connection THEN
         RAISE EXCEPTION 'Max connection cannot be modified';
+    END IF;
+
+    IF OLD.max_refresh IS DISTINCT FROM NEW.max_refresh THEN
+        RAISE EXCEPTION 'Max refresh cannot be modified';
+    END IF;
+
+    IF OLD.recovery_reset IS DISTINCT FROM NEW.recovery_reset THEN
+        RAISE EXCEPTION 'Recovery reset cannot be modified';
     END IF;
 
     RETURN NEW;

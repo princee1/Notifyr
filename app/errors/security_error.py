@@ -192,6 +192,10 @@ class MaximumSessionReachedError(SecurityBaseError):
         super().__init__('Maximum session reached', client_id=client_id,session_id =session_id,max_session_allowed=max_session_allowed)
 
 
+class MaximumRefreshReuseReachedError(SecurityBaseError):
+    def __init__(self, client_id:str,session_id:str,max_refresh_allowed:int):
+        super().__init__('Maximum Refresh Reuse reached', client_id=client_id,session_id=session_id,max_refresh_allowed=max_refresh_allowed)
+
 class SessionMechanismOperationError(SecurityBaseError):
 
     def __init__(self,reason:str,mechanism:str):

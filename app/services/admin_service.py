@@ -1,12 +1,10 @@
-from datetime import timedelta
 import time
-from typing import Literal, TypedDict
-
+from typing import Literal
 from tortoise.expressions import Q
-from app.classes.auth_permission import AuthPermission, AuthSignature, AuthType, ClientRefresh, ClientType, Credentials, EncryptedRecoveryTokens, PolicyModel, PolicyUpdateMode, RecoveryTokens, Scope, filter_asset_permission, get_combined_policies, parse_authPermission_enum
+from app.classes.auth_permission import AuthPermission, AuthSignature, AuthType, ClientRefresh, ClientType, Credentials, EncryptedRecoveryTokens, PolicyModel, PolicyUpdateMode, RecoveryReset, RecoveryTokens, Scope, filter_asset_permission, get_combined_policies, parse_authPermission_enum, RecoveryTokenGenerator
 from app.classes.secrets import ChaCha20SecretsWrapper
 from app.definition._service import DEFAULT_BUILD_STATE, BaseMiniService, BaseMiniServiceManager, BaseService, BuildFailureError, LinkDep, MiniService, Service, ServiceStatus
-from app.errors.security_error import AuthzSignatureMisMatchError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError,IdentityAlreadyBlacklistedError, MaximumSessionReachedError, PasswordLessAuthTypeStrategyError, ProvidedHashNotEquivalentError, RequestOriginIsNotValidError, SecurityIdentityNotResolvedError, SessionNotValidatedError
+from app.errors.security_error import AuthzSignatureMisMatchError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError,IdentityAlreadyBlacklistedError, MaximumRefreshReuseReachedError, MaximumSessionReachedError, PasswordLessAuthTypeStrategyError, ProvidedHashNotEquivalentError, RequestOriginIsNotValidError, SecurityIdentityNotResolvedError, SessionNotValidatedError
 from app.models.orm.security_model import ClientORM, GroupClientORM, PolicyMappingORM, UpdateClientModel
 from app.services.config_service import ConfigService
 from app.services.database.redis_service import REDIS_PREFIX_BUILDER, RedisService
@@ -49,6 +47,8 @@ class ClientVaultPath:
 
 VALID_SYNC_MECHANISM = {'redis+sync','vault+sync'}
 
+EncryptedPassword = str
+
 @MiniService()
 class ClientMiniService(BaseMiniService):
 
@@ -86,14 +86,14 @@ class ClientMiniService(BaseMiniService):
                 ...
 
     @RunInThreadPool
-    def encrypt_password(self,password:str):
+    def encrypt_password(self,password:str)->tuple[EncryptedPassword,str]:
         password,salt= self.securityService.hash(password,self.vaultService.CLIENT_PASSWORD_HASH_KEY)
         password = self.vaultService.transit_engine.encrypt(password,'security-key')
         salt = self.vaultService.transit_engine.encrypt(salt,'security-key')
         return password,salt
         
     @RunInThreadPool
-    def store_password(self,password:str,salt:str):
+    def store_password(self,password:EncryptedPassword,salt:str):
         credentials = Credentials(password=password,salt=salt)
         path = ClientVaultPath.CREDENTIALS_PATH(self.miniService_id)
         self.vaultService.security_engine.put('clients',credentials,path)
@@ -112,10 +112,21 @@ class ClientMiniService(BaseMiniService):
         return True
 
     @RunInThreadPool
-    def create_recovery_code(self,recovery:EncryptedRecoveryTokens):
+    def update_recovery_code(self,recovery:EncryptedRecoveryTokens=None,index:int=-1):
         path = ClientVaultPath.RECOVERY_PATH(self.client_id)
-        self.vaultService.security_engine.put('clients',recovery,path)
 
+        match self.client.recovery_reset:
+            case RecoveryReset.All:
+                recovery = recovery or RecoveryTokenGenerator.export([])
+                self.vaultService.security_engine.put('clients',recovery,path)
+            case RecoveryReset.Single:
+                stored_recovery:EncryptedRecoveryTokens = self.vaultService.secrets_engine.read('clients',path)
+                tokens = [t for t in stored_recovery.get('tokens',[]) if t.get('index',-1) != index]
+                stored_recovery['tokens'] = tokens
+                self.vaultService.security_engine.put('clients',stored_recovery,path)
+            case _:
+                ...
+            
     async def verify_recovery_code(self,code:str):
         path = ClientVaultPath.RECOVERY_PATH(self.client_id)
         recovery:EncryptedRecoveryTokens= await RunInThreadPool(self.vaultService.security_engine.read)('clients',path)
@@ -127,7 +138,10 @@ class ClientMiniService(BaseMiniService):
         for token in tokens:
             try:
                 await self.compare_password(code,token)
-                return True
+                if self.client.recovery_reset == RecoveryReset.Single:
+                    return token['index']
+                else:
+                    return -1
             except:
                 continue
         
@@ -363,11 +377,16 @@ class ClientMiniService(BaseMiniService):
         await self.client.save(ctx)
         return is_revoked,password,salt
 
-    async def verify_refresh_token(self,refreshPermission:ClientRefresh):
+    async def verify_refresh_token(self,refreshPermission:ClientRefresh,__raise__=True):
         if refreshPermission['client_id'] != self.client_id:
             raise SecurityIdentityNotResolvedError(refreshPermission['client_id'],'Refresh Token client id mismatch')
+
+        if __raise__ and self.client.max_refresh >0 and refreshPermission['reuse_counter'] > self.client.max_refresh:
+            raise MaximumRefreshReuseReachedError(refreshPermission['client_id'],refreshPermission['session_id'],self.client.max_refresh)
         
         await self.compare_auth_signature(refreshPermission['auth_signature'],refreshPermission['session_id'],'database')
+
+        return refreshPermission['reuse_counter'] + 1
 
     #######################################################################################################################
     ########################################                                           ####################################
@@ -394,7 +413,7 @@ class ClientMiniService(BaseMiniService):
             case 'none':
                 return
 
-    async def generate_access(self,session:str,signature:str|None,refresh:bool=True,ctx=None,):
+    async def generate_access(self,session:str,signature:str|None,refresh:bool=True,reuse=0,ctx=None):
         refresh_token = None
         auth_token = self.jwtService.encode_auth_token(signature,session,self.client_id,self.client.auth_type)
 
@@ -402,7 +421,7 @@ class ClientMiniService(BaseMiniService):
             raise CouldNotCreateAuthTokenError()
         
         if refresh:
-            refresh_token = self.jwtService.encode_refresh_token(signature,session,self.client_id)
+            refresh_token = self.jwtService.encode_refresh_token(signature,session,self.client_id,reuse)
             if refresh_token == None:
                 raise CouldNotCreateRefreshTokenError()
 

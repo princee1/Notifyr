@@ -70,12 +70,13 @@ class JWTAuthService(BaseService):
             print(e)
         return None
 
-    def encode_refresh_token(self,signature:str,session_id:str,client_id:str):
+    def encode_refresh_token(self,signature:str,session_id:str,client_id:str,reuse:int=0):
         try:
             salt = str(generate_salt())
             created_time = time.time()
             permission = ClientRefresh(client_id=client_id,auth_signature=signature, generation_id=self.GENERATION_ID, created_at=created_time, salt=salt,
-                                           expired_at=created_time + self.settingService.REFRESH_EXPIRATION,session_id=session_id)
+                                           expired_at=created_time + self.settingService.REFRESH_EXPIRATION,session_id=session_id,
+                                           reuse=reuse)
             token = self._encode_token(permission)
             return token
         except Exception as e:

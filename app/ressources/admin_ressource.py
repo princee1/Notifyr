@@ -502,5 +502,13 @@ class AdminRessource(BaseHTTPRessource):
         @UseLimiter(limit_value='1/day')
         @LockService(VaultService,lockType='reader')
         @BaseHTTPRessource.HTTPRoute('/access/', methods=[HTTPMethod.GET])
-        async def read_admin_access(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
-            ...
+        async def read_admin_access(self,request:Request,response:Response,source:SourceMode=Depends(source_mode_query), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+            match source:
+                case 'database':
+                    ...
+                
+                case 'memory':
+                    ...
+
+                case _:
+                    ...

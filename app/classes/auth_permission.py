@@ -80,6 +80,10 @@ class Scope(Enum):
     Domain = 'Domain'
     Free='Free'
 
+class RecoveryReset(Enum):
+    All = 'All'
+    Single='Single'
+
 class ClientType(Enum):
     User = 'User'
     Admin = 'Admin'
@@ -184,6 +188,7 @@ class ClientRefresh(TypedDict): # NOTE if someone from an organization change th
     client_id:str
     created_at:float
     expired_at:float
+    reuse_counter:int
     status:PermissionStatus= 'active'
 
 class AuthPermission(TypedDict):
@@ -216,8 +221,11 @@ class Credentials(TypedDict):
     password:str
     salt:str
 
+class RecoveryCredentials(Credentials):
+    index:int
+
 class EncryptedRecoveryTokens(TypedDict):
-    tokens:List[Credentials]
+    tokens:List[RecoveryCredentials]
     recovery_id:str
     date:str
     time:float

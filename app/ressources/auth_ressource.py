@@ -3,7 +3,7 @@ from typing_extensions import Literal
 from fastapi import Depends, HTTPException, Request, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from starlette import status
-from app.classes.auth_permission import AccessModel, AuthPermission, AuthSignature, AuthState, AuthType, ClientAccessInfo, ClientRefresh, ClientType, Credentials, EncryptedRecoveryTokens, RecoveryTokenGenerator, RecoveryTokens, Role
+from app.classes.auth_permission import AccessModel, AuthPermission, AuthSignature, AuthState, AuthType, ClientAccessInfo, ClientRefresh, ClientType, Credentials, EncryptedRecoveryTokens, RecoveryCredentials, RecoveryTokenGenerator, RecoveryTokens, Role
 from app.container import InjectInMethod, Get
 from app.decorators.guards import BlacklistClientGuard, ClientAuthTypeGuard, PrimarySessionGuard
 from app.decorators.handlers import ClientHandler, MiniServiceHandler, ORMCacheHandler, RedisHandler, ClientSecurityHandler, VaultHandler
@@ -68,13 +68,15 @@ class AuthRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/recover/',methods=[HTTPMethod.GET])
     async def get_recovery_token(self,request:Request,response:Response,client:Annotated[ClientMiniService,Depends(get_client_from_info)],profile:str=Depends(get_client_from_info),authPermission:AuthPermission=Depends(get_auth_permission),clientInfo:ClientAccessInfo=Depends(get_client_info)):
 
+        i=0
         tokens = []
         recovery = RecoveryTokenGenerator(count=4,part=3)
         async for token in recovery.generate():
             encrypted_code,salt = await client.encrypt_password(token)
-            tokens.append(Credentials(password=encrypted_code,salt=salt))
+            tokens.append(RecoveryCredentials(password=encrypted_code,salt=salt,index=i))
+            i+=1
 
-        await client.create_recovery_code(recovery.export(tokens))
+        await client.update_recovery_code(recovery.export(tokens))
 
         return recovery.export()
 
@@ -105,13 +107,13 @@ class AuthRessource(BaseHTTPRessource):
                 await self.blacklist_guard.guard(client,None,session_id if session_id else '')
                 client.verify_client_origin(origin)
 
-                await client.verify_recovery_code(credentials.password)
+                index = await client.verify_recovery_code(credentials.password)
                 await client.verify_login_count(session_id)
                 
                 authSignature,session_id = await client.upsert_session(session_id,origin,user_agent,device_name)
                 auth_token,refresh_token = await client.generate_access(session_id,authSignature.get('signature',None),ctx=ctx)
 
-                await client.create_recovery_code(RecoveryTokenGenerator().export())
+                await client.update_recovery_code(index=index)
                 session.login(refresh_token)
                 session.update_auth_state(AuthState.LOGIN_BY_RECOVERY)
 
@@ -142,16 +144,16 @@ class AuthRessource(BaseHTTPRessource):
                 if refreshPermission['status'] == 'active':
                     await self.blacklist_guard.guard(client,None,refreshPermission['session_id'])
                     client.verify_client_origin(origin)
-                    await client.verify_refresh_token(refreshPermission)
+                    reuse_counter = await client.verify_refresh_token(refreshPermission)
 
                     new_signature,_ = await client.upsert_session(refreshPermission['session_id'])
-                    auth_token,refresh_token = await client.generate_access(refreshPermission['session_id'],new_signature.get('signature',None),ctx=ctx)
+                    auth_token,refresh_token = await client.generate_access(refreshPermission['session_id'],new_signature.get('signature',None),reuse_counter,ctx=ctx)
 
                     session.login(refresh_token)
                     session.update_auth_state(AuthState.AUTH_BY_REFRESH)
                     res = self.access_token_pipe.pipe(auth_token,client)
                 else:
-                    await client.verify_refresh_token(refreshPermission)
+                    await client.verify_refresh_token(refreshPermission,__raise__=False)
                     new_signature = await client.revoke_itself(ctx,session_id=refreshPermission['session_id'])
                     response.status_code = status.HTTP_204_NO_CONTENT
                     session.update_auth_state(AuthState.LOGOUT_BY_REFRESH)
@@ -263,7 +265,7 @@ class AuthRessource(BaseHTTPRessource):
     @LockService(VaultService,SettingService,AdminService,as_manager=True,lockType='reader',miniLockType='reader')
     @BaseHTTPRessource.HTTPRoute('/me/',methods=[HTTPMethod.PUT])
     async def update_myself(self,request:Request,response:Response,updateClient:UpdateClientModel,broker:Annotated[Broker,Depends(Broker)],client:Annotated[ClientMiniService,Depends(get_client_from_info)],profile:str=Depends(get_client_from_info),authPermission:AuthPermission=Depends(get_auth_permission),clientInfo:ClientAccessInfo=Depends(get_client_info)):
-        if clientInfo['client_type'] != ClientType.Admin:
+        if clientInfo['client_type'] != ClientType.Admin and clientInfo['client_type']!=ClientType.System:
             updateClient.issued_for = None
             updateClient.client_scope = None
             updateClient.client_description = None

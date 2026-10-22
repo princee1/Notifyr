@@ -2,7 +2,7 @@ from typing import Any, Literal, Optional, Self
 from tortoise import fields, models
 from tortoise.contrib.pydantic import pydantic_model_creator
 from pydantic import BaseModel, Field, PrivateAttr, Secret, field_validator, model_validator
-from app.classes.auth_permission import API_TOKEN_CLIENT_TYPE_SET, AuthType, ClientType, Scope
+from app.classes.auth_permission import API_TOKEN_CLIENT_TYPE_SET, AuthType, ClientType, RecoveryReset, Scope
 from app.utils.constant import PostgresConstant
 from app.utils.helper import subset_model, uuid_v1_mc
 from app.utils.validation import email_validator, ipv4_subnet_validator, ipv4_validator,PasswordValidator
@@ -39,6 +39,8 @@ class ClientORM(models.Model):
     client_type = fields.CharEnumField(enum_type=ClientType, default=ClientType.User, max_length=25)
     issued_for = fields.CharField(max_length=30, null=True, unique=False)
     max_connection = fields.SmallIntField(False,null=False,default=1)
+    max_refresh = fields.SmallIntField(False,null=False,default=0)
+    recovery_reset = fields.CharEnumField(enum_type=RecoveryReset,default=RecoveryReset.All,max_length=25)
     can_login = fields.BooleanField(default=True,null=False)
     group = fields.ForeignKeyField(GroupClientORM, related_name="group", on_delete=fields.SET_NULL, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
@@ -63,6 +65,8 @@ class ClientORM(models.Model):
             "client_scope": self.client_scope.value,
             "client_type": self.client_type.value,
             "max_connection":self.max_connection,
+            "max_refresh":self.max_refresh,
+            "recovery_reset":self.recovery_reset.value,
             "can_login":self.can_login,
             "auth_type":self.auth_type.value,
             "issued_for": self.issued_for,
@@ -157,6 +161,8 @@ class ClientModel(ClientModelBase):
     client_scope:Scope = Field(Scope.SoloDolo)
     group:str | None = Field(None)
     max_connection:int = Field(default=1,ge=1,le=15)
+    max_reuse:int = Field(default=0,ge=0,le=999)
+    recovery_reset:RecoveryReset = Field(RecoveryReset.Single)
     client_username:str = Field(min_length=8,max_length=30)
     client_description:str = Field(default=None,max_length=500)
     policies:list[str] = Field(default_factory=list,max_length=30)

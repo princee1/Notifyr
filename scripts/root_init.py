@@ -89,7 +89,7 @@ async def main():
         
         systemInfo = {'client_email':'system@noreply-notifyr.ca','client_name':'Notifyr System','client_username' :'notifyr_system',
                         'client_description':'Root Super user account that can login and do Admin operation and super user operation','issued_for':'{COMES FROM ENV}'}
-        systemORM = security.ClientORM(client_type=ClientType.System,max_connection=1,can_login=True,**systemInfo)
+        systemORM = security.ClientORM(client_type=ClientType.System,max_connection=1,max_refresh=25,can_login=True,**systemInfo)
         system_client = InjectInMiniService(ClientMiniService,client=systemORM,policies=[])
         password = generateId(22)
         encrypted_password,salt = await system_client.encrypt_password(password)
@@ -105,7 +105,7 @@ async def main():
         skip()
 
         admin_info = admin.model_dump(mode='python',exclude={'password',})
-        adminORM = security.ClientORM(client_type=ClientType.Admin,max_connection=1,can_login=True,client_description='Admin Account',**admin_info)
+        adminORM = security.ClientORM(client_type=ClientType.Admin,max_connection=1,can_login=True,max_refresh=50,client_description='Admin Account',**admin_info)
         admin_client = InjectInMiniService(ClientMiniService,client=adminORM,policies=[])
         encrypted_password,salt = await admin_client.encrypt_password(admin.password.get_secret_value())
 
