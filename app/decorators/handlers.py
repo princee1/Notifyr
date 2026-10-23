@@ -62,6 +62,7 @@ from app.errors.db_error import (
     MongoClientAlreadyExistError,
     MongoClientModeDoesNotExistError,
     MongoTransactionFailureError,
+    VaultHardLimitError,
 )
 from app.utils.fileIO import ExtensionNotAllowedError, MultipleExtensionError
 from aiomcache.exceptions import ClientException, ValidationException 
@@ -765,6 +766,9 @@ class VaultHandler(Handler):
 
         except requests.exceptions.ReadTimeout:
             raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT,detail="Vault server did not respond in time")
+        
+        except VaultHardLimitError as e:
+            raise HTTPException(status_code=status.HTTP_507_INSUFFICIENT_STORAGE,detail={'message':'Vault hard limit reached',**e.detail()})
 
 class MiniServiceHandler(Handler):
 
@@ -779,12 +783,12 @@ class MiniServiceHandler(Handler):
         except MiniServiceDoesNotExistsError as e:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="MiniService does not exist"
+                detail={"message": "MiniService does not exist", "service": e.service,'mini_service':e.miniService_id}
             )
         except MiniServiceCannotBeIdentifiedError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-               detail="MiniService cannot be identified"
+                detail={"message": "MiniService cannot be identified"}
             )
 
 class S3Handler(Handler):

@@ -8,7 +8,7 @@ from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
 from app.depends.class_dep import TrackerInterface
 from app.depends.orm_cache import BlacklistClientCache, BlacklistGroupCache
-from app.errors.db_error import CollectionHardLimitReachedError, TortoiseTableRowsLimitReachedError
+from app.errors.db_error import CollectionHardLimitReachedError, TortoiseTableRowsLimitReachedError, VaultHardLimitError
 from app.errors.ingest_error import AgenticDatabaseNotAllowedError
 from app.errors.llm_error import LLMModelMaxTokenExceededError, LLMModelNotPermittedError, LLMProviderDoesNotExistError, LLMConfigNotConfiguredError
 from app.errors.security_error import ClientDoesNotExistError, IdentityBlacklistedError
@@ -27,6 +27,7 @@ from app.services.database.mongoose_service import MongooseService
 from app.services.database.redis_service import RedisService
 from app.services.file.file_service import FileService
 from app.services.profile_service import ProfileService
+from app.services.vault_service import VaultService
 from app.services.worker.task_service import TaskService
 from app.services.worker.celery_service import CeleryService,task_name
 from app.services.config_service import ConfigService
@@ -47,6 +48,8 @@ from app.utils.globals import CAPABILITIES
 from app.services.agent.llm_service import LLMService
 
 from tortoise import models
+
+from app.utils.toolbox import RunInThreadPool
 
 if CAPABILITIES['object']:
     from app.services.database.object_service import ObjectS3Service
@@ -530,6 +533,36 @@ class TortoiseHardLimitGuard(Guard):
     
         return True,''
 
+
+class VaultHardLimitGuard(Guard):
+
+    def __init__(self,limit:int,engine:Literal['secrets','security'],mount:str,path:str=''):
+        super().__init__()
+        self.limit = limit
+        self.engine = engine
+        self.mount = mount
+        self.path = path
+        self.vaultService = Get(VaultService)
+        if self.engine not in ['secrets','security']:
+            raise ValueError('Engine must be either secrets or security')
+
+    async def guard(self):
+        engine = None
+        match self.engine:
+            case 'secrets':
+                engine = self.vaultService.secrets_engine
+            case 'security':
+                engine = self.vaultService.security_engine
+            case _:
+                raise ValueError('Invalid engine specified')
+        
+        elements =  await RunInThreadPool(engine.list)(self.mount,self.path)
+
+        if len(elements) >= self.limit:
+            raise VaultHardLimitError(self.limit,self.engine,self.mount,self.path)
+
+
+        
 class ServiceStatusGuard(Guard):
     def __init__(self,services:List[Type[BaseService]]):
         super().__init__()

@@ -213,6 +213,7 @@ class ClientMiniService(BaseMiniService):
             authSignature['time'] = time.time()
             authSignature['last_login'] = time.time()
             authSignature['user_agent'] = user_agent
+            authSignature['device_name'] = device_name
 
         match self.configService.SESSION_MECHANISM:
             case 'vault+sync':
@@ -240,16 +241,13 @@ class ClientMiniService(BaseMiniService):
 
             case 'redis' | 'redis+sync':
                 path = ClientVaultPath.SESSIONS_REDIS_PATH(self.client_id,'*')
-                sessions = len(await self.redisService.scan(RedisConstant.SECURITY_DB,path)) or 0
+                sessions = await self.redisService.scan(RedisConstant.SECURITY_DB,path) or []
             case _:
-                ...
+                sessions = []
 
-        if isinstance(sessions,list):
-            current_session_count = len(sessions)
-        else:
-            current_session_count = sessions
+        current_session_count = len(sessions)
 
-        if session_id and session_id not in current_session_count:
+        if session_id and session_id not in sessions:
             current_session_count+=1
 
         if current_session_count >= self.client.max_connection:

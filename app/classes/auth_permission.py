@@ -7,6 +7,7 @@ from typing_extensions import TypedDict
 from enum import Enum
 
 from app.classes.cost_definition import SimpleTaskCostDefinition
+from app.utils.validation import ipv4_subnet_validator, ipv4_validator
 from .template import Extension
 from app.definition._error import BaseError
 from app.utils.fileIO import is_file
@@ -113,6 +114,25 @@ class AuthSignature(TypedDict):
     user_agent:str
     last_login:float
     device_name:str
+
+class AuthSignatureInfoModel(BaseModel):
+    ip:Optional[str] = Field(default=None,max_length=25)
+    ip_mode:Optional[Literal['ip','subnet']] = Field(default='ip') 
+    user_agent:Optional[str] = Field(default=None,max_length=100)
+    device_name:str  = Field(max_length=60,min_length=5)
+
+    @model_validator(mode='after')
+    def verify_ip(self:Self):
+        if self.ip != None:
+            match self.ip_mode:
+                case 'ip':
+                    ipv4_validator(self.ip)
+                case 'subnet':
+                    ipv4_subnet_validator(self.ip)
+                case _:
+                    ipv4_validator(self.ip)
+
+        return self
 
 class IssuerInfo(TypedDict):
     issuer:str

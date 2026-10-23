@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS GroupClient (
 );
 
 CREATE TABLE IF NOT EXISTS Client (
-    client_id UUID DEFAULT public.uuid_generate_v1mc (),
+    client_id UUID DEFAULT public.uuid_generate_v1mc(),
     client_name VARCHAR(50),
     client_email VARCHAR(200) UNIQUE,
     client_description TEXT DEFAULT NULL,
@@ -47,11 +47,39 @@ CREATE TABLE IF NOT EXISTS Client (
     issued_for VARCHAR(30) DEFAULT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT cname CHECK (client_name IS NOT NULL),
-    CONSTRAINT max_conn CHECK (max_connection BETWEEN 1 AND 15),
-    CONSTRAINT max_reuse CHECK (max_refresh BETWEEN 0 AND 999),
+
+    CONSTRAINT cname
+        CHECK (client_name IS NOT NULL),
+
+    CONSTRAINT max_conn
+        CHECK (max_connection BETWEEN 1 AND 15),
+
     PRIMARY KEY (client_id),
-    FOREIGN KEY (group_id) REFERENCES GroupClient (group_id) ON DELETE SET NULL ON UPDATE CASCADE
+
+    FOREIGN KEY (group_id)
+        REFERENCES GroupClient (group_id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+);
+
+-- Ensure max_refresh is between 0 and 999 when applicable,
+-- and require both values to be NULL for other client types.
+ALTER TABLE Client
+ADD CONSTRAINT chk_client_refresh_reset
+CHECK (
+    (
+        client_type IN ('System', 'User', 'Admin')
+        AND max_refresh BETWEEN 0 AND 999
+        AND recovery_reset IS NOT NULL
+        AND can_login IS NOT NULL
+    )
+    OR
+    (
+        client_type NOT IN ('System', 'User', 'Admin')
+        AND max_refresh IS NULL
+        AND recovery_reset IS NULL
+        AND can_login IS NULL
+    )
 );
 
 CREATE TABLE IF NOT EXISTS PolicyMapping(

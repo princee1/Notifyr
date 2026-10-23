@@ -12,7 +12,7 @@ class SecurityBaseError(BaseError):
 
     @property
     def detail(self):
-        return {"message": self.message, "details": self.context}
+        return {"message": self.message, **self.context}
 
 
 class ClientDoesNotExistError(SecurityBaseError):

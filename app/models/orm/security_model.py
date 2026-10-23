@@ -39,9 +39,9 @@ class ClientORM(models.Model):
     client_type = fields.CharEnumField(enum_type=ClientType, default=ClientType.User, max_length=25)
     issued_for = fields.CharField(max_length=30, null=True, unique=False)
     max_connection = fields.SmallIntField(False,null=False,default=1)
-    max_refresh = fields.SmallIntField(False,null=False,default=0)
-    recovery_reset = fields.CharEnumField(enum_type=RecoveryReset,default=RecoveryReset.All,max_length=25)
-    can_login = fields.BooleanField(default=True,null=False)
+    max_refresh = fields.SmallIntField(False,null=True,default=0)
+    recovery_reset = fields.CharEnumField(enum_type=RecoveryReset,default=RecoveryReset.All,null=True,max_length=10)
+    can_login = fields.BooleanField(default=None,null=True)
     group = fields.ForeignKeyField(GroupClientORM, related_name="group", on_delete=fields.SET_NULL, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
@@ -66,7 +66,7 @@ class ClientORM(models.Model):
             "client_type": self.client_type.value,
             "max_connection":self.max_connection,
             "max_refresh":self.max_refresh,
-            "recovery_reset":self.recovery_reset.value,
+            "recovery_reset": None if self.recovery_reset == None else self.recovery_reset.value,
             "can_login":self.can_login,
             "auth_type":self.auth_type.value,
             "issued_for": self.issued_for,
@@ -101,7 +101,7 @@ class PolicyMappingORM(models.Model):
 
 client_password_validator = PasswordValidator(10,60,)
 
-ClientModelBase = pydantic_model_creator(ClientORM, name="ClientORM", exclude=('created_at', 'updated_at','client_id',"authenticated","client_scope","group",))
+ClientModelBase = pydantic_model_creator(ClientORM, name="ClientORM", exclude=('created_at', 'updated_at','client_id',"group","can_login"))
 
 
 def validate_ip(issued_for:str,scope:Scope):
@@ -158,11 +158,10 @@ class AdminClientModel(BaseModel):
      
 class ClientModel(ClientModelBase):
     password:Optional[str] = None
-    client_scope:Scope = Field(Scope.SoloDolo)
     group:str | None = Field(None)
     max_connection:int = Field(default=1,ge=1,le=15)
-    max_reuse:int = Field(default=0,ge=0,le=999)
-    recovery_reset:RecoveryReset = Field(RecoveryReset.Single)
+    max_refresh:Optional[int] = Field(default=None,ge=0,le=999)
+    recovery_reset:Optional[RecoveryReset] = Field(default=None)
     client_username:str = Field(min_length=8,max_length=30)
     client_description:str = Field(default=None,max_length=500)
     policies:list[str] = Field(default_factory=list,max_length=30)
@@ -178,6 +177,11 @@ class ClientModel(ClientModelBase):
     def normalize_policies(cls,val):
         return list(set(val))
 
+    @field_validator('client_email')
+    def check_email(cls,e):
+        email_validator(e)
+        return e
+
     @model_validator(mode='after')
     def check_password(self):
         if self.client_type in API_TOKEN_CLIENT_TYPE_SET and self.password:
@@ -186,19 +190,34 @@ class ClientModel(ClientModelBase):
         return self
 
     @model_validator(mode='after')
-    def check_max_conn(self):
-        if self.client_type in API_TOKEN_CLIENT_TYPE_SET and self.max_connection >1:
-            raise ValueError(f'This client_type {self.client_type} only allow one connection found {self.max_connection}')
+    def check_after_client_type(self):
+
+        if self.client_type not in API_TOKEN_CLIENT_TYPE_SET :
+
+            if self.max_refresh == None:
+                raise ValueError(f'This client_type {self.client_type} must set the "max_refresh" found: {None}')
+
+            if self.recovery_reset == None:
+                raise ValueError(f'This client_type {self.client_type} must set the "recovery_reset" found: {self.max_refresh}')
+        
+        if self.client_type in API_TOKEN_CLIENT_TYPE_SET :
+            if self.max_refresh != None:
+                raise ValueError(f'This client_type {self.client_type} only allow the "max_refresh" to be None found: {self.max_refresh}')
+
+            if  self.recovery_reset != None:
+                raise ValueError(f'This client_type {self.client_type} only allow the "recovery_reset" to be None found: {self.max_refresh}')
+
         return self
     
     @field_validator('client_type')
-    def validate_client_type(cls,clientType:AuthType):
-        if clientType == ClientType.Admin:
+    def validate_client_type(cls,clientType:ClientType):
+        if clientType == ClientType.Admin or clientType == ClientType.System:
             raise ValueError('Cannot create an Admin client')
         return clientType
     
     @field_validator('client_description')
     def validate_description(cls,description:str)->str:
+        description = description or ''
         return description.strip()
 
     @field_validator('client_username')

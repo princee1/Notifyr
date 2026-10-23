@@ -159,3 +159,20 @@ class TortoiseContextAlreadyExistError(BaseError):
 class TortoiseContextDoesNotExistError(BaseError):
     def __init__(self,credentials:str):
         self.credentials = credentials
+
+
+class VaultHardLimitError(BaseError):
+    def __init__(self,limit:int,engine:str,mount:str,path:str):
+        super().__init__(limit,engine,mount,path)
+        self.limit = limit
+        self.engine = engine
+        self.mount = mount
+        self.path = path
+
+    def detail(self)->dict:
+        return {
+            'limit':self.limit,
+            'engine':self.engine,
+            'mount':self.mount,
+            'path':self.path
+        }
