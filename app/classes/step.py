@@ -97,7 +97,7 @@ class LambdaStepRunner:
 
         if exc_type is None:
             if asyncio.iscoroutinefunction(self.callback.after_exit):
-                await self.callback.before_enter(*self.args,**self.kwargs)
+                await self.callback.after_exit(*self.args,**self.kwargs)
             else:
                 self.callback.after_exit(*self.args,**self.kwargs)
 

@@ -222,7 +222,6 @@ class AppServer(EventInterface):
 
     @register_hook('startup')
     async def before_startup(self):
-        return
         async with self.redisService.redis_config.pipeline(True) as pipe:
             for key in SetupRootConstant.KEYS:
                 await self.redisService.retrieve(RedisConstant.CONFIG_DB,key,redis=pipe)

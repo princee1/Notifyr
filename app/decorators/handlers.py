@@ -504,7 +504,7 @@ class ClientHandler(Handler):
         except ClientAuthenticationConfusionError as e:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail={'message': 'Client is already logged in' if e.auth_flag_found else 'Client is already logged out',**e.detail}
+                detail = e.detail,
             )
 
         except ClientNotAllowedToLoginError as e:
