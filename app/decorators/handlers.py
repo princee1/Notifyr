@@ -33,7 +33,7 @@ from app.errors.service_error import MiniServiceAlreadyExistsError,MiniServiceDo
 from app.errors.async_error import KeepAliveTimeoutError, LockNotFoundError, ReactiveSubjectNotFoundError
 from app.errors.contact_error import ContactAlreadyExistsError, ContactMissingInfoKeyError, ContactNotExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
 from app.errors.properties_error import GlobalKeyAlreadyExistsError, GlobalKeyDoesNotExistsError
-from app.errors.security_error import ClientAlreadyExistError, ClientAuthenticationFlagError, ClientNotAllowedToLoginError, IdentityAlreadyBlacklistedError, AuthzSignatureMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupDoesNotExistError, GroupIdNotMatchError, IdentityBlacklistedError, JWTInvalidTokenError, MaximumRefreshReuseReachedError, MaximumSessionReachedError, MaximumSessionReachedError, PrimarySessionNotValidatedError, ProvidedHashNotEquivalentError, RequestOriginIsNotValidError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError, SessionMechanismOperationError, SessionNotValidatedError, TokenDataMissingError, TokenExpiredError, TokenGenerationMismatchError
+from app.errors.security_error import ClientAlreadyExistError, ClientAuthenticationConfusionError, ClientNotAllowedToLoginError, IdentityAlreadyBlacklistedError, AuthzSignatureMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupDoesNotExistError, GroupIdNotMatchError, IdentityBlacklistedError, JWTInvalidTokenError, MaximumRefreshReuseReachedError, MaximumSessionReachedError, MaximumSessionReachedError, PrimarySessionNotValidatedError, ProvidedHashNotEquivalentError, RequestOriginIsNotValidError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError, SessionMechanismOperationError, SessionNotValidatedError, TokenDataMissingError, TokenExpiredError, TokenGenerationMismatchError
 from app.errors.twilio_error import TwilioCallBusyError, TwilioCallFailedError, TwilioCallNoAnswerError, TwilioPhoneNumberParseError
 from app.classes.profiles import ProfileModelRequestBodyError, ProfileDoesNotExistsError, ProfileHasNotCapabilitiesError, ProfileModelTypeDoesNotExistsError, ProfileNotAvailableError, ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
 from app.services.assets_service import AssetConfusionError, AssetNotFoundError, AssetTypeNotAllowedError, AssetTypeNotFoundError
@@ -501,7 +501,7 @@ class ClientHandler(Handler):
                 'identity_type': e.identity_type
             })
 
-        except ClientAuthenticationFlagError as e:
+        except ClientAuthenticationConfusionError as e:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail={'message': 'Client is already logged in' if e.auth_flag_found else 'Client is already logged out',**e.detail}

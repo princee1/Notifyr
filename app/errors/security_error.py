@@ -145,13 +145,12 @@ class IdentityBlacklistedError(SecurityBaseError):
         super().__init__("Identity is blacklisted", identity=identity, identity_type=identity_type)
 
 
-class ClientAuthenticationFlagError(SecurityBaseError):
-    def __init__(self, client_id: str, auth_flag_found: bool,source:Literal['refresh','access']):
+class ClientAuthenticationConfusionError(SecurityBaseError):
+    def __init__(self, client_id: str,session_id:str,source:Literal['refresh','access']):
         self.client_id = client_id
         self.source = source
-        self.auth_flag_found = auth_flag_found
-        self.flag_auth_expected = not auth_flag_found
-        super().__init__("Client authentication flag mismatch", client_id=client_id, auth_flag_found=auth_flag_found, flag_auth_expected=self.flag_auth_expected,source=source)
+        self.session_id =session_id
+        super().__init__("Client authentication state confusion",session_id=session_id, client_id=client_id,source=source)
 
 class SessionNotValidatedError(SecurityBaseError):
 

@@ -151,7 +151,7 @@ class JWTAuthMiddleware(MiddleWare):
             token = get_bearer_token_from_request(request)
             if request.headers.get(HTTPHeaderConstant.X_AUTH_TYPE,None) == AuthType.API_TOKEN:
                 async with self.securityService.lock('reader'):
-                    token = self.securityService.decrypt(token,'ON_TOP_SECRET_KEY')
+                    token = self.securityService.decrypt(token,'api-token')
 
             async with self.jwtService.lock('reader'):
                 clientInfo: ClientAccessInfo = self.jwtService.verify_client_token_permission(token)
@@ -164,7 +164,7 @@ class JWTAuthMiddleware(MiddleWare):
             async with self.adminService.lock('reader',client_id) as clientService:
                 clientInfo['client_type'] = clientService.client.client_type
                 clientInfo['auth_type'] = clientService.client.auth_type
-                clientInfo['group_id'] = str(clientService.client.group.group_id)
+                clientInfo['group_id'] = clientService.group_id
                 
                 client_ip = get_client_ip(request) #TODO : check wether we must use the scope to verify the client
                 

@@ -45,11 +45,11 @@ class ClientORM(models.Model):
     group = fields.ForeignKeyField(GroupClientORM, related_name="group", on_delete=fields.SET_NULL, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
+
     class Meta:
         schema = SCHEMA
         table = "client"
         app = PostgresConstant.SECURITY_APP
-
 
     @property
     def auth_type(self):

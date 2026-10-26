@@ -16,7 +16,7 @@ from app.depends.dependencies import get_auth_permission, get_client_info, get_c
 from app.depends.funcs_dep import get_client_from_info
 from app.depends.variables import ScopeMode, SourceMode, _wrap_checker, source_mode_query,scope_mode_query
 from app.errors.depends_error import DataSourceNotSupportedError
-from app.errors.security_error import ClientAuthenticationFlagError, ClientDoesNotExistError, ClientNotAllowedToLoginError, PrimarySessionNotValidatedError, SessionMechanismOperationError, SessionNotValidatedError, TokenExpiredError
+from app.errors.security_error import ClientDoesNotExistError, ClientNotAllowedToLoginError, PrimarySessionNotValidatedError, SessionMechanismOperationError, SessionNotValidatedError, TokenExpiredError
 from app.manager.broker_manager import Broker
 from app.manager.session_manager import AuthSessionManager
 from app.models.orm.security_model import ClientORM, UpdateClientModel
@@ -152,7 +152,7 @@ class AuthRessource(BaseHTTPRessource):
                     session.login(refresh_token)
                     session.update_auth_state(AuthState.AUTH_BY_REFRESH)
                     res = self.access_token_pipe.pipe(auth_token,client)
-                else:
+                else: # inactive
                     await client.verify_refresh_token(refreshPermission,__raise__=False)
                     new_signature = await client.revoke_itself(ctx,session_id=refreshPermission['session_id'])
                     response.status_code = status.HTTP_204_NO_CONTENT
@@ -199,7 +199,6 @@ class AuthRessource(BaseHTTPRessource):
                 if mode == 'private':
                     session.login(refresh_token)
                     session.update_auth_state(AuthState.LOGIN)
-
                 else:
                     session.update_auth_state(AuthState.PUBLIC_LOGIN)
         
@@ -333,10 +332,11 @@ class AuthRessource(BaseHTTPRessource):
             if session_id == '':
                 origin = get_client_ip(request)
                 user_agent = get_user_agent(request)
+                device_name = None
 
                 await client.revoke_itself()
                 session.update_auth_state(AuthState.SESSION_REVOKED)
-                authSignature,_ = await client.upsert_session(clientInfo['session_id'],origin,user_agent,False)
+                authSignature,_ = await client.upsert_session(clientInfo['session_id'],origin,user_agent,device_name,False)
                 access_token,refresh_token = await client.generate_access(clientInfo['session_id'],authSignature.get('signature',None))
 
                 session.update_auth_state(AuthState.SESSION_REFRESHED)

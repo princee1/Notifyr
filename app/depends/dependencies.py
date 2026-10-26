@@ -34,10 +34,13 @@ def get_user_language(request: Request) -> str:
         A string representing the user's preferred language code (e.g., 'en', 'es', 'fr').
         If no language preference is found, it may return a default language or None.
     """
-    return ... 
+    return request.headers.get('Accept-Language', 'en')
 
 def get_user_agent(request: Request) -> str:
     return request.headers.get('User-Agent',None)
+
+def get_device_name(request:Request)->str:
+    return None
 
 def get_timezone(request:Request)->str:
     ...

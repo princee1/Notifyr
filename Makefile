@@ -222,6 +222,7 @@ root-init:
 	@trap 'rm -rf ./.admin/ ' EXIT INT TERM; \
 	./scripts/utils/generate-admin.sh $(ADMIN_CREDS_DIR) && \
 	$(DOCKER_COMPOSE_BASE) run --name root-init -T root-init python /usr/src/root_init.py < $(ADMIN_CREDS_DIR) && \
+	mkdir -p $(ROOT_DIR) && \
 	$(DOCKER) cp root-init:/tmp/root-credentials.json $(ROOT_DIR)/root-credentials.json && \
 	$(DOCKER) rm root-init
 	

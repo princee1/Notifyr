@@ -189,7 +189,7 @@ class ClientRessource(BaseHTTPRessource):
         group = await fetch_group(updateClient.group) if updateClient.group  else None
 
         async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
-            is_revoked,password,salt = await client.update_client(updateClient,group,ctx)
+            is_group_changed,is_revoked,password,salt = await client.update_client(updateClient,group,ctx)
             if updateClient.policies != None:
                 await self.adminService.update_policy(updateClient.policies,mode,client,group,ctx)
             if is_revoked:
@@ -200,7 +200,8 @@ class ClientRessource(BaseHTTPRessource):
                 await client.store_password(password,salt)
 
         if is_revoked and self.configService.SESSION_MECHANISM in VALID_SYNC_MECHANISM:
-            broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))
+            callback_state_func = ClientMiniService.sync_my_group.__name__ if is_group_changed else None
+            broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id,callback_state_function=callback_state_func))
 
         return 
     

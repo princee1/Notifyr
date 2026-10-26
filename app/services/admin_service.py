@@ -52,8 +52,9 @@ EncryptedPassword = str
 @MiniService()
 class ClientMiniService(BaseMiniService):
 
-    def __init__(self,vaultService:VaultService,configService:ConfigService,jwtService:JWTAuthService,securityService:SecurityService,redisService:RedisService,client:ClientORM, policies:list[PolicyModel]=[]):
+    def __init__(self,vaultService:VaultService,configService:ConfigService,jwtService:JWTAuthService,securityService:SecurityService,redisService:RedisService,client:ClientORM,group_id:str, policies:list[PolicyModel]=[]):
         self.client = client
+        self._group_id = group_id
         super().__init__(None, str(self.client.client_id))
         self.vaultService = vaultService
         self.configService = configService
@@ -201,6 +202,7 @@ class ClientMiniService(BaseMiniService):
                         authSignature:AuthSignature = await self.redisService.retrieve(RedisConstant.SECURITY_DB,path)
             else:
                 authSignature = self.sessions.get(session_id)
+            
             authSignature['signature'] = generateId(20)
 
         else:
@@ -341,15 +343,18 @@ class ClientMiniService(BaseMiniService):
 
     async def update_client(self, updateClient:UpdateClientModel,group:GroupClientORM|None,ctx=None):
         is_revoked=False
+        is_group_changed=False
         password,salt = None,None
         if group==None:
             if updateClient.remove_group:
                 self.client.group_id = None
                 is_revoked = True
+                is_group_changed = True
         else:
             self.client.group_id = group.group_id
             is_revoked = True
-        
+            is_group_changed = True
+
         if updateClient.client_username != None:
             self.client.client_username = updateClient.client_username
 
@@ -373,18 +378,18 @@ class ClientMiniService(BaseMiniService):
             is_revoked = True
 
         await self.client.save(ctx)
-        return is_revoked,password,salt
+        return is_group_changed,is_revoked,password,salt
 
     async def verify_refresh_token(self,refreshPermission:ClientRefresh,__raise__=True):
         if refreshPermission['client_id'] != self.client_id:
             raise SecurityIdentityNotResolvedError(refreshPermission['client_id'],'Refresh Token client id mismatch')
 
-        if __raise__ and self.client.max_refresh >0 and refreshPermission['reuse_counter'] > self.client.max_refresh:
+        if __raise__ and self.client.max_refresh >0 and refreshPermission.get('reuse_counter', 0) > self.client.max_refresh:
             raise MaximumRefreshReuseReachedError(refreshPermission['client_id'],refreshPermission['session_id'],self.client.max_refresh)
         
         await self.compare_auth_signature(refreshPermission['auth_signature'],refreshPermission['session_id'],'database')
 
-        return refreshPermission['reuse_counter'] + 1
+        return refreshPermission.get('reuse_counter', 0) + 1
 
     #######################################################################################################################
     ########################################                                           ####################################
@@ -441,13 +446,23 @@ class ClientMiniService(BaseMiniService):
     ########################################                                           ####################################
     #######################################################################################################################
 
+    @classmethod
+    async def sync_group(cls,client:ClientORM):
+        group = None if client.group is None else await client.group
+        return None if group is None else str(group.group_id)
+       
+    async def sync_my_group(self):
+        self._group_id = await self.sync_group(self.client)
+        return
+    
     @property
     def client_id(self):
         return self.miniService_id
 
     @property
     def group_id(self):
-        return None if self.client.group is None else str(self.client.group.group_id)
+        return self._group_id
+    
 
 SYNC_ADMIN_BUILD_STATE = 4234
 
@@ -488,15 +503,17 @@ class AdminService(BaseMiniServiceManager[ClientMiniService]):
         self.MiniServiceStore.clear()
         for client in await ClientORM.filter():
             policy = []
+            group_id = await ClientMiniService.sync_group(client)
             for pmap in self.mappings:
-                if client.client_id == pmap.get('client_id',None) or client.client_id == pmap.get('group_id',None):
+                if str(client.client_id) == pmap.get('client_id',None) or group_id == pmap.get('group_id',''):
                     policy.append(self.policies[pmap['policy_id']])
+
             service = ClientMiniService(self.vaultService,
                                         self.configService,
                                         self.jwtAuthService,
                                         self.securityService,
                                         self.redisService,
-                                        client,policy)
+                                        client,group_id,policy)
             service._builder(BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
             self.MiniServiceStore.add(service)
 
@@ -523,7 +540,7 @@ class AdminService(BaseMiniServiceManager[ClientMiniService]):
 
     async def disconnect_all(self,admin:bool=False,ctx=None):
 
-        async for client in self.MiniServiceStore.aiter(predicate=lambda c:c.client.client_type!=ClientType.Admin or admin):
+        async for client in self.MiniServiceStore.aiter(predicate=lambda c:c.client.client_type!=ClientType.System or (c.client.client_type != ClientType.Admin or admin)):
             async with self.tortoiseConnService.transaction(SECURITY_CREDS,silent=True) as ctx:
                 await client.revoke_itself(ctx,can_login=True)
             
