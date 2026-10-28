@@ -1,11 +1,11 @@
 from fastapi import Depends, Response, Request, status
 from pydantic import BaseModel
-from app.classes.auth_permission import AuthPermission, Role
+from app.classes.auth_permission import AccessAPIInfo, AuthPermission, ClientAccessInfo, Role
 from app.container import InjectInMethod
 from app.decorators.handlers import FastAPIHandler, WebSocketHandler
 from app.decorators.permissions import BalancerPermission, JWTRouteHTTPPermission
 from app.definition._ressource import BaseHTTPRessource, HTTPRessource, HTTPStatusCode, UseHandler, UseLimiter, UsePermission, UseRoles
-from app.depends.dependencies import get_auth_permission
+from app.depends.dependencies import get_access_info, get_auth_permission, get_client_info
 from app.services.worker.celery_service import CeleryService
 from app.services.worker.task_service import  TaskService
 from app.services.config_service import ConfigService, WorkerService
@@ -62,14 +62,14 @@ class PingPongRessource(BaseHTTPRessource):
     @UseRoles([Role.ADMIN])
     @UsePermission(JWTRouteHTTPPermission)
     @BaseHTTPRessource.Get('/')
-    def check_health(self, authPermission: AuthPermission = Depends(get_auth_permission)):
+    def check_health(self, authPermission: AuthPermission = Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         ...
 
     @UseLimiter(limit_value="5/minutes")
     @UseRoles([Role.ADMIN])
     @UsePermission(JWTRouteHTTPPermission)
     @BaseHTTPRessource.Get('/report')
-    def check_report(self, request: Request, authPermission: AuthPermission = Depends(get_auth_permission)):
+    def check_report(self, request: Request, authPermission: AuthPermission = Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         return {
             'instance_id':self.workerService.INSTANCE_ID,
             'parent_pid':PARENT_PID,
@@ -81,7 +81,7 @@ class PingPongRessource(BaseHTTPRessource):
     @UseRoles([Role.ADMIN])
     @UsePermission(JWTRouteHTTPPermission)
     @BaseHTTPRessource.Post('/')
-    def set_health_config(self, authPermission: AuthPermission = Depends(get_auth_permission)):
+    def set_health_config(self, authPermission: AuthPermission = Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         ...
 
 

@@ -1,17 +1,18 @@
 
-from fastapi import Depends, Request
-from app.classes.auth_permission import Role
+from fastapi import Depends, Request, Response
+from app.classes.auth_permission import AccessAPIInfo, AuthPermission, ClientAccessInfo, Role
 from app.decorators.handlers import AsyncIOHandler, TortoiseHandler
-from app.decorators.permissions import JWTRouteHTTPPermission
-from app.definition._ressource import BaseHTTPRessource, HTTPRessource, PingService, LockService, UseHandler, UsePermission, UseRoles,HTTPMethod
-from app.depends.dependencies import get_auth_permission
+from app.decorators.permissions import ClientTypesPermission, JWTRouteHTTPPermission, UserPermission
+from app.definition._ressource import BaseHTTPRessource, HTTPRessource, PingService, LockService, UseAccess, UseHandler, UsePermission, UseRoles,HTTPMethod
+from app.depends.dependencies import get_access_info, get_auth_permission, get_client_info
 from app.services.database.tortoise_service import TortoiseConnectionService
 
+@UseRoles([Role.PUBLIC])
 @PingService([TortoiseConnectionService])
-@LockService(TortoiseConnectionService,lockType='reader',infinite_wait=True)
-@UseRoles([Role.ADMIN])
 @UseHandler(TortoiseHandler,AsyncIOHandler)
-@UsePermission(JWTRouteHTTPPermission)
+@UseAccess(accesses={'Admin':True,'User':True})
+@UsePermission(JWTRouteHTTPPermission,UserPermission())
+@LockService(TortoiseConnectionService,lockType='reader',infinite_wait=True)
 @HTTPRessource('analytics')
 class AnalyticsRessource(BaseHTTPRessource):
 
@@ -19,30 +20,26 @@ class AnalyticsRessource(BaseHTTPRessource):
     def analytics_options(self):
         return {}
     
-    @BaseHTTPRessource.Get('/email/', mount=False)
-    async def fetch_email_analytics(self, request: Request, authPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.Get('/email/')
+    async def fetch_email_analytics(self,response:Response, request: Request, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         return
 
-    @BaseHTTPRessource.Get('/twilio/sms/', mount=False)
-    async def fetch_twilio_sms_analytics(self, request: Request, authPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.Get('/twilio/sms/')
+    async def fetch_twilio_sms_analytics(self,response:Response, request: Request, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         return
 
-    @BaseHTTPRessource.Get('/twilio/call/', mount=False)
-    async def fetch_twilio_call_analytics(self, request: Request, authPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.Get('/twilio/call/')
+    async def fetch_twilio_call_analytics(self,response:Response, request: Request, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         return
 
-    @BaseHTTPRessource.Get('/links/', mount=False)
-    async def fetch_links_analytics(self, request: Request, authPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.Get('/links/')
+    async def fetch_links_analytics(self,response:Response, request: Request, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         return
 
-    @BaseHTTPRessource.Get('/server/', mount=False)
-    async def fetch_server_analytics(self, request: Request, authPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.Get('/contacts/')
+    async def fetch_contacts_analytics(self,response:Response, request: Request, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         return
 
-    @BaseHTTPRessource.Get('/contacts/', mount=False)
-    async def fetch_contacts_analytics(self, request: Request, authPermission=Depends(get_auth_permission)):
-        return
-
-    @BaseHTTPRessource.Get('/campaign/', mount=False)
-    async def fetch_campaign_analytics(self, request: Request, authPermission=Depends(get_auth_permission)):
+    @BaseHTTPRessource.Get('/campaign/')
+    async def fetch_campaign_analytics(self,response:Response, request: Request, authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         return

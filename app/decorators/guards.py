@@ -1,5 +1,5 @@
-from typing import Any, List, Literal, Type
-from app.classes.auth_permission import AuthPermission, PolicyModel, RefreshPermission
+from typing import Any, Callable, List, Literal, Type
+from app.classes.auth_permission import AccessDoesNotExistsError, AccessIdCannotBeUsedError, AccessTypeAPIModel, AuthPermission, AuthType, ClientAccessInfo, ClientType, PolicyModel, ClientRefresh
 from app.classes.cost_definition import CreditNotInPlanError
 from app.classes.mongo import BaseDocument
 from app.definition._error import ServerFileError
@@ -7,23 +7,27 @@ from app.definition._service import BaseService
 from app.definition._utils_decorator import Guard
 from app.container import Get, InjectInMethod
 from app.depends.class_dep import TrackerInterface
-from app.errors.db_error import CollectionHardLimitReachedError
+from app.depends.orm_cache import BlacklistClientCache, BlacklistGroupCache
+from app.errors.db_error import CollectionHardLimitReachedError, TortoiseTableRowsLimitReachedError, VaultHardLimitError
 from app.errors.ingest_error import AgenticDatabaseNotAllowedError
 from app.errors.llm_error import LLMModelMaxTokenExceededError, LLMModelNotPermittedError, LLMProviderDoesNotExistError, LLMConfigNotConfiguredError
+from app.errors.security_error import ClientDoesNotExistError, IdentityBlacklistedError
 from app.errors.service_error import MiniServiceDoesNotExistsError
 from app.manager.task_manager import TaskManager
 from app.models.odm.agents_model import AgentModel
 from app.models.orm.contacts_model import ContactORM, ContentType, ContentTypeSubscriptionORM, Status, ContentSubscriptionORM, SubscriptionContactStatusORM
 from app.models.ingest_model import DataIngestModel, WebCrawlingDataIngestModel
 from app.models.orm.link_model import LinkORM
-from app.models.odm.llm_model import LLMProfileModel
+from app.models.orm.security_model import RevokeSessionModel
 from app.models.otp_model import OTPModel
-from app.models.orm.security_model import ClientORM
-from app.services.admin_service import AdminService
+from app.services.admin_service import AdminService, ClientMiniService
+from app.services.agent.remote_agent_service import RemoteAgentService
 from app.services.cost_service import CostService
 from app.services.database.mongoose_service import MongooseService
+from app.services.database.redis_service import RedisService
 from app.services.file.file_service import FileService
 from app.services.profile_service import ProfileService
+from app.services.vault_service import VaultService
 from app.services.worker.task_service import TaskService
 from app.services.worker.celery_service import CeleryService,task_name
 from app.services.config_service import ConfigService
@@ -42,6 +46,13 @@ from app.errors.upload_error import (
 )
 from app.utils.globals import CAPABILITIES
 from app.services.agent.llm_service import LLMService
+
+from tortoise import models
+
+from app.utils.toolbox import RunInThreadPool
+
+if CAPABILITIES['object']:
+    from app.services.database.object_service import ObjectS3Service
 
 class CeleryTaskGuard(Guard):
     def __init__(self,task_names:list[str],task_types:list[TaskType]=[]):
@@ -142,33 +153,62 @@ class TwilioLookUpPhoneGuard(Guard):
     def guard(self):
         return super().guard()
 
-
-class AuthenticatedClientGuard(Guard):
-    def __init__(self,reverse=False):
+class ClientAuthTypeGuard(Guard):
+    def __init__(self,accept_access:bool=True,accept_api:bool=True,message:Callable[...,str]= lambda a: f'Auth type:{a} is not accepted'):
         super().__init__()
-        self.reverse = reverse
-       
-    def guard(self,client:ClientORM):
-        if self.reverse:
-            if client.authenticated:
-                return False,'Client is authenticated'
-            return True,''
-        
-        if not client.authenticated:
-            return False,'Client is not authenticated'
-        return True,''
+        self.accept_access = accept_access
+        self.accept_api = accept_api
+        self.message = message
 
+        if not any([self.accept_access,self.accept_api]):
+            raise ValueError('At least one of the access or api must be set to True')
+    
+    def guard(self,client:ClientMiniService):
+        if client.client.auth_type == AuthType.ACCESS_TOKEN and not self.accept_access:
+            return False,self.message(client.client.auth_type)
+        
+        if client.client.auth_type == AuthType.API_TOKEN and not self.accept_api:
+            return False,self.message(client.client.auth_type)
+        
+        return True,''
 
 class BlacklistClientGuard(Guard):
     def __init__(self):
         super().__init__()
         self.adminService = Get(AdminService)
+        self.redisService = Get(RedisService)
     
-    async def guard(self,client:ClientORM):
-        is_blacklist,_ =await self.adminService.is_blacklisted(client)
+    async def guard(self,client:ClientMiniService,clientInfo:ClientAccessInfo,session_id:str=None):
+        if client.client.client_type == ClientType.Admin:
+            return True,''
+        
+        async with self.redisService.redis_security.pipeline() as pipe:
+            if client.group_id!= None: 
+                await BlacklistGroupCache.Get([client.group_id],pipe)
 
-        if is_blacklist:
-            return False,'Client is blacklisted'
+            await BlacklistClientCache.Get([client.client_id,''],pipe)
+            session = clientInfo['session_id'] if clientInfo!= None else session_id
+            await BlacklistClientCache.Get([client.client_id,session],pipe)
+            
+            flags = await pipe.execute()
+        
+        if any(flags):
+            raise IdentityBlacklistedError(client.client_id,)
+        return True,''
+
+class SuperUserModificationGuard(Guard):
+
+    def __init__(self,accept_admin=True):
+        super().__init__()
+        self.accept_admin = accept_admin
+
+    def guard(self,client:ClientMiniService,clientInfo:ClientAccessInfo):
+        if client.client.client_type  == ClientType.System:
+            raise ClientDoesNotExistError(client.client_id)
+
+        if client.client.client_type == ClientType.Admin and clientInfo['client_type'] != ClientType.System and self.accept_admin:
+            raise ClientDoesNotExistError(client.client_id)
+
         return True,''
 
 if CAPABILITIES['twilio']:
@@ -266,10 +306,18 @@ class TrackGuard(Guard):
         return True,''
 
 class PolicyGuard(Guard):
+
+    @InjectInMethod()
+    def __init__(self,profileService:ProfileService,remoteAgentService:RemoteAgentService):
+        super().__init__()
+        self.profileService = profileService
+        self.remoteAgentService = remoteAgentService
     
     def guard(self,policyModel:PolicyModel):
-        profileService:ProfileService = Get(ProfileService)
-        profiles_set=set(policyModel.allowed_profiles).difference(profileService.MiniServiceStore.ids)
+        if CAPABILITIES['object']:
+            objectService = Get(ObjectS3Service)
+
+        profiles_set=set(policyModel.allowed_profiles).difference(self.profileService.MiniServiceStore.ids)
         if len(profiles_set) >= 1:
             return False,f'Those profiles does not exists at the moment: {profiles_set}'
     
@@ -290,7 +338,6 @@ class GlobalsTemplateGuard(Guard):
             return False,self.error_message
 
         return True,''
-
 
 class CeleryBrokerGuard(Guard): 
 
@@ -318,7 +365,6 @@ class CeleryBrokerGuard(Guard):
 
         return True,''
     
-
 class UploadFilesGuard(Guard):
 
     def __init__(self, max_files: int = 5, max_files_size: int | None = None, max_size: int | None = None, allowed_extensions: List[str] | None = None):
@@ -394,7 +440,6 @@ class ArqDataTaskGuard(Guard):
         
         return True,""
         
-    
 class CreditPlanGuard(Guard):
 
     @InjectInMethod()
@@ -407,7 +452,6 @@ class CreditPlanGuard(Guard):
             raise CreditNotInPlanError(credit)
         
         return True,""
-
 
 class LLMProviderGuard(Guard):
 
@@ -444,7 +488,6 @@ class LLMProviderGuard(Guard):
 
         return True,""
             
-
 class DataIngestDatabaseGuard(Guard):
 
     def __init__(self,accept_vector:bool=True,accept_graphiti:bool = True):
@@ -462,10 +505,10 @@ class DataIngestDatabaseGuard(Guard):
         if not self.accept_vector and ingestTask.vector_config != None:
             raise AgenticDatabaseNotAllowedError('vector')
 
-
 class MongooseHardLimitGuard(Guard):
     
     def __init__(self,limit:int |str,model:Type[BaseDocument]):
+        super().__init__()
         self.limit = limit
         self.model = model
         self.mongooseService = Get(MongooseService)
@@ -477,7 +520,49 @@ class MongooseHardLimitGuard(Guard):
         
         return True,''
 
+class TortoiseHardLimitGuard(Guard):
+    def __init__(self,limit:int,orm:Type[models.Model]):
+        super().__init__()
+        self.limit = limit
+        self.orm = orm
 
+    async def guard(self):
+        count = len(await self.orm.all())
+        if count >=self.limit:
+            raise TortoiseTableRowsLimitReachedError(self.limit,self.orm.meta.table,'')
+    
+        return True,''
+
+
+class VaultHardLimitGuard(Guard):
+
+    def __init__(self,limit:int,engine:Literal['secrets','security'],mount:str,path:str=''):
+        super().__init__()
+        self.limit = limit
+        self.engine = engine
+        self.mount = mount
+        self.path = path
+        self.vaultService = Get(VaultService)
+        if self.engine not in ['secrets','security']:
+            raise ValueError('Engine must be either secrets or security')
+
+    async def guard(self):
+        engine = None
+        match self.engine:
+            case 'secrets':
+                engine = self.vaultService.secrets_engine
+            case 'security':
+                engine = self.vaultService.security_engine
+            case _:
+                raise ValueError('Invalid engine specified')
+        
+        elements =  await RunInThreadPool(engine.list)(self.mount,self.path)
+
+        if len(elements) >= self.limit:
+            raise VaultHardLimitError(self.limit,self.engine,self.mount,self.path)
+
+
+        
 class ServiceStatusGuard(Guard):
     def __init__(self,services:List[Type[BaseService]]):
         super().__init__()
@@ -488,3 +573,64 @@ class ServiceStatusGuard(Guard):
             raise ...
 
         return True
+
+class PrimarySessionGuard(Guard):
+
+    def __init__(self,verify_session_id=False):
+        super().__init__()
+        self.verify_session_id = verify_session_id
+
+    async def guard(self,client:ClientMiniService,clientInfo:ClientAccessInfo,session_id:str=None):
+        if not await client.is_primary_session(clientInfo['session_id']):
+            return False, 'The session is not the primary session'
+
+        if  self.verify_session_id and session_id == clientInfo['session_id']:
+            return False, 'You cannot delete your own session, you need to logout first'
+        
+        return True,''
+
+
+class SessionMechanismGuard(Guard):
+
+    @InjectInMethod()
+    def __init__(self,configService:ConfigService):
+        super().__init__()
+        self.configService = configService
+
+    def revoke_session_guard(self,revoke:RevokeSessionModel):
+        if self.configService.SESSION_MECHANISM == 'none' and revoke.session:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail='Session mechanism is not implemented')
+
+        return True,''
+
+
+class AccessAdminGuard(Guard):
+
+    def __init__(self,admin:bool):
+        super().__init__()
+        self.admin = admin
+
+    def guard(self,access:str|AccessTypeAPIModel):
+        if isinstance(access,str):
+            if access.endswith('system'):
+                raise AccessIdCannotBeUsedError(access)
+            if access.endswith('admin') and not self.admin:
+                raise AccessIdCannotBeUsedError(access)
+            
+        elif isinstance(access,AccessTypeAPIModel):
+            if access.type == 'System':
+                raise AccessDoesNotExistsError(access._input)
+            if access._input == 'system':
+                raise AccessDoesNotExistsError(access._input)
+            if access._input == 'admin' and not self.admin:
+                raise AccessDoesNotExistsError(access._input)
+            if access.type == 'Admin' and not self.admin:
+                raise AccessDoesNotExistsError(access._input)
+
+        return True,''
+
+async def access_confirm_guard(access:str,confirm:bool):
+    if access == '' and not confirm:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail='To continue with this operation confirm must be true')
+
+    return True,''

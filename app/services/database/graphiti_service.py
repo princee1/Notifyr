@@ -12,6 +12,7 @@ from app.services.database.base_db_service import TempCredentialsDatabaseService
 from app.services.database.mongoose_service import MongooseService
 from app.services.database.redis_service import RedisService
 from app.services.file.file_service import FileService
+from app.services.timer_service import TimerService
 from app.services.vault_service import VaultService
 from neo4j import AsyncGraphDatabase,GraphDatabase
 
@@ -62,13 +63,14 @@ GroupType = Literal['domain','contact']
 )
 class GraphitiService(TempCredentialsDatabaseService):
       
-    def __init__(self,configService:ConfigService,redisService:RedisService,workerService:WorkerService,vaultService:VaultService,mongooseService:MongooseService,llmProviderService:LLMService,customService:CustomService,fileService:FileService):
+    def __init__(self,configService:ConfigService,timerService:TimerService,redisService:RedisService,workerService:WorkerService,vaultService:VaultService,mongooseService:MongooseService,llmProviderService:LLMService,customService:CustomService,fileService:FileService):
         super().__init__(configService,fileService,vaultService,VaultTTLSyncConstant.VAULT_TOKEN_TTL)
         self.workerService = workerService
         self.mongooseService = mongooseService
         self.llmProviderService = llmProviderService
         self.customService = customService
         self.redisService = redisService
+        self.timerService = timerService
     
     def verify_dependency(self):
         provider_config = self.llmProviderService.graphiti_config

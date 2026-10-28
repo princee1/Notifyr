@@ -1,19 +1,20 @@
 from typing import Annotated, List
 from fastapi import Depends, File, HTTPException, Request, Response, UploadFile,status
 from validators.uri import uri
-from app.classes.auth_permission import AuthPermission, Role
+from app.classes.auth_permission import AccessAPIInfo, AuthPermission, ClientAccessInfo, IssuerInfo, Role
 from app.classes.embeddings import ComparableEmbeddings, EmbeddingWrapper, EmbeddingModel
 from app.container import Get, InjectInMethod
 from app.cost.ingest_cost import DeleteDocumentIngestCost, FileIngestCost, CrawlMarkdownIngestCost, ResearchMarkdownIngestCost
 from app.decorators.guards import ArqDataTaskGuard, DataIngestDatabaseGuard, UploadFilesGuard
 from app.decorators.handlers import CustomSchemaHandler, GatewayHandler, LLMHandler, ArqHandler, AsyncIOHandler, CostHandler, DataIngestHandler, FileHandler, MiniServiceHandler, PydanticHandler, RedisHandler, ServiceAvailabilityHandler, UploadFileHandler, VaultHandler
 from app.decorators.interceptors import DataCostInterceptor
-from app.decorators.pipes import  DataClassToDictPipe, GraphRelationshipPipe, MerchantPipe, MiniServiceInjectorPipe, QueryToModelPipe, update_status_upon_no_metadata_pipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, LockService
+from app.decorators.pipes import  DataClassToDictPipe, GraphRelationshipPipe, MerchantPipe, MiniServiceInjectorPipe, QueryToModelPipe,  update_status_upon_no_metadata_pipe
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, IncludeRessource, PingService, Throttle, UseAccess, UseGuard, UseHandler, UseInterceptor, UsePermission, UsePipe, UseRoles, LockService
 from app.depends.class_dep import EmbeddingSimilarity, FileDataIngestQuery
-from app.depends.dependencies import get_auth_permission, get_request_id
-from app.depends.funcs_dep import get_profile
+from app.depends.dependencies import get_access_info, get_auth_permission, get_client_info, get_request_id
+from app.depends.funcs_dep import get_issuer, get_profile
 from app.manager.broker_manager import Broker
+from app.manager.issuer_manager import IssuerManager
 from app.manager.merchant_manager import Merchant
 from app.models.crawal4ai_model import SchemaExtractionConfig, SeedingURLModel, URLGeneratorModel
 from app.models.vector_model import QdrantEmbedRequestModel
@@ -26,7 +27,7 @@ from app.services.file.file_service import FileService
 from app.services.profile_service import ProfileMiniService, ProfileService
 from app.services.setting_service import SettingService
 from app.services.vault_service import VaultService
-from app.decorators.permissions import JWTRouteHTTPPermission, ProfilePermission
+from app.decorators.permissions import AdminPermission, ClientTypesPermission, JWTRouteHTTPPermission, ProfilePermission, UserPermission
 from app.definition._ressource import UseLimiter
 from app.services.worker.arq_service import ArqIngestTaskService, JobAlreadyExistsError, JobInProgressError,JobStatus, UnexpectedJobStatusError
 from app.models.ingest_model import AbortedJobResponse,CrawlingComparableURL,DeleteIngestUriMetadata,ResearchDataIngestModel,ResearchIngestDataResponse
@@ -37,7 +38,7 @@ from app.utils.constant import AgenticConstant, ArqDataTaskConstant, CostConstan
 from app.utils.toolbox import RunInThreadPool
 from app.depends.variables import force_update_query
 
-
+@UseRoles([Role.INGEST,Role.ADMIN])
 @UseHandler(ArqHandler,ServiceAvailabilityHandler)
 @UsePermission(JWTRouteHTTPPermission)
 @HTTPRessource('jobs',)
@@ -50,56 +51,78 @@ class JobArqRessource(BaseHTTPRessource):
         self.configService = configService
         self.fileService = fileService
         self.settingService = settingService
-    
+
     @UseHandler(AsyncIOHandler)
+    @UsePermission(UserPermission)
     @PingService([ArqIngestTaskService])
-    @LockService(ArqIngestTaskService,lockType='reader')
     @UsePipe(DataClassToDictPipe(),before=False)
+    @LockService(ArqIngestTaskService,lockType='reader')
+    @UseAccess(accesses={'Admin':True,'User':True,'System':True})
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.GET])
-    async def get_queued_jobs(self, request: Request,response:Response,autPermission:AuthPermission=Depends(get_auth_permission)):
-        return await self.arqService.get_queued_jobs()
-        
+    async def get_queued_jobs(self, request: Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],autPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+        jobs = await self.arqService.get_queued_jobs()
+        return [j for j in jobs if issuer.verify_ownership(j.kwargs.get('issuer',None),__raise__=False)]
+
     @UseHandler(AsyncIOHandler)
+    @UsePermission(UserPermission)
     @PingService([ArqIngestTaskService])
-    @LockService(ArqIngestTaskService,lockType='reader')
     @UsePipe(DataClassToDictPipe(),before=False)
+    @LockService(ArqIngestTaskService,lockType='reader')
+    @UseAccess(accesses={'Admin':True,'User':True,'System':True})
     @BaseHTTPRessource.HTTPRoute('/results/', methods=[HTTPMethod.GET])
-    async def get_jobs_result(self, request: Request,response:Response,autPermission:AuthPermission=Depends(get_auth_permission)):
-        return await self.arqService.get_jobs_results()
-        
+    async def get_jobs_result(self, request: Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],autPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+        jobs = await self.arqService.get_jobs_results()
+        return [j for j in jobs if issuer.verify_ownership(j.kwargs.get('issuer',None),__raise__=False)]
+
+
     @UseHandler(AsyncIOHandler)    
+    @UsePermission(UserPermission)
     @PingService([ArqIngestTaskService])
-    @LockService(ArqIngestTaskService,lockType='reader')
     @UsePipe(DataClassToDictPipe(),before=False)
+    @LockService(ArqIngestTaskService,lockType='reader')
+    @UseAccess(accesses={'Admin':True,'User':True,'System':True})
     @BaseHTTPRessource.HTTPRoute('/info/{job_id}/', methods=[HTTPMethod.GET])
-    async def get_job_info(self, job_id: str, request: Request,response:Response,autPermission:AuthPermission=Depends(get_auth_permission)):
+    async def get_job_info(self, job_id: str, request: Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],autPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         job = await self.arqService.exists(job_id, raise_on_exist=False)
         info  = await self.arqService.info(job)
+        
+        provided_issuer:IssuerInfo|None =info.kwargs('issuer',None)
+        issuer.verify_ownership(provided_issuer)
         return info
 
     @UseHandler(AsyncIOHandler)
+    @UsePermission(UserPermission)
     @PingService([ArqIngestTaskService])
     @UsePipe(DataClassToDictPipe(),before=False)
     @LockService(ArqIngestTaskService,lockType='reader')
+    @UseAccess(accesses={'Admin':True,'User':True,'System':True})
     @BaseHTTPRessource.HTTPRoute('/result/{job_id}/', methods=[HTTPMethod.GET])
-    async def get_job_result(self, job_id: str, request: Request,response:Response,autPermission:AuthPermission=Depends(get_auth_permission)):
+    async def get_job_result(self, job_id: str, request: Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],autPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         job = await self.arqService.exists(job_id, raise_on_exist=False)
         result = await self.arqService.get_result(job)
+
+        provided_issuer:IssuerInfo|None =result.kwargs('issuer',None)
+        issuer.verify_ownership(provided_issuer)
         return result
 
     @UseLimiter('5/hour')
     @Throttle(uniform=(100,300))
     @PingService([ArqIngestTaskService])
     @LockService(ArqIngestTaskService,lockType='reader')
+    @UseAccess(accesses={'Admin':True,'System':True,'User':True})
+    @UsePermission(ClientTypesPermission(['Admin','System','User']))
     @UseHandler(CostHandler,AsyncIOHandler,FileHandler,RedisHandler,ArqHandler)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'refund'))
     @BaseHTTPRessource.HTTPRoute('/{job_id}/', methods=[HTTPMethod.DELETE],response_model=AbortedJobResponse)
-    async def abort_job(self, job_id: str, request: Request,response:Response,cost:Annotated[DeleteDocumentIngestCost,Depends(DeleteDocumentIngestCost)],broker:Annotated[Broker,Depends(Broker)],force:bool = Depends(force_update_query),autPermission:AuthPermission=Depends(get_auth_permission)):
+    async def abort_job(self, job_id: str, request: Request,response:Response,cost:Annotated[DeleteDocumentIngestCost,Depends(DeleteDocumentIngestCost)],broker:Annotated[Broker,Depends(Broker)],issuer:Annotated[IssuerManager,Depends(IssuerManager)],force:bool = Depends(force_update_query),autPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         job,status = await self.arqService.exists(job_id, raise_on_exist=False,return_status=True)
+        info = await self.arqService.info(job)
+
+        provided_issuer:IssuerInfo = info.kwargs.get('issuer',None)
+        issuer.verify_ownership(provided_issuer)
 
         match status:
             case JobStatus.queued | JobStatus.deferred:
-                info = await self.arqService.info(job)
                 size,uri,task = info.kwargs.get('size',0),info.kwargs.get('uri',None),info.kwargs.get('_nickname',None)
                 await self.arqService.dequeue_job(job_id)
 
@@ -127,11 +150,12 @@ class JobArqRessource(BaseHTTPRessource):
             case _:
                 raise UnexpectedJobStatusError(job_id,status)
 
-@UseRoles([Role.ADMIN])
-@PingService([ArqIngestTaskService])
-@IncludeRessource(JobArqRessource)
-@UsePermission(JWTRouteHTTPPermission)
 @UsePipe(GraphRelationshipPipe)
+@IncludeRessource(JobArqRessource)
+@UseRoles([Role.ADMIN,Role.INGEST],)
+@PingService([ArqIngestTaskService])
+@UsePermission(JWTRouteHTTPPermission,ClientTypesPermission(['Admin','System','User']))
+@UseAccess(accesses={'Admin':True,'System':True,'User':True})
 @UseHandler(ServiceAvailabilityHandler,CostHandler,DataIngestHandler,CustomSchemaHandler)
 @HTTPRessource('data-ingest')
 class DataIngestRessource(BaseHTTPRessource):
@@ -167,13 +191,13 @@ class DataIngestRessource(BaseHTTPRessource):
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UsePipe(QueryToModelPipe('ingestTask'),MerchantPipe)
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
-    @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @PingService([RedisService,{'cls':LLMService,'kwargs':VerifyLLMConfig()}])
     @LockService(RedisService,ArqIngestTaskService,LLMService,lockType='reader')
+    @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @UseHandler(UploadFileHandler,ArqHandler,AsyncIOHandler,PydanticHandler,LLMHandler,RedisHandler)
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.FILE_DATA_TASK),UploadFilesGuard(),docling_guard)
     @BaseHTTPRessource.HTTPRoute('/file/',methods=[HTTPMethod.POST],response_model=FileUploadIngestEnqueueResponse)
-    async def ingest_files(self,ingestTask:Annotated[FileUploadDataIngestModel,Depends(lambda :None)], request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[FileIngestCost,Depends(FileIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],files:List[UploadFile]= File(...),request_id:str = Depends(get_request_id),query:FileDataIngestQuery = Depends(FileDataIngestQuery), autPermission:AuthPermission=Depends(get_auth_permission)):
+    async def ingest_files(self,ingestTask:Annotated[FileUploadDataIngestModel,Depends(lambda :None)], request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],cost:Annotated[FileIngestCost,Depends(FileIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],issuer:Annotated[IssuerManager,Depends(IssuerManager)],files:List[UploadFile]= File(...),request_id:str = Depends(get_request_id),query:FileDataIngestQuery = Depends(FileDataIngestQuery), autPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         
         db_config = ingestTask.db_config
         _response = FileUploadIngestEnqueueResponse(db_config[0],db_config[1],ingestTask.expire_date,ingestTask.defer_date)
@@ -207,6 +231,7 @@ class DataIngestRessource(BaseHTTPRessource):
                     kwargs={**ingestTask.model_dump(mode='json',exclude=('expires','defer_by')),
                             **meta.model_dump(),
                             'request_id':request_id,
+                            'issuer':issuer.export(),
                             '_nickname':ArqDataTaskConstant.FILE_DATA_TASK,
                             'state':dict(),
                             'step':None
@@ -226,11 +251,11 @@ class DataIngestRessource(BaseHTTPRessource):
     @UsePipe(update_status_upon_no_metadata_pipe,before=False)
     @UseInterceptor(DataCostInterceptor(CostConstant.DOCUMENT_CREDIT,'purchase'))
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.CRAWL_DATA_TASK),crawl4ai_guard)
-    @UseHandler(ArqHandler,AsyncIOHandler,LLMHandler,RedisHandler,MiniServiceHandler,VaultHandler,GatewayHandler)
     @PingService([RemoteAgentService,RedisService,{'cls':LLMService,'kwargs':VerifyLLMConfig(crawl=True)}])
+    @UseHandler(ArqHandler,AsyncIOHandler,LLMHandler,RedisHandler,MiniServiceHandler,VaultHandler,GatewayHandler)
     @LockService(RemoteAgentService,RedisService,ArqIngestTaskService,CustomService,LLMService,lockType='reader')
     @BaseHTTPRessource.HTTPRoute('/web/',methods=[HTTPMethod.POST],response_model=WebCrawlingUriMetadata,mount=False)
-    async def ingest_web_crawling(self,request:Request,response:Response,ingestTask:WebCrawlingDataIngestModel, broker:Annotated[Broker,Depends(Broker)],cost:Annotated[CrawlMarkdownIngestCost,Depends(CrawlMarkdownIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],similarity:Annotated[EmbeddingSimilarity,Depends(EmbeddingSimilarity)],request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission)):
+    async def ingest_web_crawling(self,request:Request,response:Response,ingestTask:WebCrawlingDataIngestModel, broker:Annotated[Broker,Depends(Broker)],cost:Annotated[CrawlMarkdownIngestCost,Depends(CrawlMarkdownIngestCost)],merchant:Annotated[Merchant,Depends(Merchant)],similarity:Annotated[EmbeddingSimilarity,Depends(EmbeddingSimilarity)],issuer:Annotated[IssuerManager,Depends(IssuerManager)],request_id:str = Depends(get_request_id),autPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         """
         Web crawl the web and extract meaningful information
         """
@@ -276,6 +301,7 @@ class DataIngestRessource(BaseHTTPRessource):
                     **metadata.model_dump(include=('uri','size')),
                     'subject':embedding,
                     'request_id':request_id,
+                    'issuer':issuer.export(),
                     '_nickname':ArqDataTaskConstant.CRAWL_DATA_TASK,
                     'state':dict(),
                     'step':None
@@ -294,7 +320,7 @@ class DataIngestRessource(BaseHTTPRessource):
     @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.RESEARCH_DATA_TASK),crawl4ai_guard,DataIngestDatabaseGuard(False))
     @PingService([RemoteAgentService,ArqIngestTaskService,RedisService,{'cls':LLMService,'kwargs':VerifyLLMConfig(research=True)}])
     @BaseHTTPRessource.HTTPRoute('/research/',methods=[HTTPMethod.POST],response_model=ResearchIngestDataResponse,mount=False)
-    async def ingest_research(self,request:Request,response:Response,ingestTask:ResearchDataIngestModel, broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[ResearchMarkdownIngestCost,Depends(ResearchMarkdownIngestCost)],similarity:Annotated[EmbeddingSimilarity,Depends(EmbeddingSimilarity)], request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def ingest_research(self,request:Request,response:Response,ingestTask:ResearchDataIngestModel, broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[ResearchMarkdownIngestCost,Depends(ResearchMarkdownIngestCost)],similarity:Annotated[EmbeddingSimilarity,Depends(EmbeddingSimilarity)],issuer:Annotated[IssuerManager,Depends(IssuerManager)], request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         """
         Engage a broad research by fetching url concept and crawling those pages
         """
@@ -325,6 +351,7 @@ class DataIngestRessource(BaseHTTPRessource):
                     **metadata.model_dump(include=('uri','size')),
                     'query':embedding,
                     'request_id':request_id,
+                    'issuer':issuer.export(),
                     '_nickname':ArqDataTaskConstant.RESEARCH_DATA_TASK,
                     'state':dict(),
                     'step':None
@@ -354,7 +381,7 @@ class DataIngestRessource(BaseHTTPRessource):
         @LockService(RedisService,ArqIngestTaskService,ProfileService,LLMService,lockType='reader',as_manager=True)
         @UseGuard(ArqDataTaskGuard(ArqDataTaskConstant.API_DATA_TASK),DataIngestDatabaseGuard(False))
         @BaseHTTPRessource.HTTPRoute('/api/{profile}/',methods=[HTTPMethod.POST],response_model=APIIngestDataResponse,mount=False)
-        async def ingest_api_data(self,profile:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[CrawlMarkdownIngestCost,Depends(CrawlMarkdownIngestCost)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission)):
+        async def ingest_api_data(self,profile:Annotated[ProfileMiniService,Depends(get_profile)],request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],merchant:Annotated[Merchant,Depends(Merchant)],cost:Annotated[CrawlMarkdownIngestCost,Depends(CrawlMarkdownIngestCost)],request_id:str = Depends(get_request_id),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
             """
             Accepts a JSON body describing an `APIFetchTask` and enqueues it.
             """

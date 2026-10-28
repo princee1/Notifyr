@@ -1,5 +1,7 @@
 version: "3.8"
 
+name: "Notifyr"
+
 services:
 
   # ==========================================
@@ -15,7 +17,7 @@ services:
     command: daemon --config=/etc/ofelia/config.toml
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./ofelia.toml:/etc/ofelia/config.toml:ro
+      - ./conf/ofelia/ofelia.toml:/etc/ofelia/config.toml:ro
     restart: unless-stopped
   # ==========================================
   # EDGE LAYER
@@ -43,6 +45,8 @@ services:
   dashboard:
     image: notifyr/dashboard:community
     container_name: dashboard
+    environment:
+      - AUTH_MECHANISM=${AUTH_MECHANISM}
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.dashboard.rule=Host(`dashboard.notifyr.io`)"
@@ -130,8 +134,6 @@ services:
       # PRESERVED: Custom target paths
       - source: app_role_id
         target: /run/secrets/app-role_id.txt
-      - source: api_key
-        target: /run/secrets/api_key.txt
       - source: costs
         target: /run/secrets/costs.json
       - source: deploy
@@ -161,15 +163,17 @@ services:
       - GOOGLE_SAFE_SEARCH_API_KEY=${GOOGLE_SAFE_SEARCH_API_KEY}
       - IPINFO_API_KEY=${IPINFO_API_KEY}
 
-      - USERNAME=${USERNAME}
       - DOMAIN_NAME=${DOMAIN_NAME}
   
       - CELERY_BROKER_PROVIDER=${CELERY_BROKER_PROVIDER:-rabbitmq}
 
       - MONGO_REPLICA_NAME=${MONGO_REPLICA_NAME:-nrp}
-      - SECURITY_FLAG=${SECURITY_FLAG:-true}
+      - AUTH_MECHANISM=${AUTH_MECHANISM:-jwt}
       - INSTALL_DOCLING=${INSTALL_DOCLING:-false}
       - INSTALL_CRAWL4AI=${INSTALL_CRAWL4AI:-false}
+
+      - JOBSTORE_DB=${JOBSTORE_DB:-redis}
+      - SESSION_MECHANISM=${SESSION_MECHANISM:-redis}
 
       - MCP_ENABLED=${MCP_ENABLED:-false}
       - ALLOWED_TWO_LEVEL_AGENT=${ALLOWED_TWO_LEVEL_AGENT:-false}
@@ -305,6 +309,26 @@ services:
       - data_net
       - vault_net
 
+  root-init:
+    image: notifyr/fastapi:community
+    container_name: root-init
+    command: ["tail", "-f" ,"/dev/null"]
+    volumes:
+      - ./scripts/root_init.py:/usr/src/root_init.py
+      - vault-shared:/vault/shared:ro
+    environment:
+      - REDIS_HOST=${REDIS_HOST-redis}
+      - POSTGRES_HOST=${POSTGRES_HOST-postgres}
+      - MODE=${MODE:-prod}
+    secrets:
+      - source: deploy
+        target: /run/secrets/deploy.json
+      - source: app_role_id
+        target: /run/secrets/app-role_id.txt
+    networks:
+      - data_net
+      - vault_net 
+
   # ==========================================
   # SECURITY LAYER
   # ==========================================
@@ -325,6 +349,8 @@ services:
       - vault-data:/vault/data
       - vault-shared:/vault/shared
       - vault-audit:/vault/logs
+    # ports:
+    #   - "8200:8200"
     networks:
       - data_net
       - vault_net
@@ -397,7 +423,7 @@ services:
   # DATA LAYER
   # ==========================================
   minio:
-    image: minio/minio:latest
+    image: minio/minio
     container_name: minio
     restart: always
     entrypoint: ["./minio-entrypoint.sh"]
@@ -454,11 +480,11 @@ services:
       - REDIS_VAULT_PASSWORD=${VAULTPASS:-vaultpass}
       - DEFAULT_USER=on
       - SKIP_FIX_PERMS=1
+      
     volumes:
       - redis-data:/data
       - ./scripts/entrypoint/redis-entrypoint.sh:/entrypoint.sh
       - ./scripts/credit/ncs-lib.lua:/functions/ncs-lib.lua
-      - ./scripts/credit/credit-deduction.lua:/functions/credit-deduction.lua
     networks:
       - data_net
 
@@ -493,7 +519,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.postgres
-    image: postgres:15
+    image: notifyr/postgres
     container_name: postgres
     restart: always
     volumes:
@@ -550,6 +576,66 @@ services:
     volumes:
       - neo4j_data:/data
 
+  # ==========================================
+  # MONITORING DATA LAYER
+  # ==========================================
+
+  flower:
+    image: notifyr:flower
+    command: ["make", "flower"]
+    #container_name: ntfyr-flower
+    # labels:
+    #   - com.docker.compose.servie=flower
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.celery
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "5555:5555"
+
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./conf/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    restart: always
+    hostname: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: test@test.com
+      PGADMIN_DEFAULT_PASSWORD: test
+    ports:
+      - "7070:7070"
+
+  mongo-express:
+    image: mongo-express:1
+    container_name: mongo-express
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=${MONGO_REPLICA_NAME:-nrp}
+      ME_CONFIG_BASICAUTH: "false"
+    networks:
+      - data_net
+
+  redis-commander:
+    container_name: redis-commander
+    hostname: redis-commander
+    image: rediscommander/redis-commander:latest
+    restart: always
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - 6060:6060
+
 volumes:
   qdrant_storage:
     driver: local
@@ -587,8 +673,6 @@ secrets:
     file: ./.secrets/unseal_key.json
   costs:
     file: ./.notifyr/costs.json
-  api_key:
-    file: ./.secrets/api_key.txt
   credit_token:
     file: ./.secrets/credit_token.txt
   deploy:

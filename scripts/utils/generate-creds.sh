@@ -12,7 +12,7 @@ FORCE=0
 
 for arg in "$@"; do
     case "$arg" in
-        api-key|minio|mongodb)
+        minio|mongodb)
             TYPE="$arg"
             ;;
         -f|--force)
@@ -24,7 +24,6 @@ done
 if [ -z "$TYPE" ]; then
     echo "❌ **No secret type specified.**"
     echo "Usage:"
-    echo "  $0 api-key [--force]"
     echo "  $0 minio [--force]"
     echo "  $0 mongodb [--force]"
 
@@ -33,10 +32,6 @@ fi
 
 # ---- Configuration per type ----
 case "$TYPE" in
-    api-key)
-        CONFIG_FILE="$SECRET_DIR/api_key.txt"
-        DESCRIPTION="API key file"
-        ;;
     minio)
         CONFIG_FILE="$SECRET_DIR/minio-root.json"
         DESCRIPTION="MinIO credentials file"
@@ -60,11 +55,6 @@ fi
 
 # ---- Generation logic ----
 case "$TYPE" in
-    api-key)
-        echo "✨ Generating new API key and saving it to $CONFIG_FILE"
-        KEY="api_key:$(pwgen -s 100 1)"
-        echo -n "$KEY" > "$CONFIG_FILE"
-        ;;
     mongodb)
         echo "✨ Generating new API key and saving it to $CONFIG_FILE"
         openssl rand -base64 756 > "$CONFIG_FILE"

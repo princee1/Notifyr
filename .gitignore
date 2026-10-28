@@ -184,3 +184,9 @@ TODO
 .secrets/
 .certificates/
 .help/
+.admin/
+.root/
+
+# Temporary ignoring postman file
+.postman/
+postman/

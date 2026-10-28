@@ -1,4 +1,5 @@
-from typing import Dict, List, Literal, Tuple, get_args
+from typing import Callable, Dict, List, Literal, NoReturn, Tuple, get_args
+from app.classes.auth_permission import IssuerInfo
 from app.definition._interface import Interface, IsInterface
 from app.errors.ingest_error import ConfigDatabase, Database
 from app.models.ingest_model import DeleteIngestUriMetadata
@@ -15,13 +16,15 @@ class DeleteIngestDocumentInterface(Interface):
         super().__init__()
         self.arqService = arqService
     
-    async def delete_single_document(self,job_id:str,config:ConfigDatabase,database:Database,section:Section)->Tuple[DeleteIngestUriMetadata,str]:
+    async def delete_single_document(self,job_id:str,config:ConfigDatabase,database:Database,section:Section,ownershipCallback:Callable[[IssuerInfo],None|NoReturn])->Tuple[DeleteIngestUriMetadata,str]:
         job,state = await self.arqService.exists(job_id,return_status=True)
 
         if state != JobStatus.complete:
             raise JobStatusNotValidError(job_id,state)
         
         info = await self.arqService.info(job)
+        ownershipCallback(info.kwargs('issuer',{}))
+
         graph_config:dict = info.kwargs.get(config,None)
 
         if not graph_config:
@@ -43,13 +46,16 @@ class DeleteIngestDocumentInterface(Interface):
 
         return meta,domain
     
-    async def delete_section(self,config:ConfigDatabase,section:Section,section_val:str)->Tuple[List[DeleteIngestUriMetadata],List[str],List[str],Dict]:
+    async def delete_section(self,config:ConfigDatabase,section:Section,section_val:str,ownershipCallback:Callable[[IssuerInfo],bool])->Tuple[List[DeleteIngestUriMetadata],List[str],List[str],Dict]:
         jobs_queue = []
         jobs_done = []
         meta = []
         error= {}
 
         for info in [*await self.arqService.get_queued_jobs(),*await self.arqService.get_jobs_results(True)]:
+            if not ownershipCallback(info.kwargs('issuer',{}),__raise__=False):
+                continue
+
             if info.kwargs.get(config,None) != None and info.kwargs.get(config,{}).get(section,None) == section_val:
 
                 uri = info.kwargs.get('uri',None)

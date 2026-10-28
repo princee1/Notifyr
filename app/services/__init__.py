@@ -3,9 +3,15 @@ from app.utils.globals import APP_MODE,ApplicationMode,CAPABILITIES
 from app.services.config_service import ConfigService,WorkerService
 from app.services.logger_service import LoggerService
 
-if APP_MODE == ApplicationMode.beat or APP_MODE == ApplicationMode.server or APP_MODE == ApplicationMode.worker:
+if APP_MODE in {ApplicationMode.beat, ApplicationMode.server ,ApplicationMode.worker,ApplicationMode.root}:
     from app.services.vault_service import VaultService
     from app.services.database.redis_service import RedisService
+
+if APP_MODE == ApplicationMode.root:
+    from app.services.database.tortoise_service import TortoiseConnectionService
+    from app.services.admin_service import AdminService
+    from app.services.security_service import JWTAuthService
+    from app.services.security_service import SecurityService
 
 if APP_MODE == ApplicationMode.worker or APP_MODE == ApplicationMode.server:
     from app.services.vault_service import VaultService
@@ -17,7 +23,6 @@ if APP_MODE == ApplicationMode.worker or APP_MODE == ApplicationMode.server:
     from app.services.workflow_service import WorkflowService
     from app.services.ntfr.webhook_service import WebhookService
     from app.services.system_service import SystemService
-
 
     if CAPABILITIES['agentic']:
         from app.services.agent.llm_service import LLMService
@@ -60,7 +65,6 @@ if APP_MODE == ApplicationMode.server:
     from app.services.contacts_service import ContactsService,SubscriptionService
     from app.services.worker.arq_service import ArqIngestTaskService
     from app.services.custom_service import CustomService
-
 
 if APP_MODE == ApplicationMode.agentic and CAPABILITIES['agentic']:
     from app.services.monitoring_service import MonitoringService

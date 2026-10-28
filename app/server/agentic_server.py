@@ -3,6 +3,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, WebSocketException,
 from app.classes.prompt import PromptToken
 from app.definition._router import auth_depends, get_instance_id
 from app.services.agent.agent_service import AGENT_BUILD_CREATE_STATE
+from app.services.timer_service import TimerService
 from app.utils.constant import CostConstant, HTTPHeaderConstant
 from app.utils.toolbox import RunInThreadPool
 from app.container import Get,Register
@@ -37,13 +38,12 @@ def bootstrap_agent_app()->FastAPI:
     redisService = Get(RedisService)
     vaultService = Get(VaultService)
     agentService = Get(AgentService)
+    timerService = Get(TimerService)
     mongooseService = Get(MongooseService)
     graphitiService = Get(GraphitiService)
 
     async def on_startup():
-        mongooseService.start()
-        redisService.start()
-        graphitiService.start()
+        timerService.start()
 
         redisService.register_consumer(callbacks_stream=Callbacks_Stream,callbacks_sub=Callbacks_Sub)
         await agentService.init_mcp_client()
@@ -56,9 +56,7 @@ def bootstrap_agent_app()->FastAPI:
             )
 
     async def on_shutdown():
-        mongooseService.shutdown()
-        redisService.shutdown()
-        graphitiService.shutdown()
+        timerService.shutdown()
 
         redisService.to_shutdown = True
         await redisService.close_connections(True)

@@ -2,7 +2,7 @@
 The `BaseResource` class initializes with a `container` attribute assigned from the `CONTAINER`
 instance imported from `container`.
 """
-from typing import Any, Callable, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, TypeVar, Type, TypedDict, get_args, overload
+from typing import Any, Callable, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, TypeVar, Type, TypedDict, Union, get_args, overload
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.datastructures import Default
@@ -10,10 +10,12 @@ from pydantic import BaseModel
 from app.classes.cost_definition import SimpleTaskCostDefinition
 from app.classes.profiles import ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
 from app.definition._ws import W
-from app.depends.dependencies import get_auth_permission
+from app.depends.dependencies import get_access_info, get_auth_mechanism
+from app.depends.limiter import Bucket, KeyFunc, SecurityKeyFunc, access_info_cost_func, access_type_token_func, client_info_cost_func, client_private_key_func, constant_cost_func, cost_func_by_auth_mechanism, group_private_key_func, private_key_func, public_bucket_key_func, session_key_func, type_cost_func
+from app.errors.security_error import BadAuthMechanismContextError
 from app.services.config_service import MODE, ConfigService, WorkerService
 from app.utils.helper import _make_delay_fn, copy_response
-from app.utils.constant import SpecialKeyParameterConstant
+from app.utils.constant import HTTPHeaderConstant, SpecialKeyParameterConstant
 from app.services import CostService
 from app.container import Get, Need
 from app.definition._service import S, BaseMiniService, BaseMiniServiceManager, BaseService, ServiceLockType
@@ -23,11 +25,12 @@ import functools
 from app.interface.events import EventInterface
 from enum import Enum
 from ._utils_decorator import *
-from app.classes.auth_permission import AuthPermission, ClientTypeLiteral, FuncMetaData, Role, WSPathNotFoundError
+from app.classes.auth_permission import AuthMechanism, ClientTypeLiteral, AuthPermission, ClientAccessInfo, ClientTypeLiteral, FuncMetaData, Role, WSPathNotFoundError
 import asyncio
 from asgiref.sync import sync_to_async
 import warnings
 from app.classes.operation_id import OperationIDFactory,MCPOperationID,SimpleOperationID
+from slowapi.util import get_ipaddr
 
 configService: ConfigService = Get(ConfigService)
 costService:CostService = Get(CostService)
@@ -145,7 +148,7 @@ class Helper:
                 result = JSONResponse({},)
             
             elif isinstance(result,BaseModel):
-                result = JSONResponse(result.model_dump())
+                result = JSONResponse(result.model_dump(mode='json'))
 
             return copy_response(result, response)
 
@@ -557,8 +560,82 @@ def HTTPRessource(prefix: str, routers: list[Type[R]] = [], websockets: list[Typ
 
 ################################################################                           #########################################################
 
+def UseAccess(*access_function: Callable[..., bool] | Access | Type[Access],accesses:Dict[ClientTypeLiteral,bool],default_error: HTTPExceptionParams = None,mount=True):
+    if not mount:
+        def decorator(func:Callable):
+            return func
+        return decorator
+    
+    if Get(ConfigService).AUTH_MECHANISM != 'token':
+        def decorator(func:Callable):
+            return func
+        return decorator
+
+    access_function = Helper.filter_type_function(access_function)
+    
+    def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
+        cls = common_class_decorator(func,UseAccess,access_function,accesses=accesses,mount=mount)
+        if cls != None:
+            return cls
+
+        class_name = Helper.get_class_name_from_method(func)
+        Helper.add_protected_route_metadata(class_name, func.meta['operation_id'],)
+    
+        def wrapper(function: Callable):
+
+            @functools.wraps(function)
+            async def callback(*args, **kwargs):                    
+                request:Request = kwargs.get('request',None)
+                if request == None:
+                    raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED,'missing request attributes')
+
+                if configService.AUTH_MECHANISM == 'both' and get_auth_mechanism(request) != 'token':
+                    return await function(*args, **kwargs)
+                
+                if (accessInfo:= getattr(request.state,'accessInfo',None))==None:
+                    raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED,'missing access attributes')
+
+                if not accesses.get(accessInfo['type'],False):
+                    raise HTTPException(status.HTTP_403_FORBIDDEN,'Access Type not valid for this route')
+
+                for access in access_function:
+                    try:
+                        if isinstance(access,Access):
+                            flag = await access.do(*args,**kwargs)
+                        else:
+                            flag = await APIFilterInject(access)(*args,**kwargs)
+                        if flag:
+                            continue
+                        else:
+                            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+                        
+                    except AccessDefaultException as e:
+                        if e.response != None and isinstance(e.response,Response):
+                            return e.response
+                        
+                        e.raise_http_exception()
+
+                        if default_error == None:
+                            raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)
+                        
+                        raise HTTPException(**default_error)
+
+                    
+                return await function(*args,**kwargs)
+
+            return callback
+        Helper.appends_funcs_callback(func, wrapper, DecoratorPriority.PERMISSION)
+        return func
+    return decorator
+
+
 def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[Permission], default_error: HTTPExceptionParams = None,mount=True):
     if not mount:
+        def decorator(func:Callable):
+            return func
+        return decorator
+    
+    if Get(ConfigService).AUTH_MECHANISM != 'userpass':
         def decorator(func:Callable):
             return func
         return decorator
@@ -582,8 +659,11 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
 
             @functools.wraps(function)
             async def callback(*args, **kwargs):
+                request:Request = kwargs.get('request',None)
+                if request == None:
+                    raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED,'missing request attributes')
 
-                if not configService.SECURITY_FLAG:
+                if configService.AUTH_MECHANISM == 'both' and get_auth_mechanism(request) != 'userpass':
                     return await function(*args, **kwargs)
 
                 if empty_decorator:
@@ -594,8 +674,7 @@ def UsePermission(*permission_function: Callable[..., bool] | Permission | Type[
                         status_code=status.HTTP_501_NOT_IMPLEMENTED)
 
                 if SpecialKeyParameterConstant.META_SPECIAL_KEY_PARAMETER in kwargs or SpecialKeyParameterConstant.CLASS_NAME_SPECIAL_KEY_PARAMETER in kwargs:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
-                                        'message': 'special key used'})
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'message': 'special key used'})
 
                 kwargs_prime = kwargs.copy()
                 kwargs_prime[SpecialKeyParameterConstant.CLASS_NAME_SPECIAL_KEY_PARAMETER] = class_name
@@ -851,6 +930,47 @@ def UseRoles(roles: list[Role] = [], excludes: list[Role] = [], options: list[Ca
 
 ################################################################                           #########################################################
 
+Header = Union[dict[str,str],list[tuple[str,str]]]
+
+def Headers(header:Header|Callable[...,Header]):
+    if not (is_callable:=callable(header)) or not isinstance(header,(dict,list)):
+        raise TypeError('Should be a dict or a list')
+
+    elif isinstance(header,dict):
+        header = list(header.items())
+
+    def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
+        cls = common_class_decorator(func, Headers,None,header= header)
+        if cls != None:
+            return cls
+
+        def wrapper(function:Callable):
+
+            @functools.wraps(function)
+            async def callback(*args, **kwargs):
+                if 'response' in kwargs and isinstance(kwargs['response'], Response):
+                    response = kwargs['response']
+                    if is_callable:
+                        hs = APIFilterInject(header)
+                        if isinstance(hs,dict):
+                            hs = list(hs.items())
+                        response.raw_headers.extend(hs)
+                    else:
+                        response.raw_headers.extend(header)
+                    
+                if asyncio.iscoroutinefunction(function):
+                    return await function(*args, **kwargs)
+                else:
+                    return function(*args, **kwargs)
+
+            return callback
+
+        Helper.appends_funcs_callback(func,wrapper, DecoratorPriority.META)
+        return func
+    
+    return decorator
+
+
 def HTTPStatusCode(code: int | str):
     """
     The `HTTPStatusCode` function is a decorator that sets the HTTP status code for a response based on
@@ -874,21 +994,24 @@ def HTTPStatusCode(code: int | str):
         raise ValueError
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, HTTPStatusCode, code)
+        cls = common_class_decorator(func, HTTPStatusCode,None,code= code)
         if cls != None:
             return cls
+        
+        def wrapper(function:Callable):
+            @functools.wraps(function)
+            async def callback(*args, **kwargs):
+                if 'response' in kwargs and isinstance(kwargs['response'], Response):
+                    kwargs['response'].status_code = code
 
-        @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
-            if 'response' in kwargs and isinstance(kwargs['response'], Response):
-                kwargs['response'].status_code = code
-
-            if asyncio.iscoroutinefunction(func):
-                return await func(*args, **kwargs)
-            else:
-                return func(*args, **kwargs)
-
-        return wrapper
+                if asyncio.iscoroutinefunction(function):
+                    return await function(*args, **kwargs)
+                else:
+                    return function(*args, **kwargs)
+            return callback
+        
+        Helper.appends_funcs_callback(func,wrapper, DecoratorPriority.META)
+        return func
 
     return decorator
 
@@ -919,6 +1042,8 @@ def Throttle(fixed: float | None = None,fn: Callable[[], float] | None = None,un
                 delay = delay_fn()
                 if delay > 0:
                     await asyncio.sleep(delay/MS_TO_SEC)
+                response:Response = kwargs.get('response')
+                response.headers[HTTPHeaderConstant.X_THROTTLE_DELAY] = f'{delay} (ms)'
                 return await target_function(*args,**kwargs)
             return callback
         
@@ -927,7 +1052,7 @@ def Throttle(fixed: float | None = None,fn: Callable[[], float] | None = None,un
 
     return decorator    
 
-def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]|None|Dict[ClientTypeLiteral,int]=None,key_func:Callable[[Request],str]|Literal['group','client','public','private','default','worker','none','session','ip']='client'):
+def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=True,exempt_when:Callable=None,error_message:str=None,cost:Callable[[Request],int]|None|int|Dict[ClientTypeLiteral,int]=None,key_func:Callable[[Request],str]|Dict[AuthMechanism,SecurityKeyFunc|KeyFunc]|KeyFunc|Bucket={}):
     """
     *Description copied from the slowapi library*
 
@@ -956,72 +1081,93 @@ def UseLimiter(limit_value:str,scope:str=None,exempt=False,override_defaults=Tru
            return lambda req:1
         elif callable(cost):
             return cost
+        elif isinstance(cost,int):
+            return constant_cost_func(cost)
         elif isinstance(cost,dict):
-            if key_func != 'private':
-                raise ValueError('To add cost based on the client type we must have the client_id as key. HINT: use key_func="private"')
-            def cost_func(request:Request):
-                authPermission:AuthPermission =  get_auth_permission(request)
-                clientType = authPermission['client_type']
-                unit_cost = cost.get(clientType,1)
-                unit_cost = max(1,unit_cost)
-                return min(unit_cost,max_limit)
-            return cost_func
+            if key_func == 'public':
+                raise ValueError('To add cost based on the client type we must have ')
+            match configService.AUTH_MECHANISM:
+                case 'userpass':
+                    return client_info_cost_func(cost,max_limit)
+                case 'token':
+                    return access_info_cost_func(cost,max_limit)
+                case 'both':
+                    cost_func_by_auth_mechanism(cost,max_limit)
+                case _:
+                    return constant_cost_func(1)
         else:
             raise ValueError('Could not parse the cost as a function')
         
     cost_callback = cost_decorator()
 
-    def client_private_key_func(request:Request):
-        if not configService.SECURITY_FLAG:
-            return workerService.INSTANCE_ID
-        authPermission:AuthPermission =  get_auth_permission(request)
-        return authPermission['client_id']
-
-    def group_private_key_func(request:Request):
-        if not configService.SECURITY_FLAG:
-            return workerService.HOSTNAME
-        authPermission:AuthPermission = get_auth_permission(request)
-        if not (group_id:=authPermission.get('group_id',None)):
-            return client_private_key_func(request)
-        return group_id
-
-    def session_key_func(request:Request)->str:
-        return ...
-    
-    def private_key_func(request:Request)->str:
-        authPermission:AuthPermission = get_auth_permission(request)
-        return 'private'
-
-
-    if isinstance(key_func,str):
-        match key_func:
-            case 'default':
-                key_func = None # use the global key_func
-            case 'ip':
-                ...
-            case 'public':
-                key_func = lambda r: 'public'
-            case 'private':
-                key_func = private_key_func
-            case 'none':
-                key_func = lambda r: 'none'
+    def compute_security_key_func(mode:SecurityKeyFunc):
+        match mode:
+            case 'type':
+                return type_cost_func('token')
             case 'session':
-                key_func = session_key_func
-            case 'worker':
-                key_func = lambda r: workerService.INSTANCE_ID
+                return session_key_func
             case 'client':
-                key_func = client_private_key_func
+                return client_private_key_func
             case 'group':
-                key_func = group_private_key_func
+                return group_private_key_func
+            case 'access':
+                return access_type_token_func
+            case 'private':
+                return  private_key_func
             case _:
-                key_func = client_private_key_func
+                return client_private_key_func
+
+    def compute_key_func(mode:KeyFunc):
+        match mode:
+            case 'default':
+                return None # use the global key_func
+            case 'subnet':
+                return None
+            case 'ip':
+                return get_ipaddr
+            case 'public':
+                return lambda r: 'public'
+            case 'none':
+                return lambda r: 'none'
+            case 'worker':
+                return lambda r: workerService.INSTANCE_ID
+            case _:
+                return get_ipaddr
+
+    if key_func in get_args(KeyFunc):
+        key_func = compute_key_func(key_func)
+    
+    elif key_func in get_args(SecurityKeyFunc):
+        key_func = compute_security_key_func(key_func)
+    
+    elif isinstance(key_func,dict):
+        default:dict[AuthMechanism,SecurityKeyFunc|KeyFunc] = {'token':'access','userpass':'client','none':'worker'}
+
+        match configService.AUTH_MECHANISM:
+            case 'token'|'userpass':
+                security_key_func = key_func.get(configService.AUTH_MECHANISM,default[configService.AUTH_MECHANISM])
+                key_func = compute_security_key_func(security_key_func)
+            case 'both':
+                key_func_cp = key_func.copy()
+                def both_key_func(request:Request):
+                    auth_mechanism = get_auth_mechanism(request)
+                    security_key_func = key_func_cp.get(auth_mechanism,default[configService.AUTH_MECHANISM])
+                    return compute_security_key_func(security_key_func)
+                key_func = both_key_func
+            case 'none':
+                key_func = compute_key_func(key_func)
+
     elif callable(key_func):
         ... # Use the key_func callable provided
+    
+    elif isinstance(key_func,Bucket):
+        key_func = public_bucket_key_func(key_func)
+    
     else:
         raise ValueError('Could not parse the key_func')
 
     def decorator(func: Type[R] | Callable) -> Type[R] | Callable:
-        cls = common_class_decorator(func, UseLimiter, None, limit_value=limit_value,override_defaults=override_defaults,exempt_when=exempt_when,error_message=error_message)
+        cls = common_class_decorator(func, UseLimiter, None, limit_value=limit_value,scope=scope,exempt=exempt,override_defaults=override_defaults,exempt_when=exempt_when,error_message=error_message,cost=cost_callback,key_func=key_func)
         if cls != None:
             return cls
         meta: FuncMetaData | None = getattr(func, 'meta', None)
@@ -1078,7 +1224,7 @@ def PingService(services: list[S | dict], infinite_wait=False,is_manager=False,w
             async def callback(*args, **kwargs):
                 
                 if not infinite_wait and wait_timeout >= 0:
-                    asyncio.wait_for(inner_callback(kwargs), wait_timeout)
+                    await asyncio.wait_for(inner_callback(kwargs), wait_timeout)
                 else:
                     await inner_callback(kwargs)
                 return await Helper.return_result(target_function,args,kwargs)

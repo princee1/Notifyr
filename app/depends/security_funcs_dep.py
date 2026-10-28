@@ -1,36 +1,41 @@
 from typing import Annotated
-from fastapi import HTTPException, Header,status
+from fastapi import HTTPException, Header,status,Request
 from app.container import Get
-from app.services.admin_service import AdminService
 from app.services.config_service import ConfigService
 from app.services.security_service import SecurityService
-
-
-async def verify_admin_token(x_admin_token: Annotated[str, Header()]):
-    configService: ConfigService = Get(ConfigService)
-
-    if x_admin_token == None or x_admin_token != configService.ADMIN_KEY:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="X-Admin-Token header invalid")
-
-
-async def verify_admin_signature(x_admin_signature: Annotated[str, Header()]):
-    adminService: AdminService = Get(AdminService)
-    securityService: SecurityService = Get(SecurityService)
-    configService: ConfigService = Get(ConfigService)
-
-    if x_admin_signature == None:
-        ...
-
-    if securityService.verify_admin_signature():
-        ...
+from app.utils.globals import CAPABILITIES
 
 
 def verify_dashboard_token(x_dashboard_token:Annotated[str,Header()]):
-    ...
+    configService:ConfigService = Get(ConfigService)
+    if configService.AUTH_MECHANISM == 'none':
+        return
+    securityService:SecurityService = Get(SecurityService)
+    if securityService.DASHBOARD_KEY != x_dashboard_token:
+        raise HTTPException(401,{'message':'This request should only come from the dashboard'})
+    
 
 def verify_dmz_token(x_dmz_token:Annotated[str,Header()]):
-    ...
+    configService:ConfigService = Get(ConfigService)
+    securityService:SecurityService = Get(SecurityService)
 
-def verify_api_key(x_api_key:Annotated[str,Header()]):
-    ...
+if CAPABILITIES['twilio']:
+    from app.services.ntfr.twilio_service import TwilioService,RequestValidator
+
+    async def verify_twilio_token(request: Request):
+        twilioService = Get(TwilioService)
+        twilio_signature = request.headers.get("X-Twilio-Signature", None)
+
+        if not twilio_signature:
+            raise HTTPException(
+                status_code=400, detail='Twilio Signature not available')
+
+        full_url = str(request.url)
+
+        form_data = await request.form()
+        params = {key: form_data[key] for key in form_data}
+
+        validator = RequestValidator(twilioService.main.auth_token)
+        if not validator.validate(full_url, params, twilio_signature):
+            raise HTTPException(
+                status_code=403, detail="Invalid Twilio Signature")

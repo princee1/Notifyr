@@ -24,7 +24,7 @@ CREATE ROLE vault_ntfr_admin_client_role NOLOGIN;
 
 GRANT CONNECT ON DATABASE security TO vault_ntfr_client_role;
 
-GRANT CREATE ON DATABASE security TO vault_ntfr_admin_client_role;
+GRANT CONNECT ON DATABASE security TO vault_ntfr_admin_client_role;
 
 GRANT CREATE ON DATABASE security TO vault_ntfr_admin_client_role;
 

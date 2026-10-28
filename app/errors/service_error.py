@@ -96,9 +96,10 @@ class MiniServiceAlreadyExistsError(BuildError):
 
 class MiniServiceDoesNotExistsError(BuildError):
     
-    def __init__(self, miniService_id:str):
+    def __init__(self, miniService_id:str,service:str=None):
         super().__init__()
         self.miniService_id = miniService_id
+        self.service = service
 
     @property    
     def message(self):

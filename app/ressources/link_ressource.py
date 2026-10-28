@@ -1,19 +1,20 @@
 from typing import Annotated, Literal,get_args
 from fastapi import BackgroundTasks, Depends, Query, Request, Response
-from app.classes.auth_permission import AuthPermission, Role
+from app.classes.auth_permission import AccessAPIInfo, AuthPermission, ClientAccessInfo, Role
 from app.container import InjectInMethod
 from app.decorators.guards import AccessLinkGuard
 from app.decorators.handlers import CostHandler, ORMCacheHandler, RedisHandler, TortoiseHandler
 from app.decorators.interceptors import DataCostInterceptor
-from app.decorators.permissions import JWTRouteHTTPPermission
-from app.decorators.pipes import MerchantPipe
+from app.decorators.permissions import ClientTypesPermission, JWTRouteHTTPPermission
+from app.decorators.pipes import MerchantPipe, IssuerModifierPipe
 from app.definition._cost import DataCost
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles, LockService
-from app.depends.dependencies import get_auth_permission, get_query_params
-from app.depends.funcs_dep import GetLink
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, Throttle, UseAccess, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles, LockService
+from app.depends.dependencies import get_access_info, get_auth_permission, get_client_info, get_query_params
+from app.depends.funcs_dep import GetLink, get_issuer
 from app.depends.class_dep import  LinkQuery
 from app.depends.orm_cache import LinkORMCache
 from app.manager.broker_manager import Broker
+from app.manager.issuer_manager import IssuerManager
 from app.manager.merchant_manager import Merchant
 from app.models.orm.email_model import EmailStatus, TrackingEmailEventORM
 from app.services.config_service import ConfigService
@@ -61,15 +62,18 @@ class CRUDLinkRessource(BaseHTTPRessource):
         self.configService = configService
         self.linkService = linkService
 
-    @UseRoles([Role.ADMIN])
     @UsePipe(MerchantPipe)
+    @UseRoles([Role.ADMIN])
     @Throttle(uniform=(100,500))
     @HTTPStatusCode(status.HTTP_201_CREATED)
-    @UseInterceptor(DataCostInterceptor(CostConstant.LINK_CREDIT))
     @UseHandler(ORMCacheHandler,CostHandler,RedisHandler)
+    @UseAccess(accesses={'Admin':True,'System':True,'User':True})
+    @UseInterceptor(DataCostInterceptor(CostConstant.LINK_CREDIT))
+    @UsePermission(ClientTypesPermission(['Admin','User','System']))
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.POST])
-    async def add_link(self, request: Request, linkModel: LinkModel,cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)], response: Response,authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def add_link(self, request: Request, linkModel: LinkModel,cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)], response: Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         link = linkModel.model_dump()
+        link['issuer'] = issuer.export('model')
 
         async def transaction():
             async with in_transaction():
@@ -85,19 +89,25 @@ class CRUDLinkRessource(BaseHTTPRessource):
         return link
 
     @UseRoles([Role.PUBLIC])
+    @UsePermission(ClientTypesPermission(['Twilio'],'exclude'))
+    @UseAccess(accesses={'Admin':True,'User':True,'System':True,'App':True,'System':True})
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.GET])
-    async def read_link(self, request: Request, link: Annotated[LinkORM, Depends(get_link)],authPermission=Depends(get_auth_permission)):
+    async def read_link(self, request: Request, link: Annotated[LinkORM, Depends(get_link)],authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         return link.to_json
 
     @UseRoles([Role.ADMIN])
-    @Throttle(uniform=(100,400))
     @UsePipe(MerchantPipe(-1))
+    @Throttle(uniform=(100,400))
     @HTTPStatusCode(status.HTTP_202_ACCEPTED)
     @UseHandler(ORMCacheHandler,CostHandler,RedisHandler)
+    @UseAccess(accesses={'Admin':True,'System':True,'User':True})
+    @UsePermission(ClientTypesPermission(['Admin','User','System']))
     @UseInterceptor(DataCostInterceptor(CostConstant.LINK_CREDIT,'refund'))
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.DELETE])
-    async def delete_link(self,response:Response,request:Request,cost:Annotated[DataCost,Depends(DataCost)],merchant:Annotated[Merchant,Depends(Merchant)], link: Annotated[LinkORM, Depends(get_link)], archive: bool = Query(False),authPermission=Depends(get_auth_permission)):
+    async def delete_link(self,response:Response,request:Request,cost:Annotated[DataCost,Depends(DataCost)],issuer:Annotated[IssuerManager,Depends(IssuerManager)],merchant:Annotated[Merchant,Depends(Merchant)], link: Annotated[LinkORM, Depends(get_link)], archive: bool = Query(False),authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         link_data = link.to_json.copy()
+
+        issuer.verify_ownership(link.issuer)
 
         if not archive:
             response.status_code = status.HTTP_200_OK
@@ -121,10 +131,14 @@ class CRUDLinkRessource(BaseHTTPRessource):
         return link_data
 
     @UseRoles([Role.ADMIN])
-    @HTTPStatusCode(200)
-    @UseHandler(ORMCacheHandler)
+    @UseHandler(ORMCacheHandler())
+    @HTTPStatusCode(status.HTTP_200_OK)
+    @UseAccess(accesses={'Admin':True,'System':True,'User':True})
+    @UsePermission(ClientTypesPermission(['Admin','User','System']))
     @BaseHTTPRessource.HTTPRoute('/', methods=[HTTPMethod.PUT])
-    async def update_link(self, link: Annotated[LinkORM, Depends(get_link)], linkUpdateModel: UpdateLinkModel,request:Request,response:Response,authPermission=Depends(get_auth_permission)):
+    async def update_link(self, link: Annotated[LinkORM, Depends(get_link)], linkUpdateModel: UpdateLinkModel,request:Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
+        issuer.verify_ownership(link.issuer)
+        
         if linkUpdateModel.archived != None:
             link.archived = linkUpdateModel.archived
         
@@ -134,16 +148,21 @@ class CRUDLinkRessource(BaseHTTPRessource):
         if linkUpdateModel.link_name:
             link.link_name = linkUpdateModel.link_name
 
+        if issuer.update:
+            link.issuer = issuer.export('model')
+
         await link.save()
         await LinkORMCache.Invalid(link.link_short_id)
         
         return link.to_json
 
-    @UseGuard(AccessLinkGuard(False))
     @UseRoles([Role.PUBLIC])
-    @HTTPStatusCode(200)
+    @UseGuard(AccessLinkGuard(False))
+    @HTTPStatusCode(status.HTTP_200_OK)
+    @UsePermission(ClientTypesPermission(['Twilio'],slice='exclude'))
+    @UseAccess(accesses={'Admin':True,'User':True,'System':True,'App':True,'System':True})
     @BaseHTTPRessource.HTTPRoute('/code/{link_id}/', methods=[HTTPMethod.GET,HTTPMethod.POST], mount=True)
-    async def get_qrcode(self,response:Response, link_id: str, qrModel: QRCodeModel, link: Annotated[LinkORM, Depends(get_link)], link_query: Annotated[LinkQuery, Depends(LinkQuery)], media_type: MediaType = Depends(media_type_query), authPermission=Depends(get_auth_permission)):
+    async def get_qrcode(self,response:Response, link_id: str, qrModel: QRCodeModel, link: Annotated[LinkORM, Depends(get_link)], link_query: Annotated[LinkQuery, Depends(LinkQuery)], media_type: MediaType = Depends(media_type_query), authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         path: str = None
         url = link_query.create_link(link, path, ("contact_id", "message_id", "session_id"))
         img_data = await self.linkService.generate_qr_code(url, qrModel)

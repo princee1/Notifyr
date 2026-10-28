@@ -5,6 +5,7 @@ import uuid
 from aiohttp_retry import Tuple
 from pydantic import BaseModel, Field
 from typing_extensions import Literal
+from app.classes.auth_permission import IssuerInfoModel
 from app.definition._error import BaseError
 
 Operator = Literal["$eq","$ne","$gt","$ge","$lt","$le","$in","$nin"]
@@ -77,6 +78,7 @@ class BaseDocument(Document):
     description: Optional[str] = Field(default=None,min_length=0,max_length=400)
     created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
     last_modified: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    issuer: Optional[IssuerInfoModel]
     version: int = 1
 
     _unique_indexes: ClassVar[list[str]] = []

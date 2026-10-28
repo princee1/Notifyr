@@ -1,30 +1,58 @@
+import asyncio
+import time
+from datetime import datetime
 from typing import Any, Callable, List, Literal,Dict,NotRequired, Optional, Self
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
 from typing_extensions import TypedDict
 from enum import Enum
 
 from app.classes.cost_definition import SimpleTaskCostDefinition
+from app.utils.validation import ipv4_subnet_validator, ipv4_validator
 from .template import Extension
 from app.definition._error import BaseError
 from app.utils.fileIO import is_file
-from app.utils.helper import filter_paths, subset_model
+from app.utils.helper import filter_paths, generateId, subset_model, uuid_v1_mc
 
 PermissionScope= Literal['custom','all']
 
 ContactPermissionScope = Literal['update','create','any']
 PermissionStatus= Literal['active','inactive','expired']
-ClientTypeLiteral = Literal['User','Admin','Twilio','App','Service']
+ClientTypeLiteral = Literal['User','Admin','Twilio','App','Service','System']
 
 PolicyUpdateMode = Literal['set','merge','delete']
+AuthMechanism = Literal['userpass','token','none','both']
+SessionMechanism =Literal['redis+sync','vault+sync','redis','none']
+OwnershipMode = Literal['public','private','protected','exclusive']
 
 EXTENSION = [f".{ext}" for ext in Extension._value2member_map_.keys()]
 
+
+class AccessTypeModel(BaseModel):
+    type:ClientTypeLiteral
+    description:Optional[str] = Field(default=None,max_length=400)
+    allowed_ip:List[str]|None
+    alias:str = Field(default=None,min_length=8,max_length=40)
+
+class AccessTypeAPIModel(AccessTypeModel):
+    token:str
+    time:float = Field(default_factory=lambda :time.time())
+    _path:str|None=PrivateAttr(default=None)
+    _input:str|None=PrivateAttr(default=None)
+
+class AccessAPIInfo(TypedDict):
+    type:ClientTypeLiteral
+    description:Optional[str]
+    allowed_ip:Optional[List[str]]
+    alias:str
+    token:str
+    time:float
+    id:str
+    
 class Role(Enum):
     PUBLIC = 'PUBLIC'
     STATIC = 'STATIC'
     ADMIN = 'ADMIN'
     RELAY = 'RELAY'
-    CUSTOM ='CUSTOM'
     MFA_OTP ='MFA_OTP'
     CHAT = 'CHAT'
     EMAIL = 'EMAIL'
@@ -33,13 +61,19 @@ class Role(Enum):
     REFRESH = 'REFRESH'
     CONTACTS = 'CONTACTS'
     TWILIO = 'TWILIO'
-    SUBSCRIPTION = 'SUBSCRIPTION'
+    SECRETS = 'SECRETS'
+    NOTIFICATION = 'NOTIFICATION'
+    SUBSCRIPTION = 'SUBSCRIPTION' # NOTE why?
     CLIENT = "CLIENT"
     LINK = "LINK"
     ASSETS = "ASSETS"
     PROFILE ="PROFILE"
     MCP = "MCP"
     AGENT = "AGENT"
+    INGEST = "INGEST"
+    CELERY = "CELERY"
+    COSTS = 'COSTS'
+    CUSTOM = 'CUSTOM'
 
 class Scope(Enum):
     SoloDolo = 'SoloDolo'
@@ -47,6 +81,9 @@ class Scope(Enum):
     Domain = 'Domain'
     Free='Free'
 
+class RecoveryReset(Enum):
+    All = 'All'
+    Single='Single'
 
 class ClientType(Enum):
     User = 'User'
@@ -54,12 +91,68 @@ class ClientType(Enum):
     Twilio = 'Twilio'
     App = 'App'
     Service = 'Service'
-
+    System = 'System'
 
 class AuthType(Enum):
     ACCESS_TOKEN = 'ACCESS_TOKEN'
     API_TOKEN = 'API_TOKEN'
 
+class AuthState(Enum):
+    LOGOUT_BY_REFRESH = 'logout-by-refresh'
+    AUTH_BY_REFRESH = 'auth-by-refresh'
+    LOGIN_BY_RECOVERY = 'login-by-recovery'
+    SESSION_REVOKED = 'session-revoked'
+    SESSION_REFRESHED = 'session-refreshed'
+    PUBLIC_LOGIN = 'public-login'
+    LOGOUT ='logout'
+    LOGIN = 'login'
+
+class AuthSignature(TypedDict):
+    signature:str
+    time:float
+    ip:str
+    user_agent:str
+    last_login:float
+    device_name:str
+
+class AuthSignatureInfoModel(BaseModel):
+    ip:Optional[str] = Field(default=None,max_length=25)
+    ip_mode:Optional[Literal['ip','subnet']] = Field(default='ip') 
+    user_agent:Optional[str] = Field(default=None,max_length=100)
+    device_name:str  = Field(max_length=60,min_length=5)
+
+    @model_validator(mode='after')
+    def verify_ip(self:Self):
+        if self.ip != None:
+            match self.ip_mode:
+                case 'ip':
+                    ipv4_validator(self.ip)
+                case 'subnet':
+                    ipv4_subnet_validator(self.ip)
+                case _:
+                    ipv4_validator(self.ip)
+
+        return self
+
+class IssuerInfo(TypedDict):
+    issuer:str
+    type:ClientTypeLiteral |ClientType
+    ownership:OwnershipMode
+    group:str
+
+class IssuerInfoModel(BaseModel):
+    issuer:str = Field(max_length=60)
+    ownership:OwnershipMode
+    group:Optional[str] = Field(default=None,max_length=60)
+
+    @model_validator(mode='after')
+    def validate_group(self)->Self:
+        if self.ownership == 'protected' and self.group == None:
+            raise ValueError
+        return self
+
+
+API_TOKEN_CLIENT_TYPE_SET = {ClientType.Twilio,ClientType.App,ClientType.Service}
 
 class FuncMetaData(TypedDict):
     operation_id:str
@@ -74,7 +167,6 @@ class FuncMetaData(TypedDict):
     tags:list[str]
     cost_definition:SimpleTaskCostDefinition
     cost_definition_name:str
-
 
 class RoutePermission(TypedDict):
     scope: PermissionScope
@@ -93,41 +185,44 @@ class MCPPermissionDef(TypedDict):
     tags: list[str]|set[str]
     operations: list[str]|set[str]
 
-class AuthPermission(TypedDict):
+class ClientAccessInfo(TypedDict):
     generation_id: str
-    client_username: str
-    client_id: str
-    client_type:ClientTypeLiteral = 'User'
-    roles:list[str|Role]
-    issued_for: str # Subnets
-    group_id:str | None = None
-    auth_type:AuthType
     created_at: float
     expired_at: float
+    generation_id: str
+    auth_signature:str
+    session_id:str
+    client_id: str
+    salt:str
+
+    group_id:str # NOTE computed value
+    status:PermissionStatus= 'active' # NOTE Computed value
+    auth_type:AuthType # NOTE Computed value
+    client_type:ClientType # NOTE computed value
+
+class ClientRefresh(TypedDict): # NOTE if someone from an organization change the auth permission, the refresh token will be invalid for other people in the organization
+    generation_id: str
+    auth_signature:str
+    session_id:str
+    salt:str
+    client_id:str
+    created_at:float
+    expired_at:float
+    reuse_counter:int
+    status:PermissionStatus= 'active'
+
+class AuthPermission(TypedDict):
     allowed_routes: Dict[str, RoutePermission]
     allowed_assets:List[str] | AssetsPermission
     allowed_profiles:List[str]=[]
     allowed_agents:List[str]=[]
     allowed_blogs: List[str] = []
     allowed_mcp: Optional[MCPPermissionDef] = None
-    challenge: str
-    scope:str
-    salt:str
-    status:PermissionStatus= 'active'
-    authz_id:str
+    roles:list[str|Role]=[]
 
-class RefreshPermission(TypedDict): # NOTE if someone from an organization change the auth permission, the refresh token will be invalid for other people in the organization
-    generation_id: str
-    challenge:str
-    salt:str
-    client_id:str
-    group_id:str | None = None
-    issued_for:str
-    created_at:float
-    expired_at:float
-    status:PermissionStatus= 'active'
-    client_type:ClientTypeLiteral = 'User'
-
+class AccessModel(BaseModel):
+    auth_type:AuthType
+    access:str
 
 class RoutePermissionModel(BaseModel):
     scope:PermissionScope
@@ -141,6 +236,42 @@ class RoutePermissionModel(BaseModel):
             if not self.custom_routes:
                 raise ValueError('Custom Routes must have at least one routes')
         return self
+
+class Credentials(TypedDict):
+    password:str
+    salt:str
+
+class RecoveryCredentials(Credentials):
+    index:int
+
+class EncryptedRecoveryTokens(TypedDict):
+    tokens:List[RecoveryCredentials]
+    recovery_id:str
+    date:str
+    time:float
+
+class RecoveryTokens(EncryptedRecoveryTokens):
+    tokens:List[str]
+
+class RecoveryTokenGenerator:
+
+    def __init__(self,count:int = 3,part:int=4,sep:str='-',wait:float=0.150):
+        self.part = part
+        self.count = count
+        self.wait = wait
+        self.sep = sep
+        self.tokens = []
+        self.id = str(uuid_v1_mc())
+
+    async def generate(self,token_count=6):
+        for _ in range(token_count):
+            t = self.sep.join([generateId(self.count) for p in range(self.part)])
+            yield t
+            self.tokens.append(t)
+            await asyncio.sleep(self.wait)
+
+    def export(self,tokens=[])->EncryptedRecoveryTokens | RecoveryTokens:
+        return RecoveryTokens(tokens=tokens or self.tokens,recovery_id=self.id,time=time.time(),date=datetime.now().isoformat())
 
 class MCPPermissionModel(BaseModel):
     tags:List[str] = Field(default_factory=list, description="List of tags that the user is allowed to access",max_length=20)
@@ -157,9 +288,11 @@ class PolicyModel(BaseModel):
     allowed_agents:List[str] = Field(default_factory=list)
     allowed_routes: Dict[str, RoutePermissionModel] = Field(default_factory=dict)
     allowed_mcp: Optional[MCPPermissionModel] = None
-    allowed_assets: List[str] =[]
-    allowed_blog: List[str] = []
-    roles: Optional[List[Role]] = [Role.PUBLIC]
+    allowed_assets: List[str] = Field(default_factory=list)
+    allowed_blog: List[str] = Field(default_factory=list)
+    roles: Optional[List[Role]] = Field(default_factory=lambda:[Role.PUBLIC])
+
+    _policy_id:str = PrivateAttr(default=None)
 
     @field_validator('allowed_assets')
     def filter_assets_paths(cls,allowed_assets):
@@ -175,8 +308,79 @@ class PolicyModel(BaseModel):
         #return roles
         return [r.value for r in roles]
 
+    def update(self,model:'PolicyModel',mode:PolicyUpdateMode):
+        match mode:
+            case 'merge':    
+                self.allowed_assets = list(set(model.allowed_assets + self.allowed_assets))
+                self.allowed_profiles = list(set(model.allowed_profiles +self.allowed_profiles))
+                self.allowed_agents = list(set(model.allowed_agents +self.allowed_agents))
+                self.allowed_blog = list(set(model.allowed_blog +self.allowed_blog))
+                self.roles = list(set(model.roles + self.roles))
+                self.allowed_routes = {**self.allowed_routes,**model.allowed_routes}
+            
+            case 'set':
+                self.allowed_assets = model.allowed_assets
+                self.allowed_profiles = model.allowed_profiles
+                self.roles = model.roles
+                self.allowed_routes = model.allowed_routes
+                self.allowed_blog = model.allowed_blog
+                self.allowed_agents = model.allowed_agents
+            
+            case 'delete':
+                self.allowed_assets = list(set(self.allowed_assets) - set(model.allowed_assets))
+                self.allowed_profiles = list(set(self.allowed_profiles) - set(model.allowed_profiles))
+                self.roles = list(set(self.roles) - set(model.roles))
+                self.allowed_blog = list(set(self.allowed_blog)-set(model.allowed_blog))
+                self.allowed_agents = list(set(self.allowed_agents) - set(model.allowed_agents))
+                self.allowed_routes = {k: v for k, v in self.allowed_routes.items() if k not in model.allowed_routes}
+
+def get_combined_policies(policies:list[PolicyModel]):
+    roles= set()
+    allowed_assets = set()
+    allowed_profiles = set()
+    allowed_blogs = set()
+    allowed_routes = {}
+    allowed_agents = set()
+
+    for p in policies:
+        roles.update(p.roles)
+        allowed_assets.update(p.allowed_assets)
+        allowed_profiles.update(p.allowed_profiles)
+        allowed_agents.update(p.allowed_agents)
+        allowed_blogs.update(p.allowed_blog)
+
+        for k,r in p.allowed_routes.items():
+
+            if k not in allowed_routes:
+                allowed_routes[k] = r
+            else:
+                if r['scope'] == 'all':
+                    if allowed_routes['scope'] !='all':
+                        allowed_routes['scope'] = 'all'
+                        allowed_routes['custom_routes'] = []
+                else:
+                    if allowed_routes['scope'] == 'custom':
+                        allowed_routes['custom_routes'] = list[set(allowed_routes['custom_routes']).union(r['scope'])]
+
+    print(allowed_assets)
+
+    allowed_assets = filter_paths(list(allowed_assets),'/')
+    allowed_profiles = list(allowed_profiles)
+    allowed_agents = list(allowed_agents)
+    roles = list(roles)
+    allowed_blogs=list(allowed_blogs)
+
+    return AuthPermission(
+        roles=roles,
+        allowed_routes=allowed_routes,
+        allowed_profiles=allowed_profiles,
+        allowed_assets=allowed_assets,
+        allowed_agents=allowed_agents,
+        allowed_blogs=allowed_blogs
+    )
+
 def parse_authPermission_enum(authPermission:AuthPermission):
-        authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]
+    authPermission["roles"] = [Role._member_map_[r] for r in authPermission["roles"]]
         
 def filter_asset_permission(authPermission:AuthPermission):
     files = set()
@@ -209,6 +413,33 @@ class WSPermission(TypedDict):
 class WSPathNotFoundError(BaseError):
     ...
 
+class AccessAlreadyExistsError(BaseError):
+    def __init__(self, access: str,mode:Literal['uuid','alias']):
+        super().__init__(access,mode)
+        self.access = access
+        self.mode = mode
+
+class AccessDoesNotExistsError(BaseError):
+    def __init__(self, access:str):
+        super().__init__()
+        self.access = access
+
+class AccessIdCannotBeUsedError(BaseError):
+    def __init__(self, access:str):
+        super().__init__()
+        self.access = access
+ 
+class AccessHardLimitReachedError(BaseError):
+    def __init__(self, limit: int):
+        super().__init__(limit)
+        self.limit = limit
+
+class PoliciesNotMatchingError(BaseError):
+    ...
+
+    def __init__(self,policies:list[str]):
+        super().__init__(policies)
+        self.policies= policies
 
 def MustHave(role:Role):
 

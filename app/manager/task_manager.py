@@ -3,6 +3,7 @@ from dataclasses import asdict
 from typing import Any, Coroutine, Literal, ParamSpec, TypedDict
 from fastapi import Depends
 from humanize import naturaldelta
+from app.classes.auth_permission import IssuerInfo
 from app.classes.celery import FALLBACK_ENV_TASK, AlgorithmType, Compute_Weight, RunType, SchedulerModel, TaskExecutionResult, TaskRetryError, TaskType, add_messages, s
 from app.classes.env_selector import DEFAULT_MASK, EnvSelection, StrategyType, compute_p_values, get_selector
 from app.definition._service import ServiceStatus
@@ -115,7 +116,7 @@ class TaskManager:
 
         return new_delay
 
-    async def offload_task(self,weight:float,delay: float, index: int | None, callback: Callable, *args,_s:s|None=None, **kwargs):
+    async def offload_task(self,weight:float,delay: float, index: int | None, callback: Callable, *args,_s:s|None=None,issuer:IssuerInfo=None, **kwargs):
         scheduler = self.scheduler if _s is None else _s
         weight = Compute_Weight(weight, scheduler._heaviness)
         values:TaskExecutionResult = await self._offload_task(weight,delay,index, callback, *args, **kwargs)

@@ -1,7 +1,8 @@
-from typing import Dict, Literal
+from typing import Dict, Literal, Type
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response, status, Body,HTTPException
 from app.classes.cost_definition import InsufficientCreditsError, InvalidPurchaseRequestError
 from app.classes.embeddings import EmbeddingUsage
+from app.classes.qdrant import QdrantCollectionAlreadyExistError, QdrantCollectionDoesNotExistError, QdrantDocumentIdentificationMissingError, QdrantPointDeletionOperationError
 from app.container import Get
 from app.cost.token_cost import TokenCost
 from app.definition._router import HandlerDetails, auth_depends, exception_handler, get_instance_id, lock_service_wrapper
@@ -17,6 +18,15 @@ prefix=AgenticConstant.VECTOR_ROUTER('')
 
 MAX_TOKEN_EMBEDDING = 9182
 DIMENSION = 512
+
+QDRANT_HANDLER:Dict[Type[Exception], 'HandlerDetails']= {
+
+    QdrantCollectionDoesNotExistError:HandlerDetails(status.HTTP_404_NOT_FOUND,lambda e:f'Collection: {e.collection_name} does not exists'),
+    QdrantCollectionAlreadyExistError:HandlerDetails(status.HTTP_400_BAD_REQUEST,lambda e:f'Collection: {e.collection_name} already exists'),
+    QdrantPointDeletionOperationError:HandlerDetails(status.HTTP_500_INTERNAL_SERVER_ERROR,lambda e:f'Failed to delete point: {e.e}'),
+    QdrantDocumentIdentificationMissingError:HandlerDetails(status.HTTP_400_BAD_REQUEST,'document_id or document_name is required'),
+
+}
 
 def VectorDBRouter(depends:list=None):
     if depends == None:
@@ -36,6 +46,7 @@ def VectorDBRouter(depends:list=None):
     router = APIRouter(prefix=prefix,on_startup=[on_startup],on_shutdown=[on_shutdown],dependencies=[Depends(auth_depends)])
 
     @router.post('/',status_code=status.HTTP_201_CREATED)
+    @exception_handler(QDRANT_HANDLER)
     @lock_service_wrapper(QdrantService)
     async def create_collection(request:Request,response:Response,collection:Dict = Body(),instance_id:str=Depends(get_instance_id)):
         if not isinstance(collection,dict):
@@ -53,6 +64,7 @@ def VectorDBRouter(depends:list=None):
         return 
 
     @router.get('/s/{collection_name}',status_code=status.HTTP_200_OK)
+    @exception_handler(QDRANT_HANDLER)
     @lock_service_wrapper(QdrantService)
     async def get_collection(request:Request,response:Response,collection_name:str,instance_id:str=Depends(get_instance_id)):
         collection = await qdrantService.get_collection(
@@ -61,6 +73,7 @@ def VectorDBRouter(depends:list=None):
         return collection.model_dump()
        
     @router.delete('/',status_code=status.HTTP_200_OK)
+    @exception_handler(QDRANT_HANDLER)
     @lock_service_wrapper(QdrantService)
     async def delete_collection(request:Request,response:Response,collection_name:str,instance_id:str=Depends(get_instance_id),mode:Literal['hard','soft']=Query('soft')):
         if mode =='hard':
@@ -75,12 +88,14 @@ def VectorDBRouter(depends:list=None):
             return res.model_dump()
 
     @router.get('/',status_code=status.HTTP_200_OK)
+    @exception_handler(QDRANT_HANDLER)
     @lock_service_wrapper(QdrantService)
     async def get_all_collection(request:Request,response:Response,instance_id:str=Depends(get_instance_id)):
         collections = await qdrantService.get_collections()
         return collections.model_dump()
 
     @router.delete('/docs/{collection_name}/{job_id}',status_code=status.HTTP_200_OK)
+    @exception_handler(QDRANT_HANDLER)
     @lock_service_wrapper(QdrantService)
     async def delete_document(job_id:str,request:Request,response:Response,collection_name:str,instance_id:str=Depends(get_instance_id)):
         document_name = job_id

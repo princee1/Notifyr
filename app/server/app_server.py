@@ -8,12 +8,13 @@ from app.classes.secrets import ChaCha20SecretsWrapper
 from app.container import Get, CONTAINER
 from app.definition._error import ServerFileError
 from app.callback import Callbacks_Stream,Callbacks_Sub
-from app.definition._service import ACCEPTABLE_STATES, BaseService, ServiceStatus
-from app.interface.timers import  SchedulerInterface
+from app.definition._service import ACCEPTABLE_STATES, DEFAULT_BUILD_STATE, BaseService, ServiceStatus
+from app.errors.security_error import RootSetupNotConfiguredError
 from app.models.odm.agents_model import AgentModel
 from app.models.odm.custom_model import CustomModel
 from app.models.odm.tools_model import ToolModel
 from app.ressources import *
+from app.services.admin_service import AdminService
 from app.services.agent.remote_agent_service import RemoteAgentService
 from app.services.cost_service import CostService
 from app.services.database.memcached_service import MemCachedService
@@ -21,10 +22,11 @@ from app.services.database.mongoose_service import MongooseService
 from app.services.database.rabbitmq_service import RabbitMQService
 from app.services.database.redis_service import RedisService
 from app.services.database.tortoise_service import TortoiseConnectionService
+from app.services.timer_service import TimerService
 from app.services.vault_service import VaultService
 from app.services.worker.task_service import TaskService
 from app.services.config_service import ConfigService, WorkerService
-from app.utils.constant import MCPConstant
+from app.utils.constant import MCPConstant, RedisConstant, SetupRootConstant
 from app.utils.prettyprint import PrettyPrinter_
 from fastapi import Depends, HTTPException, Request, Response, FastAPI
 from typing import Callable,Literal
@@ -91,6 +93,7 @@ class AppServer(EventInterface):
         self.configService: ConfigService = Get(ConfigService)
         self.costService: CostService = Get(CostService)
         self.vaultService:VaultService = Get(VaultService)
+        self.redisService:RedisService = Get(RedisService)
         
         self.app = FastAPI(title=server_meta.TITLE,
                            summary=server_meta.SUMMARY,
@@ -216,7 +219,19 @@ class AppServer(EventInterface):
         
         mcp.mount_http()
         mcp.mount_sse()
-            
+
+    @register_hook('startup')
+    async def before_startup(self):
+        async with self.redisService.redis_config.pipeline(True) as pipe:
+            for key in SetupRootConstant.KEYS:
+                await self.redisService.retrieve(RedisConstant.CONFIG_DB,key,redis=pipe)
+
+            setup = await pipe.execute()
+        
+        setup = [bool(s) for s in setup]
+        if not all(setup):
+            raise RootSetupNotConfiguredError(setup)
+
     @register_hook('startup')
     async def on_startup(self):
 
@@ -267,39 +282,19 @@ class AppServer(EventInterface):
 
     @register_hook('startup',)
     def start_tickers(self):
-        vaultService: VaultService = Get(VaultService) 
-        vaultService.start()
+        timerService:TimerService  = Get(TimerService)
+        timerService.start()
 
         celery_service: CeleryService = Get(CeleryService)
         celery_service.start_interval(10)
-
-        tortoiseConnService = Get(TortoiseConnectionService)
-        tortoiseConnService.start()
-
-        mongooseService = Get(MongooseService)
-        mongooseService.start()
-
-        if CAPABILITIES['object']:
-            objectS3Service = Get(ObjectS3Service)
-            objectS3Service.start()
     
     @register_hook('shutdown')
     def stop_tickers(self):
-        tortoiseConnService = Get(TortoiseConnectionService)
-        celery_service: CeleryService = Get(CeleryService)
-        mongooseService = Get(MongooseService)
-        vaultService = Get(VaultService)
+        timerService:TimerService  = Get(TimerService)
+        timerService.shutdown()
 
-        services: list[SchedulerInterface] = [tortoiseConnService,mongooseService,vaultService]
-
-        for s in services:
-            s.shutdown()
-        
+        celery_service: CeleryService = Get(CeleryService)        
         celery_service.stop_interval()
-
-        if CAPABILITIES['object']:
-            objectS3Service = Get(ObjectS3Service)
-            objectS3Service.shutdown()
 
     @register_hook('startup')
     async def register_tortoise(self):
@@ -309,6 +304,12 @@ class AppServer(EventInterface):
             return
         
         await tortoiseConnService.init_connection()
+
+    @register_hook('startup')
+    async def register_client(self):
+                
+        adminService = Get(AdminService)
+        await adminService.load_clients(DEFAULT_BUILD_STATE)
 
     @register_hook('shutdown')
     async def close_tortoise(self):
@@ -359,6 +360,10 @@ class AppServer(EventInterface):
             
         await RunInThreadPool(vaultService.revoke_auth_token)()
 
+    @register_hook('shutdown')
+    async def after_shutdown(self):
+        ...
+    
     @property
     def shutdown_hooks(self):
         return [getattr(self,x) for x in _shutdown_hooks]

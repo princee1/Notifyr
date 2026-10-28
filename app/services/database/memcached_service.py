@@ -4,7 +4,6 @@ from typing import Any, Callable
 from app.definition._service import Service
 from app.errors.db_error import MemCacheNoValidKeysDefinedError, MemCachedCacheMissError, MemCachedTypeValueError
 from app.errors.service_error import BuildFailureError, BuildWarningError
-from app.interface.timers import SchedulerInterface
 from app.services.config_service import ConfigService
 from app.services.database.base_db_service import DatabaseService
 from pymemcache import Client as SyncClient,MemcacheClientError,MemcacheServerError,MemcacheUnexpectedCloseError
@@ -13,7 +12,7 @@ from aiomcache import Client
 
 
 @Service()
-class MemCachedService(DatabaseService,SchedulerInterface):
+class MemCachedService(DatabaseService):
     
     DEFAULT_PORT= 11211  
     POOL_MINSIZE=2

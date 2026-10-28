@@ -3,14 +3,17 @@ from fastapi import Depends, Request, Response,status
 from app.container import Get, InjectInMethod
 from app.decorators.handlers import APSSchedulerHandler, AsyncIOHandler, CeleryTaskHandler, RedisHandler, ServiceAvailabilityHandler, WebSocketHandler
 from app.decorators.permissions import AdminPermission, JWTRouteHTTPPermission
+from app.decorators.pipes import IssuerModifierPipe
 from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, PingService, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
+from app.depends.funcs_dep import get_issuer
+from app.manager.issuer_manager import IssuerManager
 from app.services.worker.celery_service import CeleryService
 from app.services.database.redis_service import RedisService
 from app.services.worker.task_service import TaskService
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService
-from app.depends.dependencies import get_auth_permission
-from app.classes.auth_permission import AuthPermission, MustHave, Role
+from app.depends.dependencies import get_access_info, get_auth_permission, get_client_info
+from app.classes.auth_permission import AccessAPIInfo, AuthPermission, ClientAccessInfo, MustHave, Role
 from apscheduler.job import Job
 
 from app.utils.constant import APSchedulerConstant, CeleryConstant, RedisConstant
@@ -23,7 +26,7 @@ CELERY_PREFIX= 'celery'
 BACKGROUND_PREFIX  = 'background'
 APS_SCHEDULER='aps'
 
-@UseRoles([Role.RESULT])
+@UseRoles([Role.RESULT,Role.ADMIN])
 @UsePermission(JWTRouteHTTPPermission)
 @UseHandler(ServiceAvailabilityHandler)
 @PingService([{"cls":CeleryService,"kwargs":{"__celery_availability__":True}}])
@@ -39,39 +42,39 @@ class CeleryResultRessource(BaseHTTPRessource):
 
     @UseHandler(CeleryTaskHandler)
     @BaseHTTPRessource.Get('/task/{task_id}/')
-    async def check_task(self,task_id:str,request:Request,authPermission=Depends(get_auth_permission)):
+    async def check_task(self,task_id:str,request:Request,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         return await self.celeryService.seek_result(task_id)
 
     @UseHandler(CeleryTaskHandler)
     @BaseHTTPRessource.Delete('/task/{task_id}/')
-    async def cancel_task(self,task_id:str,request:Request,authPermission=Depends(get_auth_permission)):
+    async def cancel_task(self,task_id:str,request:Request,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         return await self.celeryService.cancel_task(task_id)
 
     @UseHandler(CeleryTaskHandler)
     @BaseHTTPRessource.Get('/schedule/{schedule_id}/{index}')
-    async def check_schedule(self,schedule_id:str,index:int,request:Request,authPermission=Depends(get_auth_permission)):
+    async def check_schedule(self,schedule_id:str,index:int,request:Request,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         return await self.celeryService.seek_schedule(schedule_id,index)
         
     @UseHandler(CeleryTaskHandler)
     @BaseHTTPRessource.Delete('/schedule/{schedule_id}/{index}')
-    async def delete_schedule(self,schedule_id:str,index:int,request:Request,authPermission=Depends(get_auth_permission)):
+    async def delete_schedule(self,schedule_id:str,index:int,request:Request,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
        return await self.celeryService.delete_schedule(schedule_id,index)
     
     @UseHandler(CeleryTaskHandler)
     @BaseHTTPRessource.Delete('/reschedule/{schedule_id}/{index}')
-    async def delete_schedule(self,schedule_id:str,index:int,request:Request,authPermission=Depends(get_auth_permission)):
+    async def delete_schedule(self,schedule_id:str,index:int,request:Request,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
        return await self.celeryService.delete_schedule(schedule_id,index)
             
     @UseRoles([Role.ADMIN],options=[MustHave(Role.ADMIN)])
     @UseHandler(CeleryTaskHandler)
     @BaseHTTPRessource.Delete('/purge/{queue}/{task_id}/',mount=False)
-    async def purge_celery_task(self,queue:str, request:Request,task_id:str, authPermission:AuthPermission = Depends(get_auth_permission)):
+    async def purge_celery_task(self,queue:str, request:Request,task_id:str,issuer:Annotated[IssuerManager,Depends(IssuerManager)], authPermission:AuthPermission = Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         """
         Purge a specific task from the celery queue.
         """
         return
     
-@UseRoles([Role.RESULT])
+@UseRoles([Role.RESULT,Role.ADMIN])
 @UseHandler(ServiceAvailabilityHandler)
 @UsePermission(JWTRouteHTTPPermission)
 @PingService([RedisService])
@@ -87,9 +90,9 @@ class BackgroundTaskRessource(BaseHTTPRessource):
     @UseHandler(RedisHandler)
     @UseLimiter(limit_value='10/day')
     @BaseHTTPRessource.Get('/{task_id}')
-    async def get_result(self,request:Request,task_id:str,authPermission=Depends(get_auth_permission)):
+    async def get_result(self,request:Request,task_id:str,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         task_id = CeleryConstant.REDIS_BKG_TASK_ID_RESOLVER(task_id)
-        return await self.redisService.hash_get(RedisConstant.CELERY_DB,task_id)
+        return await self.redisService.hash_get_all(RedisConstant.CELERY_DB,task_id)
     
 
 @UseRoles([Role.RESULT])
@@ -112,22 +115,22 @@ class APSSchedulerRessource(BaseHTTPRessource):
     @UseHandler(APSSchedulerHandler)
     @UsePipe(transform_job_to_dict,before=False)
     @BaseHTTPRessource.HTTPRoute('/all/',methods=[HTTPMethod.GET],)
-    async def get_all_job(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def get_all_job(self,request:Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         jobs:list[Job] =  await self.taskService.get_jobs()
         return [j for j in jobs if str(j.id).startswith(CeleryConstant.BACKEND_KEY_PREFIX)]
     
     @UseHandler(APSSchedulerHandler)
     @UsePipe(transform_job_to_dict,before=False)
     @BaseHTTPRessource.HTTPRoute('/{request_id}/{index}/',methods=[HTTPMethod.GET],)
-    async def get_job(self,request_id:str,index:int,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def get_job(self,request_id:str,index:int,request:Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         job_id = APSchedulerConstant.REDIS_APS_ID_RESOLVER(request_id,index)
         return await self.taskService.get_jobs(job_id)
 
-    @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @UsePermission(AdminPermission)
     @UseHandler(APSSchedulerHandler)
+    @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @BaseHTTPRessource.HTTPRoute('/all/',methods=[HTTPMethod.DELETE],mount=True)
-    async def remove_all_jobs(self,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def remove_all_jobs(self,request:Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         jobs:list[Job] = await self.taskService.get_jobs()
         result = []
         for j in jobs:
@@ -141,29 +144,27 @@ class APSSchedulerRessource(BaseHTTPRessource):
     @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
     @UseHandler(APSSchedulerHandler)
     @BaseHTTPRessource.HTTPRoute('/{request_id}/{index}/',methods=[HTTPMethod.DELETE],)
-    async def remove_job(self,request_id:str,index:int,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def remove_job(self,request_id:str,index:int,request:Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         job_id = APSchedulerConstant.REDIS_APS_ID_RESOLVER(request_id,index)
         return await self.taskService.cancel_job(job_id)
 
     @UsePermission(AdminPermission)
     @UseHandler(APSSchedulerHandler)
     @BaseHTTPRessource.HTTPRoute('/{request_id}/{index}/',methods=[HTTPMethod.PATCH],)
-    async def pause_job(self,request_id:str,index:int,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def pause_job(self,request_id:str,index:int,request:Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         job_id = APSchedulerConstant.REDIS_APS_ID_RESOLVER(request_id,index)
         return await self.taskService.pause_job(job_id)
 
     @UsePermission(AdminPermission)
     @UseHandler(APSSchedulerHandler)
     @BaseHTTPRessource.HTTPRoute('/{request_id}/{index}/',methods=[HTTPMethod.PUT],)
-    async def resume_job(self,request_id:str,index:int,request:Request,response:Response,authPermission:AuthPermission=Depends(get_auth_permission)):
+    async def resume_job(self,request_id:str,index:int,request:Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         job_id = APSchedulerConstant.REDIS_APS_ID_RESOLVER(request_id,index)
         return await self.taskService.resume_job(job_id)
             
-
 @HTTPRessource(prefix=RESULT_PREFIX, routers=[CeleryResultRessource,BackgroundTaskRessource,APSSchedulerRessource])
 class ResultBackendRessource(BaseHTTPRessource):
     
-
     @InjectInMethod()
     def __init__(self,jwtAuthService:JWTAuthService):
         super().__init__(None,None)
@@ -173,12 +174,12 @@ class ResultBackendRessource(BaseHTTPRessource):
     @UsePermission(JWTRouteHTTPPermission)
     @UseLimiter(limit_value='10/day')
     @BaseHTTPRessource.Get('/')
-    def get_result(self,request:Request,authPermission=Depends(get_auth_permission)):
+    def get_result(self,request:Request,response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         return 
     
 
     @BaseHTTPRessource.Get('/permission/{ws_path}',)
-    def invoke_notify_permission(self, ws_path:str,request:Request, authPermission=Depends(get_auth_permission)):
+    def invoke_notify_permission(self, ws_path:str,request:Request, response:Response,issuer:Annotated[IssuerManager,Depends(IssuerManager)],authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         self._check_ws_path(ws_path)
 
 

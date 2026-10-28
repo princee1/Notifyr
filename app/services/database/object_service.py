@@ -12,6 +12,7 @@ from app.errors.service_error import BuildFailureError
 from app.services.database.base_db_service import TempCredentialsDatabaseService
 from app.services.file.base_fileretriever_service import BaseFileRetrieverService
 from app.services.file.file_service import FileService
+from app.services.timer_service import TimerService
 from app.services.vault_service import VaultService
 from app.utils.constant import MinioConstant, VaultTTLSyncConstant
 from app.utils.toolbox import RunInThreadPool
@@ -29,8 +30,8 @@ MINIO_OBJECT_DESTROY_STATE = 1001
 @Service(abstract_service_register=[BaseFileRetrieverService])
 class ObjectS3Service(TempCredentialsDatabaseService):
     
-    def __init__(self,configService:ConfigService,fileService:FileService,vaultService:VaultService) -> None:
-        TempCredentialsDatabaseService.__init__(self,configService,fileService,vaultService,VaultTTLSyncConstant.MINIO_TTL)
+    def __init__(self,configService:ConfigService,fileService:FileService,vaultService:VaultService,timerService:TimerService) -> None:
+        TempCredentialsDatabaseService.__init__(self,configService,fileService,vaultService,timerService,VaultTTLSyncConstant.MINIO_TTL)
         
         self.STORAGE_METHOD = 'mount(same FS)','s3 object storage(source of truth)'
         self.download_cache = {}

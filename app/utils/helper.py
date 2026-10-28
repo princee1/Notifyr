@@ -651,15 +651,15 @@ def is_optional(annotation) -> bool:
     return False
 
 M= TypeVar('M',bound=BaseModel)
-
 ModelCache = {}
+
 def subset_model(
     base: Type[M],
     name: str,
     include: set[str] | None = None,
     exclude: set[str] | None = None,
     optional: bool = True,
-    __config__:ConfigDict |None = None,
+    __config__:ConfigDict |None = ConfigDict(extra="forbid"),
     __cache__:bool = False
 )->Type[M]:
     if __cache__:

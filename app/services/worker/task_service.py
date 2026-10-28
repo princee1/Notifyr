@@ -11,7 +11,7 @@ from app.interface.timers import SchedulerInterface,MemoryJobStore
 from app.services.config_service import ConfigService, WorkerService
 from app.services.cost_service import CostService
 from app.services.database.mongoose_service import JOBS_CREDS, MongooseService
-from app.services.database.redis_service import RedisService
+from app.services.database.redis_service import RedisService,REDIS_PREFIX_BUILDER
 from app.services.logger_service import LoggerService
 from app.services.vault_service import VaultService
 from app.utils.constant import MongooseDBConstant, RedisConstant, CeleryConstant
@@ -32,7 +32,7 @@ class NotifyrMongoDBJobStore(MongoDBJobStore):
 
 
 # configuration
-LEADER_LOCK_KEY = f"apscheduler@leader_lock"
+LEADER_LOCK_KEY = REDIS_PREFIX_BUILDER['config'](f"apscheduler@leader_lock")
 LEADER_LOCK_TTL = 600
 LEADER_LOCK_TTL_LOWER_BOUND = int(LEADER_LOCK_TTL * 0.50)
 LEADER_LOCK_TTL_UPPER_BOUND = int(LEADER_LOCK_TTL * 5.50)
@@ -85,24 +85,28 @@ class TaskService(BaseService,SchedulerInterface):
             self.shutdown(False)
 
         self.redis_client = self.redisService.db[RedisConstant.CONFIG_DB]
-        jobstores = {
-            "redis": RedisJobStore(
-                host=self.redisService.redis_celery.connection_pool.connection_kwargs.get("host", "localhost"),
-                port=self.redisService.redis_celery.connection_pool.connection_kwargs.get("port", 6379),
-                db=RedisConstant.CELERY_DB,
-                jobs_key=f"{SCHEDULER_JOBSTORE_PREFIX}/jobs@",
-                run_times_key=f"{SCHEDULER_JOBSTORE_PREFIX}:run_times",
-                username=self.redisService.redis_celery.connection_pool.connection_kwargs.get('username'),
-                password=self.redisService.redis_celery.connection_pool.connection_kwargs.get('password')
-                ),
-            'memory':MemoryJobStore(),
-            'mongodb':NotifyrMongoDBJobStore(
+        jobstore = self.configService.JOBSTORE_DB
+
+        jobstores = {'memory':MemoryJobStore(),}
+        if jobstore == 'redis':
+            jobstores.update({
+                "redis": RedisJobStore(
+                    host=self.redisService.redis_celery.connection_pool.connection_kwargs.get("host", "localhost"),
+                    port=self.redisService.redis_celery.connection_pool.connection_kwargs.get("port", 6379),
+                    db=RedisConstant.CELERY_DB,
+                    jobs_key=f"{SCHEDULER_JOBSTORE_PREFIX}/jobs@",
+                    run_times_key=f"{SCHEDULER_JOBSTORE_PREFIX}:run_times",
+                    username=self.redisService.redis_celery.connection_pool.connection_kwargs.get('username'),
+                    password=self.redisService.redis_celery.connection_pool.connection_kwargs.get('password')
+                ),})
+        elif jobstore == 'mongodb':
+            jobstores.update({'mongodb':NotifyrMongoDBJobStore(
                 MongooseDBConstant.JOB_DATABASE_NAME,
                 collection=MongooseDBConstant.APS_COLLECTION,
                 client=self.mongooseService.client_store.get_client(JOBS_CREDS,'sync')
                 )
-        }
-        jobstore = self.configService.JOBSTORE_DB
+            })
+            
         SchedulerInterface.__init__(self,None,jobstores,jobstore,executor='asyncio-executor',replace_existing=True,coalesce=True,thread_pool_count=50)
 
     def start(self):

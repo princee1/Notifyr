@@ -669,6 +669,9 @@ def Need(typ: Type[S]|str) -> S:
     """
     return CONTAINER.need(typ)
 
+def InjectInMiniService(typ:Type[S],__scope__:Any|None=None,**kwargs)->S:
+    return InjectInFunction(True,__scope__)(typ)(**kwargs)
+
 def Bind(type_:type, obj:Any, scope=None):
     return CONTAINER.bind(type_,obj,scope)
 

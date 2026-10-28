@@ -20,7 +20,7 @@ wait_for_server() {
     if curl -sSf "$VAULT_ADDR/v1/sys/health" >/dev/null 2>&1; then
       break
     fi
-    sleep 2
+    sleep 1
   done
 }
 
@@ -36,8 +36,7 @@ wait_active_server(){
       echo "Vault is not running in HA mode (single node) — safe to continue"
       break
     fi
-    echo "Waiting for Vault to become active..."
-    sleep 2
+    sleep 1
   done
 }
 
@@ -173,6 +172,7 @@ setup_engine(){
   # Enable core KV, Transit, Database, RabbitMQ, AWS engines
   vault secrets enable -path=notifyr-generation -seal-wrap -version=2 kv
   vault secrets enable -path=notifyr-secrets -seal-wrap -version=1 kv
+  vault secrets enable -path=notifyr-security -seal-wrap -version=1 kv
   vault secrets enable -path=notifyr-transit -seal-wrap transit
   vault secrets enable -path=notifyr-database -seal-wrap database
   vault secrets enable -path=notifyr-rabbitmq -seal-wrap rabbitmq
@@ -190,6 +190,7 @@ setup_engine(){
   vault write -f notifyr-transit/keys/messages-key
   vault write -f notifyr-transit/keys/chat-key
   vault write -f notifyr-transit/keys/s3-rest-key
+  vault write -f notifyr-transit/keys/security-key
 }
 
 set_approle(){
@@ -309,13 +310,14 @@ create_default_token(){
   local balancer_exchange_token="balancer_exchange:$(pwgen -s 80 1)"
   local agentic_api_key="agentic:$(pwgen -s 70 1)"
   local mcp_api_key="mcp:$(pwgen -s 60 1)"
-
-
+  local webhook_api_key="mcp:$(pwgen -s 60 1)"
+  
   vault kv put notifyr-secrets/internal/DMZ API_KEY="$dmz_api_key"
   vault kv put notifyr-secrets/internal/BALANCER API_KEY="$balancer_exchange_token"
   vault kv put notifyr-secrets/internal/DASHBOARD API_KEY="$dashboard_api_key"
   vault kv put notifyr-secrets/internal/AGENTIC API_KEY="$agentic_api_key"
   vault kv put notifyr-secrets/internal/MCP API_KEY="$mcp_api_key"
+  vault kv put notifyr-secrets/internal/INCOMING_WEBHOOK API_KEY="$webhook_api_key"
 
   echo -n "$dmz_api_key" > "$VAULT_SECRETS_DIR/dmz-api-key.txt"
   echo -n "$dashboard_api_key" > "$VAULT_SECRETS_DIR/dashboard-api-key.txt"
@@ -355,9 +357,9 @@ setup_database_config(){
         default_ttl="12h" \
         max_ttl="16h" \
         creation_statements="CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}'; \
-                      GRANT vault_ntfr_app_role TO \"{{name}}\";" \
+                      GRANT vault_ntfr_client_role TO \"{{name}}\";" \
         rollback_statements="DROP ROLE IF EXISTS \"{{name}}\";" \
-        revocation_statements="REVOKE vault_ntfr_app_role FROM \"{{name}}\";
+        revocation_statements="REVOKE vault_ntfr_client_role FROM \"{{name}}\";
                         DROP ROLE IF EXISTS \"{{name}}\";"
 
     vault write notifyr-database/roles/admin-postgres-ntfr-role \
@@ -376,9 +378,9 @@ setup_database_config(){
       default_ttl="3h" \
       max_ttl="5h" \
       creation_statements="CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}'; \
-                          GRANT vault_ntfr_admin_role TO \"{{name}}\";" \
+                          GRANT vault_ntfr_admin_client_role TO \"{{name}}\";" \
       rollback_statements="DROP ROLE IF EXISTS \"{{name}}\";" \
-      revocation_statements="REVOKE vault_ntfr_admin_role FROM \"{{name}}\"; \
+      revocation_statements="REVOKE vault_ntfr_admin_client_role FROM \"{{name}}\"; \
                             DROP ROLE IF EXISTS \"{{name}}\";"
     setup_config_kv2 "postgres_roles" "set"
 
@@ -476,13 +478,25 @@ setup_database_config(){
       db_name="redis-notifyr" \
       default_ttl="35d" \
       max_ttl="35d" \
-      creation_statements='["~notifyr/credit:*","+@transaction", "+GET", "+SET", "+INCRBY", "+LPUSH", "+LTRIM", "+LRANGE", "+SELECT", "+FCALL", "+EVAL", "+EXISTS"]'
+      creation_statements='["~notifyr/credit:*","+@transaction", "+GET", "+SET", "+INCRBY","+DECRBY", "+LPUSH", "+LTRIM", "+LRANGE", "+SELECT", "+FCALL", "+EVAL", "+EXISTS"]'
 
+    vault write notifyr-database/roles/app-redis-security-ntfr-role \
+      db_name="redis-notifyr" \
+      default_ttl="35d" \
+      max_ttl="35d" \
+      creation_statements='["~notifyr/security/*","+@transaction","+@string","+EXISTS","+SELECT","+KEYS","+DEL","+EXPIRE"]'
+    
+    vault write notifyr-database/roles/app-redis-config-ntfr-role \
+      db_name="redis-notifyr" \
+      default_ttl="35d" \
+      max_ttl="35d" \
+      creation_statements='["~notifyr/config/*","+@transaction","+@string","+EXISTS","+KEYS","+DEL","+EXPIRE","+SELECT"]'
+    
     vault write notifyr-database/roles/app-redis-ntfr-role \
       db_name="redis-notifyr" \
       default_ttl="35d" \
       max_ttl="35d" \
-      creation_statements='["~*","&*", "+@string", "+@hash", "+@list", "+@set", "+@sortedset","+@transaction", "+@stream","+@keyspace", "+@pubsub", "-@admin", "-@dangerous", "-@connection", "+PING","+SELECT","+SCAN","+INFO","+KEYS"]'
+      creation_statements='["~*","&*", "+@string", "+@hash", "+@list", "+@set", "+@sortedset","+@transaction", "+@stream","+@keyspace", "+@pubsub", "-@admin", "-@dangerous", "-@connection", "+PING","+SELECT","+SCAN","+INFO","+KEYS","+EVALSHA"]'
 
     vault write notifyr-database/roles/agentic-redis-ntfr-role \
       db_name="redis-notifyr" \
@@ -500,7 +514,7 @@ setup_database_config(){
       db_name="redis-notifyr" \
       default_ttl="10m" \
       max_ttl="20m" \
-      creation_statements='["~notifyr/credit:*", "+GET", "+SET", "+INCRBY", "+LPUSH", "+LTRIM", "+LRANGE", "+SELECT", "+FCALL","+EXISTS"]'
+      creation_statements='["~notifyr/credit:*", "+GET", "+SET", "+INCRBY","+DECRBY", "+LPUSH", "+LTRIM", "+LRANGE", "+SELECT", "+FCALL","+EXISTS"]'
     setup_config_kv2 "redis_roles" "set"
   fi
   
@@ -647,7 +661,7 @@ database_connection_config(){
         port=6379 \
         username="redis-vaultadmin" \
         password="$VAULTPASS" \
-        allowed_roles="admin-redis-ntfr-role, app-redis-ntfr-role, ncs-redis-ntfr-role, agentic-redis-ntfr-role, app-redis-credit-ntfr-role"
+        allowed_roles="admin-redis-ntfr-role, app-redis-ntfr-role, ncs-redis-ntfr-role, agentic-redis-ntfr-role, app-redis-credit-ntfr-role, app-redis-security-ntfr-role, app-redis-config-ntfr-role"
     vault write -f notifyr-database/rotate-root/redis-notifyr
     
     vault write notifyr-database/config/redis \

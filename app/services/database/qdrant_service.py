@@ -1,5 +1,4 @@
 from typing import Any, Dict, List, Literal, Tuple
-from fastapi import HTTPException
 from app.classes.chunk import CONTEXT_KEYS, ChunkWrapper, ChunkContext
 from app.classes.embeddings import EmbeddingUsage, EmbeddingWrapper
 from app.definition._service import BaseService, LinkDep, Service
@@ -11,7 +10,7 @@ from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Record, ScoredPoint, VectorParams, Distance,PointStruct,Filter, FieldCondition, MatchValue,FilterSelector, MatchText, MatchAny, MinShould, MatchPhrase, MatchTextAny
 from app.services.setting_service import DEFAULT_BUILD_STATE
 from app.services.vault_service import VaultService
-from app.classes.qdrant import QdrantCollectionDoesNotExistError, QdrantFilterModel, QdrantSearchParamsModel, QdrantChunkFilterCondition, TextFieldMatch
+from app.classes.qdrant import QdrantCollectionAlreadyExistError, QdrantCollectionDoesNotExistError, QdrantDocumentIdentificationMissingError, QdrantFilterModel, QdrantPointDeletionOperationError, QdrantSearchParamsModel, QdrantChunkFilterCondition, TextFieldMatch
 from app.classes.qdrant import LIST_FIELDS,LITERAL_FIELDS,FLEXIBLE_TEXT_FIELDS
 from app.utils.helper import slice_dict
 from app.utils.toolbox import RunAsync
@@ -154,10 +153,10 @@ class QdrantService(BaseService):
             return exist 
     
         if not exist and not reverse:
-            raise HTTPException(404,f'Collection: {collection_name} does not exists')
+            raise QdrantCollectionDoesNotExistError(collection_name)
 
         if exist and reverse:
-            raise HTTPException(400,f'Collection: {collection_name} already exists')
+            raise QdrantCollectionAlreadyExistError(collection_name)
                 
     async def delete_collections(self,collection_name:str):
         await  self.collection_exists(collection_name)
@@ -181,7 +180,7 @@ class QdrantService(BaseService):
         await self.collection_exists(collection_name)
 
         if not document_id and not document_name:
-            raise HTTPException(status_code=400, detail='document_id or document_name is required')
+            raise QdrantDocumentIdentificationMissingError()
 
         must_conditions = []
         if document_id:
@@ -199,7 +198,7 @@ class QdrantService(BaseService):
                 wait=wait
             )
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f'Failed to delete points: {e}')
+            raise QdrantPointDeletionOperationError(e)
     
     ##################################################################################################################
     #######################################                                         ##################################

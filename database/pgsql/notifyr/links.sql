@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS Link (
     expiration TIMESTAMPTZ DEFAULT NULL,
     expiration_verification TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '1 week'),
     total_visit_count INT DEFAULT 0,
+    issuer JSONB DEFAULT NULL,
     converted_count INT DEFAULT NULL,
     total_session_count INT DEFAULT NULL,
     public BOOLEAN DEFAULT TRUE,

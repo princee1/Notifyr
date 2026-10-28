@@ -141,3 +141,38 @@ class TortoiseTransactionFailureError(BaseError):
         self.connection = connection
         self.attempts = attempts
         self.error = error
+
+class TortoiseTableRowsLimitReachedError(BaseError):
+    def __init__(self,limit:str,table:str,db:str):
+        self.limit = limit
+        self.table = table
+        self.db = db
+
+class TortoiseContextNotSetupError(BaseError):
+    def __init__(self,):
+        super().__init__()
+
+class TortoiseContextAlreadyExistError(BaseError):
+    def __init__(self,credentials:str):
+        self.credentials = credentials
+
+class TortoiseContextDoesNotExistError(BaseError):
+    def __init__(self,credentials:str):
+        self.credentials = credentials
+
+
+class VaultHardLimitError(BaseError):
+    def __init__(self,limit:int,engine:str,mount:str,path:str):
+        super().__init__(limit,engine,mount,path)
+        self.limit = limit
+        self.engine = engine
+        self.mount = mount
+        self.path = path
+
+    def detail(self)->dict:
+        return {
+            'limit':self.limit,
+            'engine':self.engine,
+            'mount':self.mount,
+            'path':self.path
+        }

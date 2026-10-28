@@ -10,11 +10,12 @@ from enum import Enum
 
 class DecoratorPriority(Enum):
     LIMITER = 0
-    PERMISSION = 1
-    HANDLER = 2
-    PIPE = 3
-    GUARD = 4
-    INTERCEPTOR = 5
+    META=1
+    PERMISSION = 2
+    HANDLER = 3
+    PIPE = 4
+    GUARD = 5
+    INTERCEPTOR = 6
 
 class DecoratorException(Exception):
 
@@ -106,12 +107,25 @@ class Permission(DecoratorObj):
 class PermissionDefaultException(DecoratorException):
     ...
 
+class Access(DecoratorObj):
+
+    def __init__(self,):
+        super().__init__(self.access, True)
+
+    def access(self,):
+        ...
+
+class AccessDefaultException(DecoratorException):
+    ...
+
+
 class Interceptor(DecoratorObj):
 
-    def __init__(self,filter_before_params:bool= True,filter_after_params:bool=True):
+    def __init__(self,filter_before_params:bool= True,filter_after_params:bool=True,inject_meta=False):
         super().__init__(self.intercept, True)
         self.filter_before_params = filter_before_params
         self.filter_after_params = filter_after_params
+        self.inject_meta = inject_meta
 
 
     def intercept_before(self):

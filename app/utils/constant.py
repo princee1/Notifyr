@@ -57,6 +57,12 @@ class HTTPHeaderConstant:
     X_REQUEST_ID='X-Request-ID'
     X_BALANCER_EXCHANGE_TOKEN='X-Balancer-Exchange-Token'
     X_NOTIFYR_APP_INSTANCE_ID='X-NotifyrApp-Instance-ID'
+    X_SESSION_ID='X-Session-ID'
+    X_AUTH_STATE = 'X-Auth-State'
+    X_AUTH_TYPE= 'X-Auth-Type'
+    X_THROTTLE_DELAY = 'X-Throttle-Delay'
+    X_AUTH_MECHANISM = 'X-Auth-Mechanism'
+    X_ISSUER_ID = 'X-Issuer-ID'
 
 
 class CookieConstant:
@@ -201,6 +207,8 @@ class MongooseDBConstant:
 class PostgresConstant:
     DEFAULT_DATABASE_NAME = 'notifyr'
     SECURITY_DATABASE_NAME = 'security'
+    SECURITY_APP = 'security'
+    NOTIFYR_APP = 'notifyr'
             
 ########################                     ########################################
 
@@ -237,7 +245,7 @@ DEFAULT_SETTING = {
     SettingDBConstant.CHAT_EXPIRATION_SETTING: 30,
     SettingDBConstant.ASSET_LANG_SETTING: "en",
     SettingDBConstant.CONTACT_TOKEN_EXPIRATION_SETTING:360000000,
-    SettingDBConstant.API_EXPIRATION_SETTING: 360000000,
+    SettingDBConstant.API_EXPIRATION_SETTING: SECONDS_IN_AN_HOUR * 10*10,
     SettingDBConstant.ALL_ACCESS_EXPIRATION_SETTING: 36000000000,
 }
 
@@ -250,8 +258,6 @@ class VaultConstant:
     ROLE_ID_FILE = 'app-role_id.txt' # in the secrets shared by the vault
     SUPERCRONIC_SEED_TIME_FILE = 'seed-time.txt'
     
-
-    
     @staticmethod
     def VAULT_SECRET_DIR(file:str)->str:
         return f'/run/secrets/{file}'
@@ -261,7 +267,7 @@ class VaultConstant:
         return f'/vault/shared/{file}'
 
 
-    NotifyrSecretType = Literal['tokens','webhook','messages','generation-id','communication','setting','internal']
+    NotifyrSecretType = Literal['tokens','webhook','messages','generation-id','communication','setting','internal','policies','clients']
     TOKENS_SECRETS = 'tokens'
     MESSAGES_SECRETS = 'messages'
     GENERATION_ID = 'generation-id'
@@ -269,15 +275,16 @@ class VaultConstant:
     LLM_SECRETS = 'llm'
     OUTBOUND_SECRETS='outbound'
     WEBHOOK_SECRETS = 'webhook'
+
     SETTINGS_SECRETS='setting'
     INTERNAL_API_SECRETS='internal'
 
-
-    NotifyrTransitKeyType = Literal['profiles-key','messages-key','chat-key','s3-rest-key']
+    NotifyrTransitKeyType = Literal['profiles-key','messages-key','chat-key','s3-rest-key','security-key']
     SECRETS_MESSAGE_KEY = 'messages-key'
     PROFILES_KEY = 'profiles-key'
     CHAT_KEY='chat-key'
     S3_REST_KEY='s3-rest-key'
+    SECURITY_KEY='security-key'
 
     NotifyrDynamicSecretsRole= Literal['postgres','mongo','redis','neo4j']
     MONGO_ROLE='mongo'
@@ -293,7 +300,7 @@ class VaultConstant:
     NOTIFYR_GENERATION_MOUNT_POINT ='notifyr-generation'
     NOTIFYR_MINIO_MOUNT_POINT = 'notifyr-minio'
     NOTIFYR_RABBITMQ_MOUNT_POINT='notifyr-rabbitmq'
-
+    NOTIFYR_SECURITY_MOUNT_POINT='notifyr-security'
 
     @staticmethod
     def KV_ENGINE_BASE_PATH(sub_mount:NotifyrSecretType='',path:str=''):
@@ -348,6 +355,7 @@ class RedisConstant:
     CONFIG_DB=4
     AGENTIC_DB=5
     LIMITER_DB=6
+    SECURITY_DB=7
 
 ########################                     ########################################
 
@@ -595,3 +603,11 @@ class HostConstant:
     POSTGRES_HOST='postgres'
     MONGOOSE_HOST='mongodb'
     VAULT_HOST='vault'
+
+class SetupRootConstant:
+    SYSTEM_ACCESS_KEY='system-access'
+    SYSTEM_LOGIN_KEY='system-login'
+    ADMIN_ACCESS_KEY = 'admin-access'
+    ADMIN_LOGIN_KEY = 'admin-login'
+
+    KEYS  = [SYSTEM_ACCESS_KEY,SYSTEM_LOGIN_KEY,ADMIN_ACCESS_KEY,ADMIN_LOGIN_KEY]

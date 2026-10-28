@@ -1,10 +1,13 @@
 from uuid import uuid4
 from fastapi.responses import JSONResponse
-from app.classes.auth_permission import AuthPermission, ClientType, filter_asset_permission, parse_authPermission_enum
-from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE
-from app.depends.orm_cache import AuthPermissionCache, BlacklistORMCache, ChallengeORMCache, ClientORMCache
-from app.models.orm.security_model import BlacklistORM, ChallengeORM, ClientORM
+from app.classes.auth_permission import AuthMechanism, AuthPermission, AuthType, ClientAccessInfo, ClientType, filter_asset_permission, parse_authPermission_enum
+from app.definition._middleware import  ApplyOn, BypassOn, ExcludeOn, MiddleWare, MiddlewarePriority,MIDDLEWARE, get_url, path_matcher
+from app.definition._ressource import HTTPMethod
+from app.depends.orm_cache import BlacklistClientCache, BlacklistGroupCache
+from app.errors.security_error import APIKeyMismatchError, APIKeyMissingError, AuthzSignatureMisMatchError, BadAuthMechanismContextError, CipherDoesNotExistError, CipherSchemeNotValidError, JWTInvalidTokenError, RequestOriginIsNotValidError, SecurityIdentityNotResolvedError, SessionNotValidatedError, TokenDataMissingError, TokenExpiredError, TokenGenerationMismatchError
+from app.errors.service_error import MiniServiceDoesNotExistsError
 from app.services.admin_service import AdminService
+from app.services.database.redis_service import RedisService
 from app.services.monitoring_service import MonitoringService
 from app.services.config_service import ConfigService, WorkerService
 from app.services.security_service import SecurityService, JWTAuthService
@@ -13,10 +16,20 @@ from fastapi import HTTPException, Request, Response,status
 from slowapi.middleware import SlowAPIMiddleware
 from typing import Callable
 import time
+from app.services.vault_service import VaultService
 from app.utils.constant import HTTPHeaderConstant, MonitorConstant
-from app.depends.dependencies import get_auth_permission, get_client_from_request, get_client_ip,get_bearer_token_from_request, get_response_id
+from app.depends.dependencies import  get_auth_mechanism, get_client_ip,get_bearer_token_from_request
     
 configService = Get(ConfigService)
+
+__valid_both_mechanism__:set[AuthMechanism] = {'token','userpass'} 
+
+
+def ensure_auth_mechanism(request:Request,valid_mechanism:AuthMechanism):
+    if (auth_mechanism:=get_auth_mechanism(request)) not in __valid_both_mechanism__:
+        raise BadAuthMechanismContextError(valid_mechanism,auth_mechanism)
+    
+    return auth_mechanism != valid_mechanism
 
 class MetaDataMiddleWare(MiddleWare):
     priority = MiddlewarePriority.METADATA
@@ -65,87 +78,191 @@ class LoadBalancerMiddleWare(MiddleWare):
         # TODO add headers like application id, notifyr-service id, Signature-Service, myb generation id 
         return response
 
+class APITokenAuthMiddleware(MiddleWare):
+    priority = MiddlewarePriority.AUTH
+
+    def __init__(self, app, dispatch = None):
+        super().__init__(app, dispatch)
+        self.securityService= Get(SecurityService)
+
+    @BypassOn(configService.AUTH_MECHANISM != 'token' and configService.AUTH_MECHANISM != 'both')
+    @ExcludeOn(['/','/contacts/manage/*'])
+    @ExcludeOn(['/docs/*','/openapi.json'])
+    @ExcludeOn(['/auth/login/','/auth/refresh/'])
+    @ExcludeOn(['/auth/recover/'],methods=['POST'])
+    @ExcludeOn(['/link/visits/*','/link/email-track/*'])
+    async def dispatch(self, request:Request, call_next:Callable[...,Response]):
+
+        try:
+            if configService.AUTH_MECHANISM == 'both' and ensure_auth_mechanism(request,'token'):
+                return await call_next(request)
+
+            token = get_bearer_token_from_request(request)
+            async with self.securityService.lock('reader'):
+                access = self.securityService.verify_server_access(token)
+
+            origin = get_client_ip(request)
+            self.securityService.verify_token_origin(origin,access)
+            
+            request.state.accessInfo = access
+
+            return await call_next(request)
+            
+        except HTTPException as e:
+            return JSONResponse(e.detail,e.status_code,e.headers)
+
+        except BadAuthMechanismContextError as e:
+            return JSONResponse(e.detail,status.HTTP_401_UNAUTHORIZED)
+
+        except APIKeyMissingError as e:
+            return JSONResponse({'message':'AUTH_MECHANISM set as "token" but not token was found, contact the server administrator'},
+                                status.HTTP_503_SERVICE_UNAVAILABLE)
+        except APIKeyMismatchError as e:
+            return JSONResponse({'message':'Token provided does not match'},
+                                status_code=status.HTTP_401_UNAUTHORIZED)
+        
+        except RequestOriginIsNotValidError as e:
+            return JSONResponse(e.detail,status.HTTP_401_UNAUTHORIZED)
+
+
 class JWTAuthMiddleware(MiddleWare):
     priority = MiddlewarePriority.AUTH
+
     def __init__(self, app, dispatch=None) -> None:
         super().__init__(app, dispatch)
         self.jwtService:JWTAuthService = Get(JWTAuthService)
         self.configService: ConfigService = Get(ConfigService)
         self.adminService: AdminService = Get(AdminService)
+        self.redisService: RedisService = Get(RedisService)
+        self.securityService:SecurityService = Get(SecurityService)
+        self.vaultService:VaultService = Get(VaultService)
 
-    def _copy_client_into_auth(self,client:ClientORM,permission:AuthPermission):
-        permission['client_type'] = client.client_type
-        permission['scope'] = client.client_scope
-        permission['issued_for'] = client.issued_for
-        permission['auth_type'] = client.auth_type
-        permission['client_username'] = client.client_username
-
-    @BypassOn(not configService.SECURITY_FLAG)
-    @ExcludeOn(['/auth/generate/*','/contacts/manage/*'])
-    @ExcludeOn(['/link/visits/*','/link/email-track/*'])
+    @BypassOn(configService.AUTH_MECHANISM != 'userpass' and configService.AUTH_MECHANISM != 'both') 
+    @ExcludeOn(['/','/contacts/manage/*'])
     @ExcludeOn(['/docs/*','/openapi.json'])
-    @ExcludeOn(['/'])
+    @ExcludeOn(['/auth/login/','/auth/refresh/'])
+    @ExcludeOn(['/auth/recover/'],methods=['POST'])
+    @ExcludeOn(['/link/visits/*','/link/email-track/*'])
     async def dispatch(self,  request: Request, call_next: Callable[..., Response]):
         try:  
+            if configService.AUTH_MECHANISM == 'both' and ensure_auth_mechanism(request,'userpass'):
+                return await call_next(request)
+                
             token = get_bearer_token_from_request(request)
-            client_ip = get_client_ip(request) #TODO : check wether we must use the scope to verify the client
-            origin = ...
+            if request.headers.get(HTTPHeaderConstant.X_AUTH_TYPE,None) == AuthType.API_TOKEN:
+                async with self.securityService.lock('reader'):
+                    token = self.securityService.decrypt(token,'api-token')
 
-            authPermission: AuthPermission = self.jwtService.verify_auth_permission(token, client_ip)
-          
-            client_id = authPermission['client_id']
-            group_id = authPermission['group_id']
+            async with self.jwtService.lock('reader'):
+                clientInfo: ClientAccessInfo = self.jwtService.verify_client_token_permission(token)
 
-            client:ClientORM = await ClientORMCache.Cache([group_id,client_id],client_id=client_id,cid="id",authPermission=authPermission)
+            client_id = clientInfo.get('client_id',None)
 
-            self._copy_client_into_auth(client,authPermission)
-            self.jwtService.verify_client_origin(authPermission,client_ip,origin)
+            if not client_id:
+                raise SecurityIdentityNotResolvedError(None,'Cannot identify the client since the client_id is not provided')
 
-            #TODO check group id
-            if not client.authenticated:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Client is not authenticated")
+            async with self.adminService.lock('reader',client_id) as clientService:
+                clientInfo['client_type'] = clientService.client.client_type
+                clientInfo['auth_type'] = clientService.client.auth_type
+                clientInfo['group_id'] = clientService.group_id
+                
+                client_ip = get_client_ip(request) #TODO : check wether we must use the scope to verify the client
+                
+                clientService.verify_client_origin(client_ip)
+                await clientService.compare_auth_signature(clientInfo['auth_signature'],clientInfo['session_id'])
+                
+                if clientService.client.client_type != ClientType.Admin: 
+                    async with self.redisService.redis_security.pipeline() as pipe:
+                        if clientService.group_id:
+                            await BlacklistGroupCache.Get([clientService.group_id],redis=pipe) # group 
+                        await BlacklistClientCache.Get([client_id,''],redis=pipe) # client
+                        await BlacklistClientCache.Get([client_id,clientInfo['session_id']],redis=pipe) # session
+                        flags = await pipe.execute()
 
-            if client.client_type != ClientType.Admin: 
+                    if any(flags):
+                        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"message": "Client is blacklisted","flags":flags})
+                       
+                request.state.clientInfo = clientInfo
+                request.state.authPermission = clientService.authPermission
 
-                if await BlacklistORMCache.Cache([group_id,client_id],client):
-                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Client is blacklisted")
-
-            request.state.client = client
-
-            policies = await AuthPermissionCache.Cache([group_id,client_id],client)
-            authPermission= AuthPermission(**{**authPermission,**policies})
-
-            filter_asset_permission(authPermission)
-            parse_authPermission_enum(authPermission)
-            
-            request.state.authPermission = authPermission
+            response:Response = await call_next(request)
+            response.headers[HTTPHeaderConstant.X_SESSION_ID] = clientInfo['session_id']
+            return response
 
         except HTTPException as e:
             return JSONResponse(e.detail,e.status_code,e.headers)
 
-        return await call_next(request)
-         
-class ChallengeMatchMiddleware(MiddleWare):
-    priority = MiddlewarePriority.CHALLENGE
+        except BadAuthMechanismContextError as e:
+            return JSONResponse(e.detail,status.HTTP_401_UNAUTHORIZED)
 
-    @BypassOn(not configService.SECURITY_FLAG)
-    @ExcludeOn(['/docs/*','/openapi.json','/contacts/manage/*'])
-    @ExcludeOn(['/auth/generate/*','/auth/refresh/*'])
-    @ExcludeOn(['/link/visits/*','/link/email-track/*'])
-    @ExcludeOn(['/'])
-    async def dispatch(self, request:Request, call_next:Callable[[Request],Response]):
-        authPermission: AuthPermission = await get_auth_permission(request)
-        client:ClientORM = await get_client_from_request(request)
-        challenge = authPermission['challenge']
+        except RequestOriginIsNotValidError as e:
+            return JSONResponse(e.detail,status.HTTP_401_UNAUTHORIZED)
 
-        db_challenge:ChallengeORM = await ChallengeORMCache.Cache(client.client_id,client) 
+        except TokenDataMissingError as e:
+            return JSONResponse({'message':'could not properly decode the token'},status.HTTP_401_UNAUTHORIZED)
+    
+        except JWTInvalidTokenError as e:
+            return JSONResponse(e.detail,status.HTTP_401_UNAUTHORIZED)
 
-        if challenge != db_challenge.challenge_auth:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Challenge does not match") 
+        except (TokenExpiredError,TokenGenerationMismatchError) as e:
+            return JSONResponse(status_code=status.HTTP_403_FORBIDDEN,content=e.detail)
+
+        except MiniServiceDoesNotExistsError as e:
+            return JSONResponse(status_code= status.HTTP_401_UNAUTHORIZED,message='could not properly authenticate the user')
         
-        return await call_next(request)
+        except SecurityIdentityNotResolvedError as e:
+            return JSONResponse({'message':e.reason},status_code= status.HTTP_401_UNAUTHORIZED)
 
+        except AuthzSignatureMisMatchError as e:
+            return JSONResponse(e.detail,status_code=status.HTTP_403_FORBIDDEN)
 
+        except CipherDoesNotExistError as e:
+            return JSONResponse(e.detail,status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        except CipherSchemeNotValidError as e:
+            return JSONResponse(e.detail,status.HTTP_400_BAD_REQUEST)
+
+        except SessionNotValidatedError as e:
+            return JSONResponse(e.detail,status_code=status.HTTP_403_FORBIDDEN)
+
+class RequiredAuthMiddleware(MiddleWare):
+    priority = MiddlewarePriority.REQUIRED
+
+    def __init__(self, app, dispatch = None):
+        super().__init__(app, dispatch)
+
+        self.regex:dict[str,AuthMechanism] = {
+                    '/admin/*':'userpass',
+                    '/auth/session/':'userpass',
+                    '/auth/recover/':'userpass',
+                    '/auth/me/':'userpass',
+                    '/access/*':'token'
+                    }
+    
+    def compute_required(self,path:str)->AuthMechanism|None:
+        for regex,mechanism in self.regex.items():
+            if path_matcher([regex],path):
+                return mechanism
+        return  None
+
+    @BypassOn(configService.AUTH_MECHANISM != 'both')
+    @ExcludeOn(['/auth/login/','/auth/refresh/'])
+    @ExcludeOn(['/auth/recover/'],methods=['POST'])
+    async def dispatch(self, request:Request, call_next:Callable[[Request],Response]):
+        try:
+            path = get_url(request)
+            require =  self.compute_required(path)
+
+            if require!= None and (auth_mechanism:=get_auth_mechanism(request))!=require:
+                raise BadAuthMechanismContextError(require,auth_mechanism,'route')
+
+            response:Response =  await call_next(request)
+            response.headers[HTTPHeaderConstant.X_AUTH_MECHANISM] = auth_mechanism
+            return response
+
+        except BadAuthMechanismContextError as e:
+            return JSONResponse(e.detail,status.HTTP_401_UNAUTHORIZED)
+    
 class CustomSlowApiMiddleware(SlowAPIMiddleware):
     priority = MiddlewarePriority.LIMITER
 

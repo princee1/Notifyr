@@ -1,266 +1,383 @@
-
-import time
-from typing import Annotated
-from fastapi import Depends, HTTPException, Header, Query, Request,status
-from fastapi.responses import JSONResponse
+from typing import Annotated, Any, Callable, get_args
+from typing_extensions import Literal
+from fastapi import Depends, HTTPException, Request, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from app.classes.auth_permission import AuthPermission, ClientType, FuncMetaData, MustHave, MustHaveRoleSuchAs, RefreshPermission, Role, TokensModel, parse_authPermission_enum
-from app.container import Get, InjectInMethod
-from app.decorators.guards import AuthenticatedClientGuard, BlacklistClientGuard
-from app.decorators.handlers import AsyncIOHandler, ORMCacheHandler, SecurityClientHandler, ServiceAvailabilityHandler, TortoiseHandler
-from app.depends.funcs_dep import GetClient, get_client_by_password
-from app.depends.security_funcs_dep import verify_admin_signature, verify_admin_token
-from app.decorators.permissions import AdminPermission, JWTRefreshTokenPermission, JWTRouteHTTPPermission, TwilioPermission, UserPermission, same_client_authPermission
-from app.decorators.pipes import ForceClientPipe, RefreshTokenPipe
-from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, PingService, LockService, UseGuard, UseHandler, UseLimiter, UsePermission, UsePipe, UseRoles
-from app.depends.orm_cache import ChallengeORMCache, ClientORMCache
-from app.errors.security_error import AuthzIdMisMatchError, ClientDoesNotExistError,ClientTokenHeaderNotProvidedError, CouldNotCreateAuthTokenError
-from app.interface.issue_auth import IssueAuthInterface
-from app.models.orm.security_model import ChallengeORM, ClientORM, raw_revoke_auth_token, raw_revoke_challenges
-from app.services.admin_service import AdminService
+from starlette import status
+from app.classes.auth_permission import AccessModel, AuthPermission, AuthSignature, AuthState, AuthType, ClientAccessInfo, ClientRefresh, ClientType, Credentials, EncryptedRecoveryTokens, RecoveryCredentials, RecoveryTokenGenerator, RecoveryTokens, Role
+from app.container import InjectInMethod, Get
+from app.decorators.guards import BlacklistClientGuard, ClientAuthTypeGuard, PrimarySessionGuard
+from app.decorators.handlers import ClientHandler, MiniServiceHandler, ORMCacheHandler, RedisHandler, ClientSecurityHandler, TortoiseHandler, VaultHandler
+from app.decorators.interceptors import InvalidBlacklistTokenInterceptor
+from app.decorators.permissions import ClientTypesPermission, JWTRouteHTTPPermission, UserPermission
+from app.decorators.pipes import AccessTokenModelPipe, ClientMiniServiceResponsePipe, MiniServiceInjectorPipe, ObjectRelationalFriendlyPipe, SanitizePathParameterPipe, auth_state_pipe, refresh_logout_handler
+from app.definition._ressource import BaseHTTPRessource, HTTPMethod, HTTPRessource, HTTPStatusCode, LockService, PingService, Throttle, UseGuard, UseHandler, UseInterceptor, UseLimiter, UsePermission, UsePipe, UseRoles
+from app.definition._service import MiniStateProtocol
+from app.depends.dependencies import get_auth_permission, get_client_info, get_client_ip, get_query_params, get_user_agent
+from app.depends.funcs_dep import get_client_from_info
+from app.depends.variables import ScopeMode, SourceMode, _wrap_checker, source_mode_query,scope_mode_query
+from app.errors.depends_error import DataSourceNotSupportedError
+from app.errors.security_error import ClientDoesNotExistError, ClientNotAllowedToLoginError, PrimarySessionNotValidatedError, SessionMechanismOperationError, SessionNotValidatedError, TokenExpiredError
+from app.manager.broker_manager import Broker
+from app.manager.session_manager import AuthSessionManager
+from app.models.orm.security_model import ClientORM, UpdateClientModel
+from app.ressources.admin_ressource import ClientRessource
+from app.services.admin_service import VALID_SYNC_MECHANISM, AdminService, ClientMiniService, ClientVaultPath
 from app.services.config_service import ConfigService
-from app.services.database.tortoise_service import TortoiseConnectionService
+from app.services.database.redis_service import RedisService
+from app.services.database.tortoise_service import SECURITY_CREDS, TortoiseConnectionService
 from app.services.security_service import JWTAuthService
 from app.services.setting_service import SettingService
-from app.depends.dependencies import get_auth_permission, get_client_from_request, get_client_ip
-from app.utils.constant import ConfigAppConstant
-from tortoise.transactions import in_transaction
-from app.utils.globals import CAPABILITIES
+from app.services.vault_service import VaultService
+from tortoise.expressions import Q
 
+from app.utils.constant import RedisConstant
+from app.utils.toolbox import RunInThreadPool
 
-if CAPABILITIES['twilio']:
-    from app.services.ntfr.twilio_service import TwilioService
-    from app.depends.variables import  verify_twilio_token
+SessionMode = Literal['public','private']
+session_choices = get_args(SessionMode)
 
-REFRESH_AUTH_PREFIX = 'refresh'   
-GENERATE_AUTH_PREFIX = 'generate'
-AUTH_PREFIX = 'auth'    
-
-@PingService([TortoiseConnectionService])
-@LockService(TortoiseConnectionService,lockType='reader',infinite_wait=True)
-@UseHandler(TortoiseHandler)   
-@UsePipe(ForceClientPipe)
-@UseHandler(ServiceAvailabilityHandler,SecurityClientHandler,AsyncIOHandler)
-@UsePermission(JWTRouteHTTPPermission(True))
-@HTTPRessource(REFRESH_AUTH_PREFIX)
-class RefreshAuthRessource(BaseHTTPRessource,IssueAuthInterface):
-    
-    @InjectInMethod()
-    def __init__(self,adminService:AdminService,jwtService:JWTAuthService):
-        BaseHTTPRessource.__init__(self)
-        IssueAuthInterface.__init__(self,adminService)
-        self.jwtService = jwtService
-
-    @UseLimiter(limit_value='1/day')  # VERIFY Once a month
-    @UsePipe(RefreshTokenPipe)
-    @UseRoles(roles=[Role.REFRESH])
-    @UseHandler(ORMCacheHandler)
-    @LockService(SettingService,JWTAuthService,lockType='reader')
-    @UsePermission(UserPermission,JWTRefreshTokenPermission)
-    @UseGuard(BlacklistClientGuard, AuthenticatedClientGuard,)
-    @BaseHTTPRessource.HTTPRoute('/client/', methods=[HTTPMethod.GET, HTTPMethod.POST])
-    async def refresh_auth_token(self,tokens:TokensModel, client: Annotated[ClientORM, Depends(get_client_from_request)], request: Request,client_id:str=Query(""), authPermission=Depends(get_auth_permission)):
-        refreshPermission:RefreshPermission = tokens
-        async with in_transaction():    
-            await raw_revoke_auth_token(client)
-            auth_token, refresh_token = await self.issue_auth(client)
-            client.authenticated = True # NOTE just to make sure
-            await client.save()
-
-        await ChallengeORMCache.Invalid(client.client_id)
-        #await ClientORMCache.Invalid(client.client_id)
-        
-        return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": { "auth_token": auth_token}, "message": "Tokens successfully refreshed"})
-
-
-    @UseLimiter(limit_value='1/day')  # VERIFY Once a month
-    @UsePipe(RefreshTokenPipe)
-    @UseHandler(ORMCacheHandler)
-    @LockService(SettingService,JWTAuthService,lockType='reader')
-    @UseRoles(roles=[Role.ADMIN,Role.REFRESH],options=[MustHave(Role.ADMIN)])
-    @UsePermission(AdminPermission,JWTRefreshTokenPermission)
-    @BaseHTTPRessource.HTTPRoute('/admin/', methods=[HTTPMethod.GET, HTTPMethod.POST], dependencies=[Depends(verify_admin_signature)], )
-    async def refresh_admin_token(self,tokens:TokensModel, client: Annotated[ClientORM, Depends(get_client_from_request)], request: Request,client_id:str=Query(""), authPermission=Depends(get_auth_permission)):
-        async with in_transaction():    
-            refreshPermission:RefreshPermission = tokens
-            await raw_revoke_auth_token(client)
-            auth_token, refresh_token = await self.issue_auth(client)
-
-        #await ClientORMCache.Invalid(client.client_id)
-        await ChallengeORMCache.Invalid(client.client_id)
-        
-
-        return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": { "auth_token": auth_token,}, "message": "Tokens successfully refreshed"})
-    
-    if CAPABILITIES['twilio']:
-        @UsePipe(RefreshTokenPipe)
-        @UseHandler(SecurityClientHandler)
-        @LockService(SettingService,JWTAuthService,lockType='reader')
-        @UseRoles(roles=[Role.ADMIN,Role.REFRESH,Role.TWILIO],options=[MustHaveRoleSuchAs(Role.ADMIN,Role.TWILIO)])
-        @UsePermission(TwilioPermission,JWTRefreshTokenPermission)
-        @BaseHTTPRessource.HTTPRoute('/admin/', methods=[HTTPMethod.GET, HTTPMethod.POST], dependencies=[Depends(verify_twilio_token)],mount=False )
-        async def refresh_twilio_token(self,tokens:TokensModel, client: Annotated[ClientORM, Depends(get_client_from_request)], request: Request,client_id:str=Query(""), authPermission=Depends(get_auth_permission)):
-            return
-            twilioService:TwilioService = Get(TwilioService)
-            async with in_transaction():    
-                refreshPermission:RefreshPermission = tokens
-                await raw_revoke_auth_token(client)
-                auth_token, refresh_token = await self.issue_auth(client)
-
-            status_code = await twilioService.update_env_variable(auth_token, refresh_token)
-
-            if status_code == status.HTTP_200_OK:
-                    return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": {
-                "refresh_token": refresh_token, "auth_token": auth_token}, "message": "Tokens successfully issued"})
-            else:
-                return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED,content='Could not set auth and refresh token')
-
-@PingService([TortoiseConnectionService])
-@LockService(TortoiseConnectionService,lockType='reader',infinite_wait=True)
-@UseRoles([Role.ADMIN])
-@UseHandler(TortoiseHandler,ServiceAvailabilityHandler,AsyncIOHandler)
-@HTTPRessource(GENERATE_AUTH_PREFIX)
-class GenerateAuthRessource(BaseHTTPRessource,IssueAuthInterface):
-    admin_roles = [Role.ADMIN,Role.CUSTOM,Role.CONTACTS,Role.SUBSCRIPTION,Role.REFRESH,Role.CLIENT,Role.PUBLIC]
-    twilio_roles = admin_roles + [Role.TWILIO]
-
-    @InjectInMethod()
-    def __init__(self,adminService:AdminService,configService:ConfigService,jwtAuthService:JWTAuthService):
-        BaseHTTPRessource.__init__(self)
-        #BaseHTTPRessource.__init__(self,dependencies=[Depends(verify_admin_signature),Depends(verify_admin_token)])
-        IssueAuthInterface.__init__(self,adminService)
-        self.configService = configService
-        self.jwtAutService = jwtAuthService
-
-    async def _get_client_by_type(self,client_type)->ClientORM:
-        
-        client = await ClientORM.filter(client_type =client_type).first()
-        if client == None:
-            raise ClientDoesNotExistError()
-                
-        return client
-    
-    def _decode_and_verify(self, client: ClientORM, x_client_token):
-        authPermission: AuthPermission = self.jwtAutService._decode_token(x_client_token)
-        
-        if authPermission["client_id"] != str(client.client_id):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Client ID mismatch")
-
-        if authPermission['generation_id'] != self.jwtAutService.GENERATION_ID:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Generation ID mismatch")
-        
-        if authPermission["issued_for"] != client.issued_for:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Issued-for mismatch")
-        
-        # if authPermission['group_id'] != str(client.group_id):  # VERIFY if works
-        #     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Group ID mismatch")
-
-        return authPermission
-    
-    async def _create_superuser_auth(self,client_type,roles):
-        async with in_transaction():
-            client = await self._get_client_by_type(client_type)
-            await raw_revoke_challenges(client)
-            auth_token, refresh_token = await self.issue_auth(client)
-        
-        if auth_token == None:
-            raise CouldNotCreateAuthTokenError
-    
-        await ChallengeORMCache.Invalid(client.client_id)
-
-        return auth_token, refresh_token
-
-    @UseLimiter(limit_value='1/day')
-    @UseHandler(SecurityClientHandler,ORMCacheHandler)
-    @LockService(SettingService,JWTAuthService,lockType='reader')
-    @BaseHTTPRessource.HTTPRoute('/admin/', methods=[HTTPMethod.GET],dependencies=[Depends(verify_admin_signature),Depends(verify_admin_token)])
-    async def issue_admin_auth(self, request: Request,):
-        #TODO Protect requests
-        auth_token, refresh_token = await self._create_superuser_auth(ClientType.Admin,self.admin_roles)
-
-        return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": {
-            "refresh_token": refresh_token, "auth_token": auth_token}, "message": "Tokens successfully issued"})
-
-    if CAPABILITIES['twilio']:
-        @UseLimiter(limit_value='1/day')
-        @UseHandler(SecurityClientHandler,ORMCacheHandler)
-        @LockService(SettingService,JWTAuthService,lockType='reader')
-        @BaseHTTPRessource.HTTPRoute('/twilio/', methods=[HTTPMethod.GET],dependencies=[Depends(verify_admin_signature),Depends(verify_admin_token)],mount=False)
-        async def issue_twilio_auth(self,request:Request):
-            twilioService:TwilioService = Get(TwilioService)
-            auth_token, refresh_token = await self._create_superuser_auth(ClientType.Twilio)
-            status_code = await twilioService.update_env_variable(auth_token,refresh_token)
-
-            if status_code == status.HTTP_200_OK:
-                    return JSONResponse(status_code=status.HTTP_200_OK, content={ "message": "Tokens successfully issued"})
-            else:
-                return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,content='Could not set auth and refresh token')
-        
-    @UseLimiter(limit_value='1/day')
-    @UsePipe(ForceClientPipe)
-    @UseHandler(SecurityClientHandler,ORMCacheHandler)
-    @UseRoles(roles=[Role.CLIENT]) # BUG need to revise
-    @UseGuard(BlacklistClientGuard,AuthenticatedClientGuard)
-    @LockService(SettingService,JWTAuthService,lockType='reader')
-    @UsePermission(UserPermission(accept_none_auth=True))
-    @BaseHTTPRessource.HTTPRoute('/client/authenticate/', methods=[HTTPMethod.POST])
-    async def self_issue_by_connect(self,request:Request,client:Annotated[ClientORM,Depends(get_client_by_password)],x_client_token:str=Header(None)):
-        if x_client_token == None:
-            raise ClientTokenHeaderNotProvidedError
-
-        authPermission:AuthPermission = self._decode_and_verify(client, x_client_token)
-        parse_authPermission_enum(authPermission)
-        async with in_transaction():    
-
-            challenge = await ChallengeORM.filter(client=client).first()
-            if not self.compare_authz_id(challenge,authPermission['authz_id']):
-                raise AuthzIdMisMatchError
-            
-            await raw_revoke_auth_token(client)
-            auth_token, refresh_token = await self.issue_auth(client)
-            
-            await client.save()
-
-        await ChallengeORMCache.Invalid(client.client_id)
-        
-        return JSONResponse(status_code=status.HTTP_200_OK, content={"tokens": {
-            "refresh_token": refresh_token, "auth_token": auth_token}, "message": "Tokens successfully issued"})
-
-    @UsePipe(ForceClientPipe)
-    @UseLimiter(limit_value='1/day')
-    @UseHandler(SecurityClientHandler,ORMCacheHandler)
-    @UseGuard(AuthenticatedClientGuard)
-    @UsePermission(UserPermission(accept_none_auth=True))
-    @UseRoles(roles=[Role.CLIENT]) # BUG need to revise
-    @BaseHTTPRessource.HTTPRoute('/client/disconnect/', methods=[HTTPMethod.DELETE])
-    async def self_revoke_by_connect(self,request:Request,client:Annotated[ClientORM,Depends(get_client_by_password)],x_client_token:str=Header(None),ip_address:str=Depends(get_client_ip)):
-        if x_client_token == None:
-            raise ClientTokenHeaderNotProvidedError 
-
-        authPermission:AuthPermission = self.jwtAutService.verify_auth_permission(x_client_token,ip_address)
-        parse_authPermission_enum(authPermission)
-
-        async with in_transaction():    
-            jwtAuthPermission = JWTRouteHTTPPermission(accept_inactive=True)
-            challenge = await ChallengeORM.filter(client=client).first()
-
-            if challenge.challenge_auth != authPermission['challenge']:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Challenge does not match") 
-            
-            funcMetaData:FuncMetaData = getattr(self.self_revoke_by_connect,'meta')
-            jwtAuthPermission.permission(self.__class__.__name__,funcMetaData,authPermission)
-            await self._revoke_client(client)
-
-        await ChallengeORMCache.Invalid(client.client_id)
-        
-        return JSONResponse(status_code=status.HTTP_200_OK,content={'message':'Successfully disconnect'})
-
-
-@HTTPRessource(AUTH_PREFIX,routers=[GenerateAuthRessource,RefreshAuthRessource])
+@PingService([VaultService])
+@UseHandler(VaultHandler,ClientHandler,TortoiseHandler)
+@HTTPRessource('auth')
 class AuthRessource(BaseHTTPRessource):
 
-    @UseLimiter(limit_value='1/week')
-    @UsePermission(JWTRouteHTTPPermission,AdminPermission,same_client_authPermission)
-    @BaseHTTPRessource.Get('/{client_id}')
-    def route(self,client_id:str,request:Request,client:Annotated[ClientORM,Depends(get_client_from_request)],authPermission=Depends(get_auth_permission)):
-        return 
+    session_mode_query:Callable[[Request],SessionMode] = get_query_params('session','private',False,raise_except=True,checker=_wrap_checker('scope',lambda v: v in session_choices,choices=session_choices)) 
+
+    @InjectInMethod()
+    def __init__(self,tortoiseService:TortoiseConnectionService,adminService:AdminService,settingService:SettingService,vaultService:VaultService,configService:ConfigService,redisService:RedisService):
+        super().__init__(None,None)
+
+        self.tortoiseService = tortoiseService
+        self.settingService = settingService
+        self.adminService = adminService
+        self.vaultService = vaultService
+        self.redisService = redisService
+        self.configService = configService
+
+        self.blacklist_guard = BlacklistClientGuard()
+        self.access_token_pipe = AccessTokenModelPipe()
+
+    @Throttle(normal=(300,30))
+    @UseHandler(MiniServiceHandler)
+    @UseLimiter('5/day',key_func='client')
+    @HTTPStatusCode(status.HTTP_201_CREATED)
+    @UsePermission(JWTRouteHTTPPermission,UserPermission)
+    @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
+    @LockService(VaultService,AdminService,as_manager=True,lockType='reader',miniLockType='reader')
+    @UseGuard(ClientAuthTypeGuard(accept_access=True, accept_api=False),BlacklistClientGuard)
+    @BaseHTTPRessource.HTTPRoute('/recover/',methods=[HTTPMethod.GET])
+    async def get_recovery_token(self,request:Request,response:Response,client:Annotated[ClientMiniService,Depends(get_client_from_info)],profile:str=Depends(get_client_from_info),authPermission:AuthPermission=Depends(get_auth_permission),clientInfo:ClientAccessInfo=Depends(get_client_info)):
+
+        i=0
+        tokens = []
+        recovery = RecoveryTokenGenerator(count=4,part=3)
+        async for token in recovery.generate():
+            encrypted_code,salt = await client.encrypt_password(token)
+            tokens.append(RecoveryCredentials(password=encrypted_code,salt=salt,index=i))
+            i+=1
+
+        await client.update_recovery_code(recovery.export(tokens))
+
+        return recovery.export()
+
+    @Throttle(normal=(300,30))
+    @UseLimiter('5/day',key_func='ip')
+    @UsePipe(auth_state_pipe,before=False)
+    @HTTPStatusCode(status.HTTP_201_CREATED)
+    @PingService([TortoiseConnectionService])
+    @LockService(TortoiseConnectionService,lockType='reader')
+    @LockService(VaultService,SettingService,JWTAuthService,RedisService,lockType='reader')
+    @UseHandler(ORMCacheHandler,MiniServiceHandler,ClientSecurityHandler,RedisHandler,ClientHandler)
+    @BaseHTTPRessource.HTTPRoute('/recover/',methods=[HTTPMethod.POST],response_class = AccessModel)
+    async def recover(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)], credentials: Annotated[HTTPBasicCredentials, Depends(HTTPBasic())],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)]):
+        
+        clientORM = await ClientORM.filter(Q(client_username=credentials.username) | Q(client_email=credentials.username)).exclude(client_type=ClientType.System).first()
+        self.verify_client(credentials.username, clientORM, True)
+        
+        origin = get_client_ip(request)
+        user_agent = get_user_agent(request)
+        device_name=None
+
+        session_id = session.is_client_authenticated(clientORM)
+        session.logout()
+
+        async with self.adminService.lock('reader',str(clientORM.client_id)) as client:
+            async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
+
+                await self.blacklist_guard.guard(client,None,session_id if session_id else '')
+                client.verify_client_origin(origin)
+
+                index = await client.verify_recovery_code(credentials.password)
+                await client.verify_login_count(session_id)
+                
+                authSignature,session_id = await client.upsert_session(session_id,origin,user_agent,device_name)
+                auth_token,refresh_token = await client.generate_access(session_id,authSignature.get('signature',None),ctx=ctx)
+
+                await client.update_recovery_code(index=index)
+                session.login(refresh_token)
+                session.update_auth_state(AuthState.LOGIN_BY_RECOVERY)
+
+        if self.configService.SESSION_MECHANISM in VALID_SYNC_MECHANISM:
+            broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))
+
+        return self.access_token_pipe.pipe(auth_token,client)
+
+    @Throttle(uniform=(100,250))
+    @UseLimiter('5/day',key_func='ip')
+    @UsePipe(auth_state_pipe,before=False)
+    @PingService([TortoiseConnectionService])
+    @UseHandler(ORMCacheHandler,MiniServiceHandler,ClientSecurityHandler,RedisHandler,ClientHandler)
+    @LockService(VaultService,SettingService,JWTAuthService,TortoiseConnectionService,lockType='reader')
+    @BaseHTTPRessource.HTTPRoute('/refresh/',methods=[HTTPMethod.PUT],response_class=AccessModel)
+    async def refresh(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)]):
+        session.logout()
+        refreshPermission:ClientRefresh =  session.verify_refresh_token(True)
+        
+        clientORM = await ClientORM.filter(client_id=refreshPermission['client_id']).first()
+        self.verify_client(refreshPermission['client_id'], clientORM)
+        origin = get_client_ip(request)
+
+        res = None
+        async with self.adminService.lock('reader',str(clientORM.client_id)) as client:
+            async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
+                
+                if refreshPermission['status'] == 'active':
+                    await self.blacklist_guard.guard(client,None,refreshPermission['session_id'])
+                    client.verify_client_origin(origin)
+                    reuse_counter = await client.verify_refresh_token(refreshPermission)
+
+                    new_signature,_ = await client.upsert_session(refreshPermission['session_id'])
+                    auth_token,refresh_token = await client.generate_access(refreshPermission['session_id'],new_signature.get('signature',None),reuse_counter,ctx=ctx)
+
+                    session.login(refresh_token)
+                    session.update_auth_state(AuthState.AUTH_BY_REFRESH)
+                    res = self.access_token_pipe.pipe(auth_token,client)
+                else: # inactive
+                    await client.verify_refresh_token(refreshPermission,__raise__=False)
+                    new_signature = await client.revoke_itself(ctx,session_id=refreshPermission['session_id'])
+                    response.status_code = status.HTTP_204_NO_CONTENT
+                    session.update_auth_state(AuthState.LOGOUT_BY_REFRESH)
+
+        if self.configService.SESSION_MECHANISM in VALID_SYNC_MECHANISM:
+            broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))
+        return res
+
+    @Throttle(normal=(200,70))
+    @UseLimiter('5/day',key_func='ip')
+    @UsePipe(auth_state_pipe,before=False)
+    @HTTPStatusCode(status.HTTP_201_CREATED)
+    @PingService([TortoiseConnectionService])
+    @LockService(TortoiseConnectionService,lockType='reader')
+    @LockService(VaultService,SettingService,JWTAuthService,RedisService,lockType='reader')
+    @UseHandler(ORMCacheHandler,MiniServiceHandler,ClientSecurityHandler,RedisHandler,ClientHandler)
+    @BaseHTTPRessource.HTTPRoute('/login/',methods=[HTTPMethod.POST],response_class=AccessModel)
+    async def login(self,broker:Annotated[Broker,Depends(Broker)],request:Request,response:Response, credentials: Annotated[HTTPBasicCredentials, Depends(HTTPBasic())],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)],mode:SessionMode=Depends(session_mode_query),):
+
+        clientORM = await ClientORM.filter(Q(client_username=credentials.username) | Q(client_email=credentials.username)).first()
+        self.verify_client(credentials.username, clientORM, True)
+
+        origin = get_client_ip(request)
+        user_agent = get_user_agent(request)
+        device_name=None
+
+        session_id = session.is_client_authenticated(clientORM)
+        session.logout()
+
+        async with self.adminService.lock('reader',str(clientORM.client_id)) as client:
+            async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
+                    
+                await self.blacklist_guard.guard(client,None,session_id if session_id else '')
+                client.verify_client_origin(origin)
+
+                encryptedPassword = await client.fetch_password()
+                await client.compare_password(credentials.password,encryptedPassword)
+
+                await client.verify_login_count(session_id)
+                authSignature,session_id = await client.upsert_session(session_id,origin,user_agent,device_name)
+                auth_token,refresh_token = await client.generate_access(session_id,authSignature.get('signature',None),ctx=ctx)
+                
+                if mode == 'private':
+                    session.login(refresh_token)
+                    session.update_auth_state(AuthState.LOGIN)
+                else:
+                    session.update_auth_state(AuthState.PUBLIC_LOGIN)
+        
+        if self.configService.SESSION_MECHANISM in VALID_SYNC_MECHANISM:
+            broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))
+
+        return self.access_token_pipe.pipe(auth_token,client)
+
+    @Throttle(uniform=(150,200))
+    @UsePipe(auth_state_pipe,before=False)
+    @UseLimiter('10/hours',key_func='client')
+    @PingService([TortoiseConnectionService])
+    @HTTPStatusCode(status.HTTP_204_NO_CONTENT)
+    @UseInterceptor(InvalidBlacklistTokenInterceptor)
+    @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
+    @UseGuard(ClientAuthTypeGuard(accept_access=True, accept_api=False))
+    @LockService(VaultService,TortoiseConnectionService,AdminService,as_manager=True)
+    @UseHandler(ORMCacheHandler,MiniServiceHandler,ClientSecurityHandler,RedisHandler)
+    @UsePermission(JWTRouteHTTPPermission(True),ClientTypesPermission([ClientType.Admin,ClientType.User,ClientType.System]))
+    @BaseHTTPRessource.HTTPRoute('/logout/',methods=[HTTPMethod.DELETE])
+    async def logout(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],client:Annotated[ClientMiniService,Depends(get_client_from_info)],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)],profile:str=Depends(get_client_from_info),scope:ScopeMode = Depends(scope_mode_query),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+
+        async with self.tortoiseService.transaction(SECURITY_CREDS) as ctx:
+            if scope == 'single':
+                await client.revoke_itself(ctx,clientInfo['session_id'])
+            else:
+                session.verify_refresh_token(False)
+                if not await client.is_primary_session(clientInfo['session_id']):
+                    raise PrimarySessionNotValidatedError(clientInfo['client_id'],clientInfo['session_id'])
+                
+                await client.revoke_itself(ctx)
+
+            request.state.clear = True
+            session.update_auth_state(AuthState.LOGOUT)
+            session.logout()
+
+        if self.configService.SESSION_MECHANISM in VALID_SYNC_MECHANISM:
+            broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))
+
+        return
+
+    @Throttle(normal=(250,50))
+    @UseHandler(MiniServiceHandler)
+    @UseLimiter('20/day',key_func='client')
+    @UsePermission(JWTRouteHTTPPermission,UserPermission)
+    @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
+    @UsePipe(ClientMiniServiceResponsePipe('client'),before=False)
+    @LockService(AdminService,as_manager=True,lockType='reader',miniLockType='reader')
+    @UseGuard(ClientAuthTypeGuard(accept_access=True, accept_api=False),BlacklistClientGuard)
+    @BaseHTTPRessource.HTTPRoute('/me/',methods=[HTTPMethod.GET])
+    async def me(self,request:Request,response:Response,client:Annotated[ClientMiniService,Depends(get_client_from_info)],profile:str=Depends(get_client_from_info),authPermission:AuthPermission=Depends(get_auth_permission),clientInfo:ClientAccessInfo=Depends(get_client_info)):
+        return
+        
+
+    @Throttle(normal=(300,30))
+    @UseHandler(MiniServiceHandler)
+    @UseLimiter('1/hour',key_func='client')
+    @UseInterceptor(InvalidBlacklistTokenInterceptor)
+    @UsePipe(ObjectRelationalFriendlyPipe,before=False)
+    @UsePermission(JWTRouteHTTPPermission,UserPermission)
+    @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
+    @UseGuard(ClientAuthTypeGuard(accept_access=True, accept_api=False),BlacklistClientGuard)
+    @LockService(VaultService,SettingService,AdminService,as_manager=True,lockType='reader',miniLockType='reader')
+    @BaseHTTPRessource.HTTPRoute('/me/',methods=[HTTPMethod.PUT])
+    async def update_myself(self,request:Request,response:Response,updateClient:UpdateClientModel,broker:Annotated[Broker,Depends(Broker)],client:Annotated[ClientMiniService,Depends(get_client_from_info)],profile:str=Depends(get_client_from_info),authPermission:AuthPermission=Depends(get_auth_permission),clientInfo:ClientAccessInfo=Depends(get_client_info)):
+        if clientInfo['client_type'] != ClientType.Admin and clientInfo['client_type']!=ClientType.System:
+            updateClient.issued_for = None
+            updateClient.client_scope = None
+            updateClient.client_description = None
+
+        updateClient.policies = None
+        return await ClientRessource.update_client(request,response,updateClient,broker,client,None,authPermission,clientInfo)
+
+
+    if Get(ConfigService).SESSION_MECHANISM != 'none':
+
+        @UseRoles([Role.ADMIN])
+        @Throttle(uniform=(100,250))
+        @UsePipe(SanitizePathParameterPipe({},session=True))
+        @UsePermission(JWTRouteHTTPPermission,UserPermission)
+        @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
+        @UseLimiter('10/hours',key_func='client',cost={'User':2})
+        @LockService(VaultService,SettingService,lockType='reader')
+        @UseHandler(MiniServiceHandler,ClientSecurityHandler,ClientHandler)
+        @UseGuard(ClientAuthTypeGuard(True,False),BlacklistClientGuard,PrimarySessionGuard)
+        @BaseHTTPRessource.HTTPRoute('/session/{session_id:path}',methods=[HTTPMethod.GET])
+        async def fetch_session(self,request:Request,response:Response,client:Annotated[ClientMiniService,Depends(get_client_info)],session_id:str='',source:SourceMode=Depends(source_mode_query),profile:str=Depends(get_client_from_info),clientInfo:ClientAccessInfo=Depends(get_client_info),authPermission:AuthPermission=Depends(get_auth_permission)):
+            res = {}
+            match source:
+                
+                case 'database':
+                    async with client.lock('reader'):
+                       res = await client.read_sessions(session_id)
+                    return res
+                
+                case 'memory':
+                    async with client.lock('reader'):
+                        if session_id == '':
+                            match self.configService.SESSION_MECHANISM:
+                                case 'redis+sync' | 'vault+sync':
+                                    for s in client.sessions.keys():
+                                        res[s] = client.sessions[s].to_plain()
+                                case 'redis':
+                                    raise SessionMechanismOperationError('Sessions are not stored in the memor','no-sync')
+                        else:
+                            match self.configService.SESSION_MECHANISM:
+                                case 'redis+sync' | 'vault+sync':
+                                    if session_id not in client.sessions:
+                                        raise SessionNotValidatedError(client.client_id,session_id)
+                                    res[session_id] = client.sessions[session_id].to_plain()
+                                case 'redis':
+                                    raise SessionMechanismOperationError('Sessions are not stored in the memory','no-sync')
+                case _:
+                    raise DataSourceNotSupportedError(source,['database','memory'])
+
+            return res
+
+        @UseRoles([Role.ADMIN])
+        @Throttle(uniform=(100,250))
+        @UseInterceptor(InvalidBlacklistTokenInterceptor)
+        @UsePipe(SanitizePathParameterPipe({},session=True))
+        @UsePermission(JWTRouteHTTPPermission,UserPermission)
+        @UsePipe(MiniServiceInjectorPipe(AdminService,'client'))
+        @UseLimiter('10/hours',key_func='client',cost={'User':2})
+        @UseHandler(MiniServiceHandler,ClientSecurityHandler,ClientHandler)
+        @UseGuard(ClientAuthTypeGuard(True, False),BlacklistClientGuard,PrimarySessionGuard(True))
+        @LockService(VaultService,SettingService,AdminService,as_manager=True,lockType='reader',miniLockType='reader')
+        @BaseHTTPRessource.HTTPRoute('/session/{session_id:path}',methods=[HTTPMethod.DELETE])
+        async def delete_session(self,request:Request,response:Response,broker:Annotated[Broker,Depends(Broker)],session:Annotated[AuthSessionManager,Depends(AuthSessionManager)],client:Annotated[ClientMiniService,Depends(get_client_info)],session_id:str='',profile:str=Depends(get_client_from_info),clientInfo:ClientAccessInfo=Depends(get_client_info),authPermission:AuthPermission=Depends(get_auth_permission)):
+            res = None
+            if session_id == '':
+                origin = get_client_ip(request)
+                user_agent = get_user_agent(request)
+                device_name = None
+
+                await client.revoke_itself()
+                session.update_auth_state(AuthState.SESSION_REVOKED)
+                authSignature,_ = await client.upsert_session(clientInfo['session_id'],origin,user_agent,device_name,False)
+                access_token,refresh_token = await client.generate_access(clientInfo['session_id'],authSignature.get('signature',None))
+
+                session.update_auth_state(AuthState.SESSION_REFRESHED)
+                request.state.clear = True
+
+                session.login(refresh_token)
+                
+                res = self.access_token_pipe.pipe(access_token,client)
+
+            else:
+                await client.revoke_itself(session_id=session_id)
+                response.status_code = status.HTTP_204_NO_CONTENT
+                session.update_auth_state(AuthState.SESSION_REVOKED)
+
+            if self.configService.SESSION_MECHANISM in VALID_SYNC_MECHANISM:
+                broker.propagate(MiniStateProtocol(service=AdminService,to_build=True,id=client.miniService_id  ))
+
+            return res
+
+
+    def verify_client(self,username:str, clientORM:ClientORM,__check_can_login__=False):
+        if clientORM == None:
+            raise ClientDoesNotExistError(username,True)
+        
+        if clientORM.auth_type != AuthType.ACCESS_TOKEN:
+            raise ClientDoesNotExistError(username)
+
+        if __check_can_login__ and not clientORM.can_login:
+            raise ClientNotAllowedToLoginError(username)
+
+    ###############################################################################################################################
+    #############################################                                              ####################################
+    ###############################################################################################################################
+
+
+    @BaseHTTPRessource.HTTPRoute('/password-forget/',methods=[HTTPMethod.POST],deprecated=True,mount=False)
+    async def password_forgot(self,request:Request,response:Response):
+        ...
+
+    @BaseHTTPRessource.HTTPRoute('/password-reset/',methods=[HTTPMethod.POST],deprecated=True, mount=False)
+    async def password_reset(self,request:Request,response:Response):
+        ...
+
+        

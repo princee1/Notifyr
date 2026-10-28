@@ -16,6 +16,10 @@ DOCKER_COMPOSE_MONITOR = $(DOCKER) compose -f 'monitor.docker-compose.yaml'
 # Deployment Paths
 DEPLOY_CONFIG   = ./.notifyr/deploy.json
 SECRETS_DIR     = ./.secrets
+ROOT_DIR 		= ./.root
+
+#Admin Creds
+ADMIN_CREDS_DIR = ./.admin/creds.json
 
 # Other Services
 ngrok_url = https://elegant-gazelle-leading.ngrok-free.app
@@ -149,15 +153,11 @@ deploy-data:
 
 # 	# 1. Create Initial Secrets
 	@echo "--- 🔑 Initializing Minio Credentials..."
-	./scripts/generate-creds.sh minio
+	./scripts/utils/generate-creds.sh minio
 	@echo "--- ✅ Minio Credentials ready."
 
-	@echo "--- 🔑 Initializing API Key Credentials..."
-	./scripts/generate-creds.sh api-key
-	@echo "--- ✅ API Key Credentials ready."
-
 	@echo "--- 🔑 Initializing MongoDB Replicas Keyfile"
-	./scripts/generate-creds.sh mongodb
+	./scripts/utils/generate-creds.sh mongodb
 	@echo "--- ✅ MongoDB keyfile ready."
 	@sleep 3 && clear
 
@@ -193,7 +193,7 @@ deploy-data:
 
 
 # Main deployment target
-deploy: deploy-data deploy-agentic deploy-server
+deploy: deploy-data root-init deploy-agentic deploy-server
 	@sleep 10 && clear
 	@echo "\n================================================="
 	@echo "🟢 FULL DEPLOYMENT COMPLETE (Data & Server) 🟢"
@@ -211,6 +211,23 @@ agentic: deploy-data deploy-agentic
 	$(DOCKER_COMPOSE_BASE) down ncs
 	@echo "\n================================================="
 	@echo "🟢 AGENTIC DEPLOYMENT COMPLETE 🟢"
+	@echo "================================================="
+
+.PHONY: root-init
+root-init:
+	@echo "================================================="
+	@echo "💾 Setting up Notifyr Admin"
+	@echo "================================================="
+
+	@trap 'rm -rf ./.admin/ ' EXIT INT TERM; \
+	./scripts/utils/generate-admin.sh $(ADMIN_CREDS_DIR) && \
+	$(DOCKER_COMPOSE_BASE) run --name root-init -T root-init python /usr/src/root_init.py < $(ADMIN_CREDS_DIR) && \
+	mkdir -p $(ROOT_DIR) && \
+	$(DOCKER) cp root-init:/tmp/root-credentials.json $(ROOT_DIR)/root-credentials.json && \
+	$(DOCKER) rm root-init
+	
+	@echo "================================================="
+	@echo "✅ Admin User Created"
 	@echo "================================================="
 
 
@@ -250,20 +267,6 @@ purge:
 	$(DOCKER) builder prune --all -f
 	@echo "✅ Docker build cache purged."
 
-
-refresh-apikey:
-	@echo "================================================="
-	@echo "🔄 Refreshing API Key and Redeploying App"
-	@echo "================================================="
-	@echo "--- 🔑 Creating new API Key..."
-	./scripts/generate-creds.sh api-key --force
-	@echo "--- 🚀 Redeploying 'app' service with new build..."
-	$(call COMPOSE_RUN, App Update, up -d, app)
-	@echo "================================================="
-	@echo "✅ API Key Refreshed."
-	@echo "================================================="
-
-
 refresh-cost:
 	@echo "================================================="
 	@echo "💰 Refreshing Cost File and Top-up"
@@ -296,7 +299,6 @@ update:
 	@echo "✅ New container deployed with updated code"
 	@echo "================================================="
 
-
 # ==============================================================================
 # 5. Monitoring Targets
 # ==============================================================================
@@ -307,7 +309,7 @@ monitor-on:
 	@echo "================================================="
 	
 # 	# 1. Stop web-facing/DMZ services from base compose
-	$(call COMPOSE_RUN, Base Services Down, down, traeffik dashboard dmz)
+	$(call COMPOSE_RUN, Base Services Down, down, traefik dashboard dmz)
 	
 	@sleep 3 && clear
 	

@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import contextmanager
 import functools
 import json
 from random import randint
@@ -15,6 +16,7 @@ from app.services.config_service import ConfigService, WorkerService
 from app.services.database.base_db_service import BrokerService, CredentialName, ResultBackendService, TempCredentialsDatabaseService
 from app.services.file.file_service import FileService
 from app.services.reactive_service import ReactiveService
+from app.services.timer_service import TimerService
 from app.services.vault_service import VaultService
 from app.utils.constant import HostConstant, RedisConstant, SubConstant, VaultConstant
 from app.utils.globals import APP_MODE, CAPABILITIES, ApplicationMode
@@ -34,22 +36,53 @@ CELERY_BACKEND_CREDS='celery-backend'
 CELERY_BROKER_CREDS='celery-broker'
 AGENTIC_CREDS='agentic'
 CREDIT_CREDS='credit'
+SECURITY_CREDS='security'
+CONFIG_CREDS='config'
 
 AGENTIC_APP_MODE_CRED = {ApplicationMode.arq,ApplicationMode.agentic,ApplicationMode.server}
+
+
+def _serialize_redis_value(value:Any)->Any:
+    if isinstance(value,(dict,list,tuple,set)):
+        return json.dumps(value)
+    return value
+
+def _deserialize_redis_value(value:Any)->Any:
+    if value == None:
+        return None
+
+    if not isinstance(value,str):
+        return value
+    try:
+        return json.loads(value)
+    except (TypeError, ValueError):
+        return value
+
+
+REDIS_PREFIX_BUILDER:dict[int|str,Callable[[str],str]] ={
+    #RedisConstant.COST_DB: lambda c:f'notifyr/credit:{c}',
+    RedisConstant.SECURITY_DB: lambda s:f'notifyr/security/{s}',
+    RedisConstant.AGENTIC_DB: lambda a:f'notifyr/agentic/{a}',
+    RedisConstant.CONFIG_DB:lambda c:f'notifyr/config/{c}',
+    'agentic':lambda a:f'notifyr/agentic/{a}',
+    #'cost':lambda c:f'notifyr/credit:{c}',
+    'security':lambda s: f'notifyr/security/{s}',
+    'config':lambda c:f'notifyr/config/{c}',
+}
 
 @Service()
 class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerService):
 
     GROUP = 'NOTIFYR-GROUP'
     
-    def __init__(self,configService:ConfigService,reactiveService:ReactiveService,vaultService:VaultService,workerService:WorkerService,fileService:FileService):
-        super().__init__(configService,fileService,vaultService,60*60*24*29,)
+    def __init__(self,configService:ConfigService,reactiveService:ReactiveService,vaultService:VaultService,workerService:WorkerService,fileService:FileService,timerService:TimerService):
+        super().__init__(configService,fileService,vaultService,timerService,60*60*24*29,)
         self.configService = configService
         self.reactiveService = reactiveService
         self.workerService = workerService
         self.to_shutdown = False
         self.callbacks = CALLBACKS_CONFIG.copy()
-        self.db:Dict[Literal['celery','limiter','events','cache','config','agentic',0,1,2,3,4,5],Redis] = {}
+        self.db:Dict[Literal['celery','limiter','events','cache','config','agentic','cost','security',0,1,2,3,4,5,6,7],Redis] = {}
 
         self.consumer_name = f'notifyr-consumer={self.workerService.INSTANCE_ID}'
 
@@ -195,25 +228,45 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
                 if 'stream_tasks' in config and config['stream_tasks']:
                     config['stream_tasks'].cancel()
             
-        len_db = len(self.db.keys())//2
-        for i in range(len_db):
+        for i in self.db.keys():
+            if not isinstance(i,int):
+                continue
+            
             await self.db[i].close()
 
     @staticmethod
-    def check_db(func:Callable):
+    def check_db(use_prefix=True):
 
-        @functools.wraps(func)
-        async def wrapper(self:Self,database:int|str,*args,**kwargs):
-            if 'redis' in kwargs and kwargs['redis'] and isinstance(kwargs['redis'],Redis):
+        def decorator(func:Callable):
+            @functools.wraps(func)
+            async def wrapper(self:Self,database:int|str,*args,**kwargs):
+
+                if use_prefix and database and database in REDIS_PREFIX_BUILDER:
+                    prefix_builder = REDIS_PREFIX_BUILDER[database]
+                    args = tuple([prefix_builder(args[0]),*args[1:]])
+
+                if 'redis' in kwargs and kwargs['redis'] and isinstance(kwargs['redis'],Redis):
+                    return await func(self,database,*args,**kwargs)
+                
+                if database not in self.db:
+                    raise RedisDatabaseDoesNotExistsError(database)
+                kwargs['redis'] = self.db[database]
+                #return await None# ERROR
                 return await func(self,database,*args,**kwargs)
-            
-            if database not in self.db:
-                raise RedisDatabaseDoesNotExistsError(database)
-            kwargs['redis'] = self.db[database]
-            #return await None# ERROR
-            return await func(self,database,*args,**kwargs)
 
-        return wrapper
+            return wrapper
+        
+        return decorator
+
+    @contextmanager
+    def redis_synccontext(self,db:int,suffix:str,host:str=NOTIFYR_HOST,prefix:str='app'):
+
+        cred = self.vaultService.database_engine.generate_credentials(VaultConstant.REDIS_ROLE,prefix,suffix)
+        username = cred['data']['username']
+        password = cred['data']['password']
+        yield SyncRedis(host,db=db,username=username,password=password)
+        self.vaultService.revoke_lease(cred['lease_id'])
+
 
     def build(self,build_state=-1):
         self.generate_credentials()
@@ -233,9 +286,15 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
             raise BuildFailureError(e.args)
     
     def generate_credentials(self):
-        self.add_credentials(VaultConstant.REDIS_ROLE)
+        self.add_credentials(VaultConstant.REDIS_ROLE,prefix='app')
         self.add_credentials(VaultConstant.REDIS_ROLE,CREDIT_CREDS,prefix='app',suffix='credit')
-        self.add_credentials(VaultConstant.REDIS_ROLE,CELERY_BACKEND_CREDS,suffix='celery-backend')
+        self.add_credentials(VaultConstant.REDIS_ROLE,CONFIG_CREDS,prefix='app',suffix='config')
+        
+        if self.configService.JOBSTORE_DB == 'redis':
+            self.add_credentials(VaultConstant.REDIS_ROLE,CELERY_BACKEND_CREDS,suffix='celery-backend')
+
+        if self.configService.AUTH_MECHANISM == 'userpass' or self.configService.AUTH_MECHANISM == 'both':
+            self.add_credentials(VaultConstant.REDIS_ROLE,SECURITY_CREDS,suffix='security')
 
         if self.configService.CELERY_BROKER_PROVIDER == 'redis':
             self.add_credentials(VaultConstant.REDIS_ROLE,CELERY_BROKER_CREDS,suffix='celery-broker')
@@ -246,14 +305,10 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
     def create_redis_instance(self):
 
         self.redis_cost = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.COST_DB,decode_responses=True,username=self.db_user(CREDIT_CREDS),password=self.db_password(CREDIT_CREDS))
-        self.redis_celery = Redis(host=self.configService.REDIS_HOST,db=RedisConstant.CELERY_DB,username=self.db_user(CELERY_BACKEND_CREDS),password=self.db_password(CELERY_BACKEND_CREDS))
         
         self.redis_limiter = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.LIMITER_DB,username=self.db_user(),password=self.db_password())
         self.redis_cache = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.CACHE_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
-        self.redis_config = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.CONFIG_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
-
-        if CAPABILITIES['agentic'] and APP_MODE in AGENTIC_APP_MODE_CRED:
-            self.redis_agentic = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.AGENTIC_DB,decode_responses=True,username=self.db_user(AGENTIC_CREDS),password=self.db_password(AGENTIC_CREDS))        
+        self.redis_config = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.CONFIG_DB,decode_responses=True,username=self.db_user(CONFIG_CREDS),password=self.db_password(CONFIG_CREDS))
 
         if APP_MODE == ApplicationMode.beat or APP_MODE == ApplicationMode.worker:
             self.redis_events = SyncRedis(host=HostConstant.REDIS_HOST,db=RedisConstant.EVENT_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
@@ -262,13 +317,11 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         
         self.db.clear()
         self.db.update({
-            RedisConstant.CELERY_DB:self.redis_celery,
             RedisConstant.LIMITER_DB:self.redis_limiter,
             RedisConstant.EVENT_DB:self.redis_events,
             RedisConstant.CACHE_DB:self.redis_cache,
             RedisConstant.CONFIG_DB:self.redis_config,
             RedisConstant.COST_DB:self.redis_cost,
-            'celery':self.redis_celery,
             'limiter':self.redis_limiter,
             'events': self.redis_events,
             'cache':self.redis_cache,
@@ -276,11 +329,18 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
             'cost':self.redis_cost
         })
 
+        if self.configService.AUTH_MECHANISM == 'userpass' or self.configService.AUTH_MECHANISM == 'both':
+            self.redis_security = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.SECURITY_DB,decode_responses=True,username=self.db_user(SECURITY_CREDS),password=self.db_password(SECURITY_CREDS))
+            self.db['security'] = self.redis_security
+            self.db[RedisConstant.SECURITY_DB] = self.redis_security
+
         if CAPABILITIES['agentic'] and APP_MODE in AGENTIC_APP_MODE_CRED:
+            self.redis_agentic = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.AGENTIC_DB,decode_responses=True,username=self.db_user(AGENTIC_CREDS),password=self.db_password(AGENTIC_CREDS))        
             self.db['agentic']=self.redis_agentic
             self.db[RedisConstant.AGENTIC_DB]= self.redis_agentic
 
         if self.configService.JOBSTORE_DB == 'redis':
+            self.redis_celery = Redis(host=self.configService.REDIS_HOST,db=RedisConstant.CELERY_DB,username=self.db_user(CELERY_BACKEND_CREDS),password=self.db_password(CELERY_BACKEND_CREDS))
             self.db['celery'] = self.redis_celery
             self.db[RedisConstant.CELERY_DB] = self.redis_celery
 
@@ -289,8 +349,19 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
             if name == None or name == CELERY_BROKER_CREDS:
                 super().revoke_lease(CELERY_BROKER_CREDS)
 
-        if name == None or name == CELERY_BACKEND_CREDS:
-            super().revoke_lease(CELERY_BACKEND_CREDS)
+        if self.configService.JOBSTORE_DB == 'redis':
+            if name == None or name == CELERY_BACKEND_CREDS:
+                super().revoke_lease(CELERY_BACKEND_CREDS)
+
+        if name == None or name == SECURITY_CREDS:
+            super().revoke_lease(SECURITY_CREDS)
+
+        if name == None or name == CREDIT_CREDS:
+            super().revoke_lease(CREDIT_CREDS)
+
+        if CAPABILITIES['agentic'] and APP_MODE in AGENTIC_APP_MODE_CRED:
+            if (name == None or name == AGENTIC_CREDS):
+                super().revoke_lease(AGENTIC_CREDS)
         
         if name == None or name == 'default':
             super().revoke_lease()
@@ -300,15 +371,15 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         await RunInThreadPool(self.generate_credentials)()
         self.create_redis_instance()
 
-    @check_db
-    async def store(self,database:int|str,key:str,value:Any,expiry,nx:bool= False,xx:bool=False,redis:Redis=None):
+    @check_db()
+    async def store(self,database:int|str,key:str,value:Any,expiry:int,nx:bool= False,xx:bool=False,redis:Redis=None):
         if isinstance(value,(dict,list)):
             value = json.dumps(value)
         if expiry <=0:
             expiry = None
         return await redis.set(key,value,ex=expiry,get=True,nx=nx,xx=xx)
     
-    @check_db
+    @check_db()
     async def retrieve(self,database:int|str,key:str,redis:Redis=None):
         value = await redis.get(key)
         if not isinstance(value,str):
@@ -316,11 +387,11 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         value = json.loads(value)
         return value
     
-    @check_db
+    @check_db()
     async def delete(self,database:int|str,key:str,redis:Redis=None):
         return await redis.delete(key)
 
-    @check_db
+    @check_db()
     async def exists(self,database:int|str,key:str,redis:Redis=None)->bool:
         if isinstance(key,(list,tuple)):
             result =  await redis.exists(*key)
@@ -331,7 +402,7 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         
         return result > 0
             
-    @check_db
+    @check_db(False)
     async def delete_all(self, database: int | str, prefix: str, simple_prefix=True,redis: Redis = None):
         if simple_prefix:
             prefix =f"{prefix}*"
@@ -340,59 +411,86 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
             return await redis.delete(*keys)
         return 0
     
-    @check_db
-    async def scan(self,database:int|str,match,redis:Redis=None):
-        cursor = 0
-        keys = []
-        while True:
-            cursor, key = redis.scan(
-                cursor=cursor,
-                match=match,
-                count=500
-            )
-            keys.extend(key)
-            if cursor == 0:
-                break
-        return list(set(keys))
+    @check_db()
+    async def scan(self,database:int|str,match:str,mode:Literal['scan','keys']='keys',redis:Redis=None):
+        if mode == 'scan':
+            cursor = 0
+            keys = []
+            while True:
+                cursor, key = await redis.scan(
+                    cursor=cursor,
+                    match=match,
+                    count=500
+                )
+                keys.extend(key)
+                if cursor == 0:
+                    break
+            return list(set(keys))
+        else:
+            return await redis.keys(match)
     
-    @check_db
+    @check_db()
     async def append(self,database:int|str,key:str,data:Any,redis:Redis=None):
         return await redis.append(key,data)
     
-    @check_db
+    @check_db()
     async def increment(self,database:int|str,name:str,amount:int,redis:Redis=None):
         return await redis.incrby(name,amount)
     
-    @check_db
+    @check_db()
     async def decrement(self,database:int|str,name:str,amount:int,redis:Redis=None):
         return await redis.decrby(name,amount)
+
+    @check_db()
+    async def expire(self,database:int|str,hash_name:str,ttl:int,nx:int=False,xx:int=False,redis:Redis=None):
+        return await redis.expire(hash_name,ttl,nx=nx,xx=xx)
     
-    @check_db
+    @check_db()
     async def hash_kdel(self,database:int|str,hash_name,*keys:str,redis:Redis=None):
-        return await redis.hdel(*keys)
+        count = await redis.hdel(hash_name,*keys)
+        if count <1:
+            raise 
+        return count
     
-    @check_db
+    @check_db()
     async def hash_set(self,database:int|str,hash_name:str,key:str=None,value:Any=None,mapping:dict=None,redis:Redis=None):
-        return await redis.hset(hash_name,key,value,mapping)
+        if mapping is not None:
+            mapping = {k:_serialize_redis_value(v) for k,v in mapping.items()}
+            return await redis.hset(hash_name, mapping=mapping)
+
+        value = _serialize_redis_value(value)
+        count = await redis.hset(hash_name,key,value)
+        return count
+        if count <1:
+            raise 
+        return count
     
-    @check_db
-    async def expire(self,database:int|str,hash_name:str,ttl:int,nx=False,redis:Redis=None):
-        return await redis.expire(hash_name,ttl,nx=nx)
-    
-    @check_db
-    async def hash_get(self,database:int|str,hash_name,redis:Redis=None):
-        return await redis.hgetall(hash_name)
+    @check_db()
+    async def hash_get(self,database:int|str,hash_name:str,key:str,redis:Redis=None):
+        value = await redis.hget(hash_name,key)
+        return _deserialize_redis_value(value)
+
+    @check_db()
+    async def hash_exists(self,database:int|str,hash_name:str,key:str,redis:Redis=None):
+        return await redis.hexists(hash_name,key)
+
+    @check_db()
+    async def hash_get_all(self,database:int|str,hash_name,redis:Redis=None):
+        values = await redis.hgetall(hash_name)
+        if not values:
+            return {}
+        return {k:_deserialize_redis_value(v) for k,v in values.items()}
        
-    @check_db
+    @check_db()
     async def push(self,database:int|str,name:str,*element:dict,redis:Redis=None):
         element = [json.dumps(e) for e in list(element)]
         return await redis.lpush(name,*element)
 
-    @check_db
+    @check_db()
     async def range(self,database:int|str,name:str,start:int,stop:int,redis:Redis=None):
         return await redis.lrange(name,start,stop)
 
-    @check_db
+    @check_db()
     async def rem(self,database:int|str,name:str,*keys:str,redis:Redis=None):
         return await redis.zrem(name,*keys)
 

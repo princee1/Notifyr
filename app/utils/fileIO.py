@@ -170,6 +170,8 @@ class JSONFile(File):
     def load(self, from_data=None):
         super().load(from_data)
         if not self.exists and from_data is None:
+            self.data = {}
+            self.loaded = False
             return 
 
         if from_data != None:
@@ -209,6 +211,7 @@ class JSONFile(File):
     
     def __setitem__(self,key,value):
         self.data[key] = value
+        self.loaded = True
 
     def export(self,encoding='utf-8'):
         return json.dumps(self.data).encode()

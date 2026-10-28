@@ -2,6 +2,8 @@ from enum import Enum
 from datetime import datetime
 from typing import Self, TypedDict
 from tortoise import Tortoise, fields, models
+from app.models.orm.contacts_model import ContactORM
+from app.utils.constant import PostgresConstant
 from app.utils.helper import uuid_v1_mc
 from tortoise.contrib.pydantic import pydantic_model_creator
 from pydantic import BaseModel, field_validator, model_validator
@@ -40,7 +42,7 @@ class DirectionEnum(str, Enum):
 class SMSTrackingORM(models.Model):
     sms_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     sms_sid = fields.CharField(max_length=60, null=True, default=None)
-    contact = fields.ForeignKeyField('default.ContactORM', null=True, on_delete=fields.SET_NULL)
+    contact = fields.ForeignKeyField(ContactORM, null=True, on_delete=fields.SET_NULL)
     recipient = fields.CharField(max_length=100)
     sender = fields.CharField(max_length=100)
     date_sent = fields.DatetimeField(auto_now_add=True, use_tz=True)
@@ -52,6 +54,7 @@ class SMSTrackingORM(models.Model):
 
     class Meta:
         schema = SCHEMA
+        app = PostgresConstant.NOTIFYR_APP
         table = "smstracking"
 
     @property
@@ -74,7 +77,7 @@ class SMSTrackingORM(models.Model):
 class CallTrackingORM(models.Model):
     call_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     call_sid = fields.CharField(max_length=60, null=True, default=None)
-    contact = fields.ForeignKeyField('default.ContactORM', null=True, on_delete=fields.SET_NULL)
+    contact = fields.ForeignKeyField(ContactORM, null=True, on_delete=fields.SET_NULL)
     recipient = fields.CharField(max_length=100)
     sender = fields.CharField(max_length=100)
     date_started = fields.DatetimeField(auto_now_add=True, use_tz=True)
@@ -88,6 +91,7 @@ class CallTrackingORM(models.Model):
 
     class Meta:
         schema = SCHEMA
+        app = PostgresConstant.NOTIFYR_APP
         table = "calltracking"
 
     @property
@@ -110,7 +114,7 @@ class CallTrackingORM(models.Model):
 
 class SMSEventORM(models.Model):
     event_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    sms = fields.ForeignKeyField("default.SMSTrackingORM", related_name="events", on_delete=fields.CASCADE)
+    sms = fields.ForeignKeyField(SMSTrackingORM, related_name="events", on_delete=fields.CASCADE)
     sms_sid = fields.CharField(max_length=60,null=True)
     direction = fields.CharEnumField(enum_type=DirectionEnum, max_length=1)
     current_event = fields.CharEnumField(enum_type=SMSStatusEnum, max_length=50)
@@ -132,6 +136,7 @@ class SMSEventORM(models.Model):
 
     class Meta:
         schema = SCHEMA
+        app = PostgresConstant.NOTIFYR_APP
         table = "smsevent"
 
     @property
@@ -149,7 +154,7 @@ class SMSEventORM(models.Model):
 
 class CallEventORM(models.Model):
     event_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    call = fields.ForeignKeyField("default.CallTrackingORM", related_name="events", null=True, on_delete=fields.CASCADE)
+    call = fields.ForeignKeyField(CallTrackingORM, related_name="events", null=True, on_delete=fields.CASCADE)
     call_sid = fields.CharField(max_length=60,null=True)
     direction = fields.CharEnumField(enum_type=DirectionEnum, max_length=1)
     current_event = fields.CharEnumField(enum_type=CallStatusEnum, max_length=50)
@@ -178,6 +183,7 @@ class CallEventORM(models.Model):
         call_duration:int|None=None
         
     class Meta:
+        app = PostgresConstant.NOTIFYR_APP
         schema = SCHEMA
         table = "callevent"
 
@@ -212,6 +218,7 @@ class SMSAnalyticsORM(models.Model):
 
     class Meta:
         schema = SCHEMA
+        app = PostgresConstant.NOTIFYR_APP
         table = "smsanalytics"
         unique_together = ("week_start_date", "direction")
 
@@ -254,6 +261,7 @@ class CallAnalyticsORM(models.Model):
     #average_call_duration = fields.FloatField(default=0)
 
     class Meta:
+        app = PostgresConstant.NOTIFYR_APP
         schema = SCHEMA
         table = "callanalytics"
         unique_together = ("week_start_date", "direction", "country", "state", "city")

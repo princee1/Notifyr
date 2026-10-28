@@ -10,35 +10,42 @@ Register(CeleryService)
 configService = Get(ConfigService)
 costService = Get(CostService)
 
-from .admin_ressource import AdminRessource
 from .worker.result_ressource import ResultBackendRessource
 from .contacts_ressources import ContactsRessource
-from .auth_ressource import AuthRessource
 from .app_ressource import AppRessource
 from .link_ressource import LinkRessource
-from .ping_pong_ressource import PingPongRessource
-from .properties_ressource import PropertiesRessource
+from .internal.ping_pong_ressource import PingPongRessource
+from .internal.properties_ressource import PropertiesRessource
 from .analytics_ressource import AnalyticsRessource
-from .profile_ressource import ProfilRessource
+from .profile_ressource import ProfileRessource
 from .cost_ressource import CostRessource
 from .worker.celery_ressource import CeleryRessource
 from app.definition._ressource import BaseHTTPRessource
 
 
 SERVER_RESSOURCES:list[Type[BaseHTTPRessource]] = [
-                                                 AdminRessource,
                                                  ResultBackendRessource,
                                                  ContactsRessource,
-                                                 AuthRessource,
                                                  AppRessource,
                                                  LinkRessource,
                                                  PingPongRessource,
                                                  PropertiesRessource,
                                                  AnalyticsRessource,
-                                                 ProfilRessource,
+                                                 ProfileRessource,
                                                  CostRessource,
                                                  CeleryRessource]
 
+if configService.AUTH_MECHANISM == 'userpass' or configService.AUTH_MECHANISM == 'both':
+    from .admin_ressource import AdminRessource
+    from .auth_ressource import AuthRessource
+
+    SERVER_RESSOURCES.append(AdminRessource)
+    SERVER_RESSOURCES.append(AuthRessource)
+
+if configService.AUTH_MECHANISM == 'token' or configService.AUTH_MECHANISM == 'both':
+    from .access_ressource import AccessRessource
+
+    SERVER_RESSOURCES.append(AccessRessource)
 
 if CAPABILITIES['object']:
     from .object_s3_ressource import S3ObjectRessource
@@ -46,7 +53,6 @@ if CAPABILITIES['object']:
     if configService.ASSET_MODE == AssetMode.s3:
         SERVER_RESSOURCES.append(S3ObjectRessource)
     SERVER_RESSOURCES.append(BlogsRessource)
-    
 
 if CAPABILITIES['webhook']:
     ...
@@ -69,7 +75,6 @@ if CAPABILITIES['agentic']:
     SERVER_RESSOURCES.append(DataIngestRessource)
     SERVER_RESSOURCES.append(GatewayAgenticRessource)
     SERVER_RESSOURCES.append(AgentsRessource)
-
 
 if CAPABILITIES['notification']:
     from .ntfr.notification_ressource import NotificationRessource

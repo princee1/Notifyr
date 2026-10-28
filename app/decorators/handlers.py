@@ -5,6 +5,7 @@ from typing import Callable
 
 import aiohttp
 from amqp import AccessRefused
+import asyncpg
 from fastapi.exceptions import ResponseValidationError
 import grpc
 import hvac
@@ -16,7 +17,7 @@ from app.errors.ingest_error import AgenticDatabaseNotAllowedError, IngestConfig
 from app.errors.agentic_error import *
 from app.errors.llm_error import LLMProviderDoesNotExistError, LLMModelNotPermittedError, LLMModelMaxTokenExceededError, LLMRateLimiterError, LLMConfigNotConfiguredError
 from app.services.worker.arq_service import DataTaskNotFoundError, JobAlreadyExistsError, JobDequeueError, JobDoesNotExistsError, JobInProgressError, JobStatusNotValidError,ResultNotFound, UnexpectedJobStatusError
-from app.classes.auth_permission import WSPathNotFoundError
+from app.classes.auth_permission import AccessAlreadyExistsError, AccessDoesNotExistsError, AccessHardLimitReachedError, AccessIdCannotBeUsedError, WSPathNotFoundError
 from app.classes.stream_data_parser import ContinuousStateError, DataParsingError, SequentialStateError, ValidationDataError
 from app.classes.template import SchemaValidationError, SkipTemplateCreationError, TemplateBuildError, TemplateCreationError, TemplateFormatError, TemplateInjectError, TemplateNotFoundError, TemplateValidationError
 from app.container import InjectInMethod
@@ -32,7 +33,7 @@ from app.errors.service_error import MiniServiceAlreadyExistsError,MiniServiceDo
 from app.errors.async_error import KeepAliveTimeoutError, LockNotFoundError, ReactiveSubjectNotFoundError
 from app.errors.contact_error import ContactAlreadyExistsError, ContactMissingInfoKeyError, ContactNotExistsError, ContactDoubleOptInAlreadySetError, ContactOptInCodeNotMatchError
 from app.errors.properties_error import GlobalKeyAlreadyExistsError, GlobalKeyDoesNotExistsError
-from app.errors.security_error import AlreadyBlacklistedClientError, AuthzIdMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupAlreadyBlacklistedError, GroupIdNotMatchError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError
+from app.errors.security_error import ClientAlreadyExistError, ClientAuthenticationConfusionError, ClientNotAllowedToLoginError, IdentityAlreadyBlacklistedError, AuthzSignatureMisMatchError, ClientDoesNotExistError, CouldNotCreateAuthTokenError, CouldNotCreateRefreshTokenError, GroupDoesNotExistError, GroupIdNotMatchError, IdentityBlacklistedError, JWTInvalidTokenError, MaximumRefreshReuseReachedError, MaximumSessionReachedError, MaximumSessionReachedError, PrimarySessionNotValidatedError, ProvidedHashNotEquivalentError, RefreshTokenIdentityMismatchError, RequestOriginIsNotValidError, SecurityIdentityNotResolvedError, ClientTokenHeaderNotProvidedError, SessionMechanismOperationError, SessionNotValidatedError, TokenDataMissingError, TokenExpiredError, TokenGenerationMismatchError
 from app.errors.twilio_error import TwilioCallBusyError, TwilioCallFailedError, TwilioCallNoAnswerError, TwilioPhoneNumberParseError
 from app.classes.profiles import ProfileModelRequestBodyError, ProfileDoesNotExistsError, ProfileHasNotCapabilitiesError, ProfileModelTypeDoesNotExistsError, ProfileNotAvailableError, ProfileNotSpecifiedError, ProfileTypeNotMatchRequest
 from app.services.assets_service import AssetConfusionError, AssetNotFoundError, AssetTypeNotAllowedError, AssetTypeNotFoundError
@@ -61,6 +62,7 @@ from app.errors.db_error import (
     MongoClientAlreadyExistError,
     MongoClientModeDoesNotExistError,
     MongoTransactionFailureError,
+    VaultHardLimitError,
 )
 from app.utils.fileIO import ExtensionNotAllowedError, MultipleExtensionError
 from aiomcache.exceptions import ClientException, ValidationException 
@@ -383,6 +385,13 @@ class TortoiseHandler(Handler):
             mess = str(mess)
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
                                 'message': 'Parameters error', 'detail': mess, })
+
+        except asyncpg.exceptions.RaiseError as e:
+            err = e.as_dict()
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={
+                'message':e.sqlstate,
+                'error':err
+            })
         
         except TortoiseTransactionFailureError as e :
             raise ...
@@ -394,20 +403,19 @@ class TortoiseHandler(Handler):
             mess = str(mess)
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
                                 'message': 'ORM error', 'detail': mess, })
+        
 
-class SecurityClientHandler(Handler):
+class ClientSecurityHandler(Handler):
 
     async def handle(self, function, *args, **kwargs):
         try:
-            return await function(*args, **kwargs)
+            return await super().handle(function, *args, **kwargs)
+        except ProvidedHashNotEquivalentError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail=e.detail)
 
-        except GroupAlreadyBlacklistedError as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
-                'message': f'Group {e.group_id} is already blacklisted',
-                'group_id': e.group_id,
-                'group_name': e.group_name
-            })
-
+        except SessionMechanismOperationError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail=e.detail)
+        
         except CouldNotCreateRefreshTokenError as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={
                 'message': 'Could not create refresh token'
@@ -418,10 +426,49 @@ class SecurityClientHandler(Handler):
                 'message': 'Could not create auth token'
             })
 
-        except SecurityIdentityNotResolvedError as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
-                'message': 'Both group and client can\'t be None'
+        except ClientTokenHeaderNotProvidedError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'message': 'Client token header not provided',})
+
+        except AuthzSignatureMisMatchError as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={'message': 'Authorization Signature mismatch',})
+        
+        except (TokenExpiredError,TokenGenerationMismatchError) as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail=e.detail)
+
+        except (MaximumSessionReachedError,MaximumRefreshReuseReachedError) as e :
+            raise HTTPException(status_code =status.HTTP_403_FORBIDDEN,detail=e.detail)
+
+        except PrimarySessionNotValidatedError as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail=e.detail)
+
+        except SessionNotValidatedError as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail=e.detail)
+
+        except TokenDataMissingError as e:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail={'message':'could not properly decode the token'})
+
+        except RequestOriginIsNotValidError as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail=e.detail)
+
+        except JWTInvalidTokenError as e:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail=e.detail)
+        
+        except RefreshTokenIdentityMismatchError as e :
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail=e.detail)
+
+class ClientHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+
+        except ClientAlreadyExistError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={
+                'message':'Client already exist with those identifiant'
             })
+
+        except SecurityIdentityNotResolvedError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.detail)
 
         except GroupIdNotMatchError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
@@ -431,24 +478,40 @@ class SecurityClientHandler(Handler):
             })
 
         except ClientDoesNotExistError as e:
+            if e.from_auth:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail={
+                    'message':'No client match those credentials'                })
+            
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={
                 'message': 'Client does not exist'
             })
 
-        except AlreadyBlacklistedClientError as e:
+        except IdentityAlreadyBlacklistedError as e:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={
                 'message': 'Client is already blacklisted'if not e.reversed_ else 'Client is not blacklisted yet',
             })
-
-        except ClientTokenHeaderNotProvidedError as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
-                'message': 'Client token header not provided',
+        
+        except GroupDoesNotExistError as e:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={
+                'message': 'Group does not exist',
+                'group_id': e.group_id
             })
-
-        except AuthzIdMisMatchError as e:
+    
+        except IdentityBlacklistedError as e:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={
-                'message': 'Authorization ID mismatch',
+                'message': f'{e.identity_type} {e.identity} is blacklisted',
+                'identity': e.identity,
+                'identity_type': e.identity_type
             })
+
+        except ClientAuthenticationConfusionError as e:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail = e.detail,
+            )
+
+        except ClientNotAllowedToLoginError as e:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail = e.detail)
 
 class ValueErrorHandler(Handler):
 
@@ -506,7 +569,6 @@ class MotorErrorHandler(Handler):
         except DocumentDoesNotExistsError as e:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,detail=f"Document with id '{e.id}' does not exists")
-
 
 class MongooseHandler(Handler):
 
@@ -615,6 +677,7 @@ class ORMCacheHandler(Handler):
     async def handle(self, function, *args, **kwargs):
         return await function(*args,**kwargs)
 
+
 async def handle_http_exception(function, *args, **kwargs):
     
     try:
@@ -691,17 +754,24 @@ class VaultHandler(Handler):
     async def handle(self, function, *args, **kwargs):
         try:
             return await function(*args,**kwargs)
+
+        except hvac.exceptions.InvalidPath as e:
+            raise HTTPException(status_code=500,detail={'message':f'invalid path at vault {e}'})
+        
         except hvac.exceptions.InvalidRequest as e:
-            raise HTTPException(500,)
+            raise HTTPException(500,detail={'message':f'invalid request at vault {e}'})
 
         except hvac.exceptions.Forbidden as e:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail={'message':str(e)})
 
         except hvac.exceptions.Unauthorized as e:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail={'message':str(e)})
 
         except requests.exceptions.ReadTimeout:
             raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT,detail="Vault server did not respond in time")
+        
+        except VaultHardLimitError as e:
+            raise HTTPException(status_code=status.HTTP_507_INSUFFICIENT_STORAGE,detail={'message':'Vault hard limit reached',**e.detail()})
 
 class MiniServiceHandler(Handler):
 
@@ -716,12 +786,12 @@ class MiniServiceHandler(Handler):
         except MiniServiceDoesNotExistsError as e:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="MiniService does not exist"
+                detail={"message": "MiniService does not exist", "service": e.service,'mini_service':e.miniService_id}
             )
         except MiniServiceCannotBeIdentifiedError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-               detail="MiniService cannot be identified"
+                detail={"message": "MiniService cannot be identified"}
             )
 
 class S3Handler(Handler):
@@ -875,6 +945,12 @@ class RedisHandler(Handler):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=str(e)
             )
+        
+        # except redis.exceptions.InvalidPasswordError as e:
+        #     raise HTTPException(
+        #         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        #         detail='could not connect to redis invalid credentials'
+        #                 )
 
         except redis.exceptions.LockError:
             raise HTTPException(
@@ -914,6 +990,7 @@ from app.classes.cost_definition import (
     CostDefinitionNotFoundError,
     CostException,
     CostLessThanZeroError,
+    CostMechanismNotActivatedError,
     CostMoreThanZeroError,
     CreditNotInPlanError,
     PaymentFailedError,
@@ -998,6 +1075,9 @@ class CostHandler(Handler):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={'message':'Credit does not appear in the plan','error':str(e)}
             )
+
+        except CostMechanismNotActivatedError as e:
+            raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED,detail='Cost Mechanism not implemented')
 
         except CostException as e:
             # generic cost-related errors fallback
@@ -1305,7 +1385,6 @@ class EmbeddingHandler(Handler):
                 detail="An embedding operation failed"
             ) from e
         
-
 class AgentHandler(Handler):
 
     async def handle(self, function, *args, **kwargs):
@@ -1419,3 +1498,25 @@ class DataSourceHandler(Handler):
             return await super().handle(function, *args, **kwargs)
         except DataSourceNotSupportedError as e:
             raise  
+
+class AccessHandler(Handler):
+
+    async def handle(self, function, *args, **kwargs):
+        try:
+            return await super().handle(function, *args, **kwargs)
+        except AccessHardLimitReachedError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail='Hard limit reached'
+            ) from e
+        except AccessAlreadyExistsError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f'access : {e.access} already exists'
+            ) from e
+
+        except AccessDoesNotExistsError as e:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail=f'access : {e.access} does not exists')
+
+        except AccessIdCannotBeUsedError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail=f'access : {e.access} does not exists')

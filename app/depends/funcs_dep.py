@@ -2,18 +2,19 @@ import functools
 from typing import Annotated, Callable
 from fastapi import Depends, HTTPException, Header, Query, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from app.classes.auth_permission import AuthPermission, ClientType, ContactPermission, Role, filter_asset_permission
+from app.classes.auth_permission import AccessAPIInfo, AuthPermission, ClientAccessInfo, ClientType, ContactPermission, IssuerInfo, PolicyModel, Role, filter_asset_permission
 from app.container import Get
 from app.definition._error import ServerFileError
 from app.models.orm.contacts_model import ContactORM, ContentSubscriptionORM
 from app.models.orm.link_model import LinkORM
-from app.models.orm.security_model import BlacklistORM, ChallengeORM, ClientORM, GroupClientORM, PolicyMappingORM, PolicyORM
+from app.models.orm.security_model import BlacklistModel, ClientORM, GroupClientORM, PolicyMappingORM
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService, SecurityService
-from app.depends.dependencies import get_auth_permission, get_query_params, get_request_id, wrapper_auth_permission
-from tortoise.exceptions import OperationalError
+from app.depends.dependencies import get_access_info, get_auth_mechanism, get_auth_permission, get_client_info, get_query_params, get_request_id, wrapper_auth_permission
 
-from app.utils.helper import filter_paths
+from app.services.vault_service import VaultService
+from app.utils.constant import FastAPIConstant
+from app.utils.toolbox import RunInThreadPool
 from .variables import *
 
 
@@ -59,56 +60,12 @@ def ByPassAdminRole(bypass=False, skip=False):
     return depends
 
 
-@ByPassAdminRole()
-@AcceptNone('group_id')
-async def _get_group(group_id: str = None, gid: str = None, authPermission: AuthPermission = None) -> GroupClientORM:
-    if gid == 'id':
-        group = await GroupClientORM.filter(group_id=group_id).first()
-
-    elif gid == 'name':
-        group = await GroupClientORM.filter(group_name=group_id).first()
-
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid GID type")
-
+async def fetch_group(group:str) -> GroupClientORM:
+    group = await GroupClientORM.filter(group_id=group).first()
     if group == None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Group does not exist")
+        raise GroupDoesNotExistError(group)
 
     return group
-
-
-def GetClient(bypass: bool = False, accept_admin: bool = False, skip: bool = False, raise_: bool = True):
-    @ByPassAdminRole(bypass, skip=skip)
-    @AcceptNone(key='client_id')
-    async def _get_client(client_id: str | None = None, cid: str = None, authPermission: AuthPermission = None) -> ClientORM:
-        if cid == 'id':
-            client = await ClientORM.filter(client_id=client_id).first()
-        elif cid == 'name':
-            client = await ClientORM.filter(client_name=client_id).first()
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid CID type")
-
-        if client is None:
-            if raise_:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND, detail="Client does not exist")
-            else:
-                return None
-
-        if client.client_type == 'Admin' and not accept_admin:
-            if raise_:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND, detail="Client does not exist")
-            else:
-                return None
-
-        return client
-
-    return _get_client
-
 
 def Get_Contact(skip_permission:bool,raise_file:bool):
 
@@ -116,7 +73,7 @@ def Get_Contact(skip_permission:bool,raise_file:bool):
 
         if not skip_permission:
             if authPermission == None:
-                if Get(ConfigService).SECURITY_FLAG:
+                if Get(ConfigService).AUTH_MECHANISM != 'none':
                     raise HTTPException(status_code=401, detail="Unauthorized")
 
             else:
@@ -179,72 +136,6 @@ async def get_subs_content(content_id: str, content_idtype: str = Query('id'), a
         raise HTTPException(
             404, {"message": "Subscription Content does not exists with those information"})
 
-async def get_client(client_id: str = Depends(get_query_params('client_id')), cid: str = Depends(get_query_params('cid', 'id')), authPermission: AuthPermission = Depends(get_auth_permission)):
-    try:
-        return await GetClient()(client_id=client_id, cid=cid, authPermission=authPermission)
-    except OperationalError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e.args[0])
-        )
-
-
-async def get_group(group_id: str = Query(''), gid: str = Query('id'), authPermission: AuthPermission = Depends(get_auth_permission)):
-    try:
-        return await _get_group(group_id=group_id, gid=gid, authPermission=authPermission)
-    except OperationalError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e.args[0])
-        )
-
-
-async def get_client_by_password(credentials: Annotated[HTTPBasicCredentials, Depends(HTTPBasic())], cid: str = Depends(get_query_params('cid', 'id'))):
-    security: SecurityService = Get(SecurityService)
-    configService: ConfigService = Get(ConfigService)
-    key = configService.getenv('CLIENT_PASSWORD_HASH_KEY', 'test')
-    error = HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail="Invalid username or password",
-        headers={"WWW-Authenticate": "Basic"},
-    )
-
-    try:
-        client: ClientORM = await GetClient(skip=True, raise_=False)(client_id=credentials.username, cid=cid, authPermission=None)
-    except OperationalError:
-        raise error
-
-    if client == None:
-        raise error
-    stored_hash, stored_salt = client.password, client.password_salt
-
-    if not security.verify_password(stored_hash, stored_salt, credentials.password, key):
-        error
-
-    if not client.can_login:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail='Cant authenticate right now... get your token from the admin!'
-        )
-
-    await client.save()
-
-    return client
-
-
-@ByPassAdminRole()
-@AcceptNone('blacklist_id')
-async def _get_blacklist(blacklist_id: str = None):
-    blacklist = await BlacklistORM.filter(blacklist_id=blacklist_id).first()
-    if blacklist == None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail='Blacklist does not exists')
-    return blacklist
-
-
-async def get_blacklist(blacklist_id: str = Depends(get_query_params('blacklist_id', None))):
-    return await _get_blacklist(blacklist_id=blacklist_id)
-
 
 def GetLink(raise_file_error:bool,raise_err:bool=True):
 
@@ -276,14 +167,16 @@ def GetLink(raise_file_error:bool,raise_err:bool=True):
 
     return get_link
 
-
-async def get_challenge(client:ClientORM):
-    return await ChallengeORM.filter(client=client).first()
-
+@RunInThreadPool
+def fetch_policy(policy:str):
+    vaultService = Get(VaultService) 
+    params = vaultService.security_engine.read('policies',policy)
+    policy_obj = PolicyModel(**params)
+    policy_obj._policy_id = policy
+    return policy_obj
 
 def get_template(template:str):
     return template
-
 
 def get_profile(profile:str):
     return profile
@@ -291,79 +184,51 @@ def get_profile(profile:str):
 def get_agent(agent:str):
     return agent
 
+def get_policy(policy:str):
+    return policy
 
-def GetPolicy(skipPermission:bool):
+def get_group(group:str):
+    return group
 
-    async def get_policy(policy:str,authPermission:AuthPermission=Depends(wrapper_auth_permission)):
+def get_client(client:str):
+    return client
 
-        if not skipPermission:
-            print('Auth Permission',authPermission)
-            if authPermission['client_type'] != ClientType.Admin:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,)
-        try:
-            p = await PolicyORM.filter(policy_id=policy).first()
-            if p == None:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f'Policy does not exists'
-                )
-            return p
-        except OperationalError as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(e.args[0])
-            )
+def get_client_from_info(clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    return clientInfo.get('client_id',None)
 
-    return get_policy
+def get_blacklist(blacklist:BlacklistModel):
+    return blacklist
 
+def get_credentials(credentials: Annotated[HTTPBasicCredentials, Depends(HTTPBasic())]):
+    return credentials
 
-async def get_combined_policies(client:ClientORM):
+def get_access(access:str):
+    return access
 
-    client_id = str(client.client_id)
-    group_id = None if client.group == None else str(client.group.group_id)
-    policies:list[PolicyORM] = [pm.policy for pm in  await PolicyMappingORM.filter(client_id=client_id,group_id=group_id)]
+def get_issuer(request:Request,ownership:OwnershipMode=Depends(ownership_mode_query),clientInfo:ClientAccessInfo=Depends(get_client_info),accessInfo:AccessAPIInfo=Depends(get_access_info))->IssuerInfo|None:
+    group = None
+    mechanism = configService.AUTH_MECHANISM
+    while True:
+        match mechanism:
+            case 'none':
+                return None
+            case 'token':
+                issuer = accessInfo['id']
+                _type = accessInfo['type']
+                if ownership == 'protected':
+                    raise HTTPException(status.HTTP_400_BAD_REQUEST,'access does not have group value',headers=FastAPIConstant.OO_SCOPE_HEADERS)
+                break
+            case 'userpass':
+                issuer = clientInfo['client_id']
+                _type = clientInfo['type']
+                if ownership == 'protected' and (group:=clientInfo.get('group_id',None))==None :
+                    raise HTTPException(status.HTTP_400_BAD_REQUEST,'current client not associated with a group',headers=FastAPIConstant.OO_SCOPE_HEADERS)
+                break
+            case 'both':
+                mechanism = get_auth_mechanism(request)
+                continue
 
-    roles= set()
-    allowed_assets = set()
-    allowed_profiles = set()
-    allowed_blogs = set()
-    allowed_routes = {}
-    allowed_agents = set()
+    return {'issuer':issuer,'type':_type,'ownership':ownership,'group':group}
 
-    for p in policies:
-        p = await p
-        roles.update(p.roles)
-        allowed_assets.update(p.allowed_assets)
-        allowed_profiles.update(p.allowed_profiles)
-        allowed_agents.update(p.allowed_agents)
-        allowed_blogs.update(p.allowed_blogs)
-
-        for k,r in p.allowed_routes.items():
-
-            if k not in allowed_routes:
-                allowed_routes[k] = r
-            else:
-                if r['scope'] == 'all':
-                    if allowed_routes['scope'] !='all':
-                        allowed_routes['scope'] = 'all'
-                        allowed_routes['custom_routes'] = []
-                else:
-                    if allowed_routes['scope'] == 'custom':
-                        allowed_routes['custom_routes'] = list[set(allowed_routes['custom_routes']).union(r['scope'])]
-
-    print(allowed_assets)
-
-    allowed_assets = filter_paths(list(allowed_assets),'/')
-    allowed_profiles = list(allowed_profiles)
-    allowed_agents = list(allowed_agents)
-    roles = list(roles)
-    allowed_blogs=list(allowed_blogs)
-
-    return AuthPermission(
-        roles=roles,
-        allowed_routes=allowed_routes,
-        allowed_profiles=allowed_profiles,
-        allowed_assets=allowed_assets,
-        allowed_agents=allowed_agents,
-        allowed_blogs=allowed_blogs
-    )
+def get_session_id(clientInfo:ClientAccessInfo = Depends(get_client_info)):
+    return clientInfo.get('session_id',None)

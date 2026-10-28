@@ -1,6 +1,7 @@
 
 from typing import Callable, Literal,get_args
 from fastapi import Depends, Query, Request, Response
+from app.classes.auth_permission import OwnershipMode
 from app.container import GetDependsFunc,Get
 from app.services import ConfigService
 from app.depends.dependencies import get_query_params
@@ -24,10 +25,6 @@ def _wrap_checker(name: str, predicate: Callable[[object], bool], choices: list 
             return msg or f"Invalid value for {name!s}: {value!r}. Valid choices: {choices_list}"
         return msg or f"Invalid value for {name!s}: {value!r}"
     return _checker
-
-if CAPABILITIES['twilio']:
-    from app.services.ntfr.twilio_service import TwilioService
-    verify_twilio_token: Callable = GetDependsFunc(TwilioService, 'verify_twilio_token')
 
 # ----------------------------------------------                                    ---------------------------------- #
 
@@ -61,4 +58,23 @@ delete_mode_query:Callable[[Request],DeleteMode] = get_query_params('mode','soft
 SourceMode = Literal['cache','memory','database']
 sources_choices = list(get_args(SourceMode))
 
-source_mode_query:Callable[[Request],SourceMode] = get_query_params('source','soft',False,raise_except=True,checker=_wrap_checker('source',lambda v: v in sources_choices,choices=sources_choices))
+source_mode_query:Callable[[Request],SourceMode] = get_query_params('source','memory',False,raise_except=True,checker=_wrap_checker('source',lambda v: v in sources_choices,choices=sources_choices))
+
+# ----------------------------------------------                                    ---------------------------------- #
+ScopeMode = Literal['all','single']
+scope_choices = list(get_args(ScopeMode))
+scope_mode_query:Callable[[Request],ScopeMode] = get_query_params('scope','single',False,raise_except=True,checker=_wrap_checker('scope',lambda v: v in scope_choices,choices=scope_choices))
+
+
+# ----------------------------------------------                                    ---------------------------------- #
+
+ownership_choices = list(get_args(OwnershipMode))
+ownership_mode_query:Callable[[Request],OwnershipMode] = get_query_params('ownership','public',False,raise_except=True,checker=_wrap_checker('ownership',lambda v: v in scope_choices,choices=scope_choices))
+
+# ----------------------------------------------                                    ---------------------------------- #
+
+def bool_query_creator(name:str,default:Literal['true','false']='true')->Callable[[Request],bool]:
+    return get_query_params(name,default,True,raise_except=True,cls=bool)
+
+
+confirm_query = bool_query_creator('confirm','false')

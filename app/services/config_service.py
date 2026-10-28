@@ -1,8 +1,9 @@
 import os
-from typing import Any, Callable, TypedDict
+from typing import Any, Callable, TypedDict, get_args
 from typing_extensions import Literal
 from dotenv import load_dotenv, find_dotenv
 from enum import Enum
+from app.classes.auth_permission import AuthMechanism, SessionMechanism
 from app.errors.service_error import BuildAbortError, BuildFailureError, BuildOkError, BuildWarningError
 from app.utils.constant import RabbitMQConstant, RedisConstant
 from app.definition import _service
@@ -144,20 +145,16 @@ class ConfigService(_service.BaseService):
         
         # NAMING CONFIG #
         self.DOMAIN_NAME =  self.getenv('DOMAIN_NAME','notifyr')
-        self.USERNAME:str = self.getenv('USERNAME','notifyr')
 
         # DIRECTORY CONFIG #
-
         self.BASE_DIR:str = self.getenv("BASE_DIR", './')
         self.ASSETS_DIR:str = self.getenv("ASSETS_DIR", f'assets{DIRECTORY_SEPARATOR}')
         self.OBJECTS_DIR:str = self.getenv('OBJECTS_DIR',f'objects{DIRECTORY_SEPARATOR}')
         self.DATA_INGESTION_DIR:str = self.getenv('DATA_INGESTION_DIR', '/data-ingestion/' if self.MODE != MODE.DEV_MODE else './data-ingestion/')
 
         # GRAPHITI CONFIG #
-        self.GRAPHITI_MAX_COROUTINES = ConfigService.parseToInt(self.getenv('GRAPHITI_MAX_COROUTINES'))
+        self.GRAPHITI_MAX_COROUTINES:int = ConfigService.parseToInt(self.getenv('GRAPHITI_MAX_COROUTINES'))
 
-        # SECURITY CONFIG #
-        self.SECURITY_FLAG: bool = ConfigService.parseToBool(self.getenv('SECURITY_FLAG'), False)
         self.COST_FLAG:bool = ConfigService.parseToBool(self.getenv('COST_FLAG','true'),True)
         self.ADMIN_KEY:str = self.getenv("ADMIN_KEY")
         
@@ -240,6 +237,14 @@ class ConfigService(_service.BaseService):
         # MCP CONFIG #
         self.MCP_ENABLED:bool = ConfigService.parseToBool(self.getenv('MCP_ENABLED','false'),False)
 
+        # SESSION CONFIG #
+        self.SESSION_MECHANISM:SessionMechanism = self.getenv('SESSION_MECHANISM','redis')
+
+        # SECURITY CONFIG #
+        self.AUTH_MECHANISM:AuthMechanism  = self.getenv('AUTH_MECHANISM','userpass').lower()
+
+        self.SYSTEM_IP:str = self.getenv('SYSTEM_IP','172.25.0.1')
+
     def verify(self):
         if self.S3_CRED_TYPE not in ['MINIO','AWS']:
             raise BuildAbortError(f"S3_CRED_TYPE {self.S3_CRED_TYPE} is not valid please use MINIO or AWS")
@@ -250,11 +255,29 @@ class ConfigService(_service.BaseService):
         if self.JOBSTORE_DB not in ['redis','mongodb']:
             raise BuildFailureError(f'JOBSTORE_DB env var should be redis or mongodb not {self.JOBSTORE_DB}')
 
-        if not self.SECURITY_FLAG:
-            raise BuildWarningError(f"SECURITY_FLAG {self.SECURITY_FLAG} is set to False, this is not recommended for production environments")
-
         if self.CELERY_BROKER_PROVIDER not in ['redis','rabbitmq']:
             raise BuildWarningError()
+
+        if self.AUTH_MECHANISM not in ['userpass','token','both','none']:
+            raise BuildAbortError('AUTH MECHANISM must be either "userpass", "token", "both", "none"')
+
+        if self.AUTH_MECHANISM == 'none':
+            if self.MODE == MODE.DEV_MODE:
+                raise BuildWarningError(f"AUTH_MECHANISM {self.AUTH_MECHANISM} is set to None, this is not recommended for production environments")
+
+            if self.MODE == MODE.PROD_MODE:
+                raise BuildAbortError('AUTH_MECHANISM must be either userpass, token or both, but userpass is better')
+
+        if self.AUTH_MECHANISM != 'userpass':
+            self.SESSION_MECHANISM == 'none'
+        else:
+            if self.SESSION_MECHANISM not in get_args(SessionMechanism):
+                raise BuildAbortError('SESSION MECHANISM must be either "redis+sync" "vault+sync" "redis" or "none"' )
+            if self.MODE == MODE.DEV_MODE and self.SESSION_MECHANISM == 'none':
+                raise BuildWarningError(f"SESSION_MECHANISM {self.SESSION_MECHANISM} is set to None, this is not recommended for production environments")
+            
+            if self.MODE == MODE.DEV_MODE and self.SESSION_MECHANISM == 'none':
+                raise BuildAbortError('SESSION_MECHANISM must be either use with redis(with or without sync) or with vault(with sync), but redis is better')
 
     def __getitem__(self, key):
         try:
@@ -295,5 +318,5 @@ class WorkerService(_service.BaseService):
      
     def build(self, build_state = ...):
         self.HOSTNAME = socket.gethostname()
-        self.INSTANCE_ID = f"notiry://{PARENT_PID}:{PROCESS_PID}@{self.HOSTNAME}:{APP_MODE.value}/"  
+        self.INSTANCE_ID = f"notifyr://{PARENT_PID}:{PROCESS_PID}@{self.HOSTNAME}:{APP_MODE.value}/"  
         raise BuildOkError()

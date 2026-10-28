@@ -11,22 +11,16 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE DOMAIN Role AS VARCHAR(15) CHECK (
-    VALUE IN ('PUBLIC','ADMIN','RELAY','CUSTOM','MFA_OTP','CHAT','RESULT','STATIC','REFRESH','CONTACTS','TWILIO','SUBSCRIPTION','CLIENT','LINK','PROFILE',
-    'ASSETS'
-)
-);
-
-CREATE DOMAIN AuthType AS VARCHAR(15) CHECK(
-    VALUE IN ('ACCESS_TOKEN','API_TOKEN')
-);
-
 CREATE DOMAIN Scope AS VARCHAR(15) CHECK (
     VALUE IN ('SoloDolo', 'Organization','Domain','Free')
 );
 
 CREATE DOMAIN ClientType AS VARCHAR(10) CHECK (
-    VALUE IN ('User','Admin','Twilio','App','Service')
+    VALUE IN ('User','Admin','Twilio','App','Service','System')
+);
+
+CREATE DOMAIN RecoverResetType AS VARCHAR(8) CHECK (
+    VALUE IN ('Single','All')
 );
 
 CREATE TABLE IF NOT EXISTS GroupClient (
@@ -38,70 +32,59 @@ CREATE TABLE IF NOT EXISTS GroupClient (
 );
 
 CREATE TABLE IF NOT EXISTS Client (
-    client_id UUID DEFAULT public.uuid_generate_v1mc (),
-    client_name VARCHAR(50) UNIQUE,
+    client_id UUID DEFAULT public.uuid_generate_v1mc(),
+    client_name VARCHAR(50),
+    client_email VARCHAR(200) UNIQUE,
     client_description TEXT DEFAULT NULL,
     client_username VARCHAR(30) UNIQUE DEFAULT 'notifyr-user-' || secure_random_string(12),
     client_scope Scope DEFAULT 'SoloDolo',
-    group_id UUID DEFAULT NULL,
     client_type ClientType DEFAULT 'User',
-    password TEXT DEFAULT NULL,
-    password_salt TEXT DEFAULT NULL,
-    can_login BOOLEAN DEFAULT FALSE,
+    group_id UUID DEFAULT NULL,
     max_connection INT DEFAULT 1,
-    current_connection_count INT DEFAULT 0,
-    issued_for VARCHAR(50) UNIQUE DEFAULT secure_random_string(20),
-    authenticated BOOLEAN DEFAULT FALSE,
-    auth_type AuthType DEFAULT 'ACCESS_TOKEN',
+    max_refresh INT DEFAULT 0,
+    recovery_reset RecoverResetType DEFAULT 'Single',
+    can_login BOOLEAN DEFAULT TRUE,
+    issued_for VARCHAR(30) DEFAULT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
+
+    CONSTRAINT cname
+        CHECK (client_name IS NOT NULL),
+
+    CONSTRAINT max_conn
+        CHECK (max_connection BETWEEN 1 AND 15),
+
     PRIMARY KEY (client_id),
-    FOREIGN KEY (group_id) REFERENCES GroupClient (group_id) ON DELETE SET NULL ON UPDATE CASCADE
-    -- CHECK (SELECT COUNT(*) FROM Client WHERE client_type ='Admin') = 1
+
+    FOREIGN KEY (group_id)
+        REFERENCES GroupClient (group_id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS Challenge (
-    client_id UUID ,
-    challenge_auth VARCHAR(128) UNIQUE DEFAULT secure_random_string(128),
-    created_at_auth TIMESTAMPTZ DEFAULT NOW(),
-    expired_at_auth TIMESTAMPTZ,
-    challenge_refresh VARCHAR(256) UNIQUE DEFAULT secure_random_string(256),
-    created_at_refresh TIMESTAMPTZ DEFAULT NOW(),
-    expired_at_refresh TIMESTAMPTZ ,
-    last_authz_id UUID DEFAULT public.uuid_generate_v4(),
-    PRIMARY KEY (client_id),
-    FOREIGN KEY (client_id) REFERENCES Client (client_id) ON DELETE CASCADE ON UPDATE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS Blacklist (
-    blacklist_id UUID DEFAULT public.uuid_generate_v1mc (),
-    client_id UUID UNIQUE DEFAULT NULL,
-    group_id UUID UNIQUE DEFAULT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    expired_at TiMESTAMPTZ,
-    CONSTRAINT client_xor_group CHECK (
-        (client_id IS NOT NULL AND group_id IS NULL) OR
-        (client_id IS NULL AND group_id IS NOT NULL)
-    ),
-    PRIMARY KEY (blacklist_id),
-    FOREIGN KEY (group_id) REFERENCES GroupClient (group_id) ON DELETE CASCADE ON UPDATE CASCADE,
-    FOREIGN KEY (client_id) REFERENCES Client (client_id) ON DELETE CASCADE ON UPDATE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS Policy (
-    policy_id UUID PRIMARY KEY DEFAULT public.uuid_generate_v1mc(),
-    allowed_profiles TEXT[] DEFAULT '{}',
-    allowed_agents TEXT[] DEFAULT '{}',
-    allowed_routes JSONB DEFAULT '{}'::jsonb,
-    allowed_assets TEXT[] DEFAULT '{}',
-    roles role[] DEFAULT ARRAY['PUBLIC']::Role[],
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+-- Ensure max_refresh is between 0 and 999 when applicable,
+-- and require both values to be NULL for other client types.
+ALTER TABLE Client
+ADD CONSTRAINT chk_client_refresh_reset
+CHECK (
+    (
+        client_type IN ('System', 'User', 'Admin')
+        AND max_refresh BETWEEN 0 AND 999
+        AND recovery_reset IS NOT NULL
+        AND can_login IS NOT NULL
+    )
+    OR
+    (
+        client_type NOT IN ('System', 'User', 'Admin')
+        AND max_refresh IS NULL
+        AND recovery_reset IS NULL
+        AND can_login IS NULL
+    )
 );
 
 CREATE TABLE IF NOT EXISTS PolicyMapping(
     mapping_id UUID DEFAULT public.uuid_generate_v1mc(),
-    policy_id UUID,
+    policy_id VARCHAR(30),
     client_id UUID DEFAULT NULL,
     group_id UUID DEFAULT NULL,
     PRIMARY KEY (mapping_id),
@@ -109,7 +92,6 @@ CREATE TABLE IF NOT EXISTS PolicyMapping(
         (client_id IS NOT NULL AND group_id IS NULL) OR
         (client_id IS NULL AND group_id IS NOT NULL)
     ),
-    FOREIGN KEY (policy_id) REFERENCES Policy (policy_id) ON DELETE CASCADE ON UPDATE CASCADE,
     FOREIGN KEY (group_id) REFERENCES GroupClient (group_id) ON DELETE CASCADE ON UPDATE CASCADE,
     FOREIGN KEY (client_id) REFERENCES Client (client_id) ON DELETE CASCADE ON UPDATE CASCADE
 );
@@ -125,100 +107,6 @@ ON PolicyMapping(policy_id, group_id)
 WHERE group_id IS NOT NULL;
 
 -- ------------------------------------             -------------------------------------------#
--- ------------------------------------             -------------------------------------------#
-
-CREATE OR REPLACE FUNCTION set_auth_challenge() RETURNS VOID AS $$
-BEGIN
-    SET search_path = clients;
-
-    UPDATE 
-        Challenge c
-    SET 
-        challenge_auth = secure_random_string(64),
-        created_at_auth = NOW(),
-        expired_at_auth = NOW() + (expired_at_auth - created_at_auth)
-    WHERE 
-        expired_at_auth IS NOT NULL AND expired_at_auth <= NOW();
-
-END; $$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION set_refresh_challenge() RETURNS VOID AS $$
-BEGIN
-    SET search_path = clients;
-    UPDATE 
-        Challenge c
-    SET 
-        challenge_refresh = secure_random_string(128),
-        created_at_refresh = NOW(),
-        expired_at_refresh = NOW() + (expired_at_refresh - created_at_refresh)
-    WHERE 
-        expired_at_refresh IS NOT NULL AND expired_at_refresh <= NOW();
-    
-END; $$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION raw_revoke_challenges(cid UUID) RETURNS VOID as $$
-BEGIN
-    SET search_path = clients;
-    UPDATE 
-        Challenge c
-    SET 
-        challenge_auth = secure_random_string(64),
-        created_at_auth = NOW(),
-        challenge_refresh = secure_random_string(128),
-        created_at_refresh = NOW()
-    WHERE
-        c.client_id = cid;
-
-    UPDATE 
-        Challenge c
-    SET 
-        expired_at_auth = NOW() + (expired_at_auth - created_at_auth),
-        expired_at_refresh = NOW() + (expired_at_refresh - created_at_refresh)
-    WHERE
-        c.client_id = cid AND c.expired_at_auth IS NOT NULL AND c.expired_at_refresh IS NOT NULL;
-
-END; $$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION raw_revoke_auth_token(cid UUID) RETURNS VOID as $$
-BEGIN
-    SET search_path = clients;
-    UPDATE 
-        Challenge c
-    SET 
-        challenge_auth = secure_random_string(64),
-        created_at_auth = NOW()
-    WHERE
-        c.client_id = cid;
-    
-    UPDATE 
-        Challenge c
-    SET 
-        expired_at_auth = NOW() + (expired_at_auth - created_at_auth)
-    WHERE
-        c.client_id = cid AND c.expired_at_auth IS NOT NULL;
-
-END; $$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION update_challenge() RETURNS VOID AS $$
-BEGIN
-    SET search_path = clients;
-    PERFORM set_auth_challenge();
-    PERFORM set_refresh_challenge();
-END; $$ LANGUAGE plpgsql;
-
--- ------------------------------------             -------------------------------------------#
--- ------------------------------------             -------------------------------------------#
-
-CREATE OR REPLACE FUNCTION delete_blacklist() RETURNS VOID AS $$
-BEGIN
-    SET search_path = clients;
-    DELETE FROM Blacklist
-    WHERE expired_at <= NOW();
-
-END; $$ LANGUAGE plpgsql;
-
--- ------------------------------------             -------------------------------------------#
-
 -- ------------------------------------             -------------------------------------------#
 
 CREATE OR REPLACE FUNCTION compute_limit_group() RETURNS TRIGGER AS $compute_limit_group$
@@ -249,7 +137,6 @@ $compute_limit_group$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION compute_limit_client() RETURNS TRIGGER AS $compute_limit_client$
 DECLARE
     client_count INT;
-
 BEGIN   
     SET search_path = clients;
     SELECT 
@@ -285,13 +172,29 @@ CREATE TRIGGER limit_client
 
 -- ------------------------------------             -------------------------------------------#
 
-
 CREATE OR REPLACE FUNCTION guard_admin_creation() RETURNS TRIGGER AS $guard_admin_creation$
 BEGIN
     SET search_path = clients;
     IF NEW.client_type = 'Admin' THEN
+        IF NEW.can_login IS FALSE THEN
+            RAISE EXCEPTION 'Admin clients must be able to login';
+            RETURN NULL;
+        END IF;
+
         IF (SELECT COUNT(*) FROM Client WHERE client_type = 'Admin') > 0 THEN
             RAISE EXCEPTION 'Admin already exists';
+            RETURN NULL;
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW.client_type = 'System' THEN
+        IF NEW.can_login IS FALSE THEN
+            RAISE EXCEPTION 'System clients must be able to login';
+            RETURN NULL;
+        END IF;
+
+        IF (SELECT COUNT(*) FROM Client WHERE client_type = 'System') > 0 THEN
+            RAISE EXCEPTION 'System already exists';
             RETURN NULL;
         END IF;
         RETURN NEW;
@@ -306,109 +209,81 @@ CREATE TRIGGER guard_admin_creation
     FOR EACH ROW
     EXECUTE FUNCTION guard_admin_creation();
 
-CREATE OR REPLACE FUNCTION guard_admin_deletion() RETURNS TRIGGER AS $guard_admin_deletion$
+CREATE OR REPLACE FUNCTION guard_super_user_deletion() RETURNS TRIGGER AS $guard_super_user_deletion$
 BEGIN
     SET search_path = clients;
-    IF OLD.client_type = 'Admin' THEN
-        RAISE EXCEPTION 'Admin cannot be deleted or updated';
+    IF OLD.client_type = 'Admin' or OLD.client_type = 'System' THEN
+        RAISE EXCEPTION 'Superuser cannot be deleted';
         RETURN NULL;  
     END IF;
     RETURN NEW;
 END;
-$guard_admin_deletion$ LANGUAGE plpgsql;
+$guard_super_user_deletion$ LANGUAGE plpgsql;
 
-CREATE TRIGGER guard_admin_deletion
-    BEFORE DELETE OR UPDATE
+CREATE TRIGGER guard_super_user_deletion
+    BEFORE DELETE
     ON Client
     FOR EACH ROW
-    EXECUTE FUNCTION guard_admin_deletion();
+    EXECUTE FUNCTION guard_super_user_deletion();
 
--- ------------------------------------             -------------------------------------------#
-
--- ------------------------------------             -------------------------------------------#
-
-
-CREATE OR REPLACE FUNCTION guard_challenge_expiry() RETURNS TRIGGER AS $guard_challenge_expiry$
-DECLARE
-    client_auth_type AuthType;
+CREATE OR REPLACE FUNCTION guard_client_identity_modification() RETURNS TRIGGER AS $guard_client_identity_modification$
 BEGIN
-    SET search_path = clients;
-    SELECT auth_type INTO client_auth_type FROM Client WHERE client_id = NEW.client_id;
-
-    IF client_auth_type = 'ACCESS_TOKEN' THEN
-        IF NEW.expired_at_auth IS NULL OR NEW.expired_at_refresh IS NULL THEN
-            RAISE EXCEPTION 'expired_at_auth/refresh cannot be null';
-            RETURN NULL;
-        END IF;
-        IF NEW.expired_at_auth <= NOW() THEN
-            RAISE EXCEPTION 'expired_at_auth cannot be in the past for ACCESS_TOKEN clients';
-            RETURN NULL;
-        END IF;
-        IF NEW.expired_at_refresh <= NOW() THEN
-            RAISE EXCEPTION 'expired_at_refresh cannot be in the past for ACCESS_TOKEN clients';
-            RETURN NULL;
-        END IF;
-    ELSIF client_auth_type = 'API_TOKEN' THEN
-        IF NEW.expired_at_auth IS NOT NULL OR NEW.expired_at_refresh IS NOT NULL THEN
-            RAISE EXCEPTION 'expired_at_auth and expired_at_refresh must be NULL for API_TOKEN clients';
-            RETURN NULL;
-        END IF;
+    IF OLD.client_id IS DISTINCT FROM NEW.client_id THEN
+        RAISE EXCEPTION 'Client ID cannot be modified';
     END IF;
+
+    IF OLD.client_type IS DISTINCT FROM NEW.client_type THEN
+        RAISE EXCEPTION 'Client type cannot be modified';
+    END IF;
+
+    IF OLD.max_connection IS DISTINCT FROM NEW.max_connection THEN
+        RAISE EXCEPTION 'Max connection cannot be modified';
+    END IF;
+
+    IF OLD.max_refresh IS DISTINCT FROM NEW.max_refresh THEN
+        RAISE EXCEPTION 'Max refresh cannot be modified';
+    END IF;
+
+    IF OLD.recovery_reset IS DISTINCT FROM NEW.recovery_reset THEN
+        RAISE EXCEPTION 'Recovery reset cannot be modified';
+    END IF;
+
     RETURN NEW;
 END;
-$guard_challenge_expiry$ LANGUAGE plpgsql;
+$guard_client_identity_modification$ LANGUAGE plpgsql;
 
-CREATE TRIGGER guard_challenge_expiry
-    BEFORE INSERT OR UPDATE
-    ON Challenge
+CREATE TRIGGER guard_client_identity_modification
+    BEFORE UPDATE
+    ON Client
     FOR EACH ROW
-    EXECUTE FUNCTION guard_challenge_expiry();
+    EXECUTE FUNCTION guard_client_identity_modification();
+
+CREATE OR REPLACE FUNCTION guard_super_user_modification() RETURNS TRIGGER AS $guard_super_user_modification$
+BEGIN
+    IF (NEW.client_type = 'Admin' or NEW.client_type = 'System' )AND NEW.can_login IS FALSE THEN
+        RAISE EXCEPTION 'Admin clients must be able to login';
+        RETURN NULL;
+    END IF;
+
+    IF (OLD.client_type = 'Admin' or NEW.client_type = 'System') AND OLD.group_id IS DISTINCT FROM NEW.group_id THEN
+        RAISE EXCEPTION 'The Admin client group cannot be modified';
+    END IF;
+
+    RETURN NEW;
+END;
+$guard_super_user_modification$ LANGUAGE plpgsql;
+
+CREATE TRIGGER guard_super_user_modification
+    BEFORE UPDATE
+    ON Client
+    FOR EACH ROW
+    EXECUTE FUNCTION guard_super_user_modification();
+
+
+-- ------------------------------------             -------------------------------------------#
+
+-- ------------------------------------             -------------------------------------------#
 
 DELETE FROM clients.Client;
 
 DELETE FROM clients.Groupclient;
-
-INSERT INTO
-    clients.Client (
-        client_name,
-        client_type,
-        client_description,
-        client_scope,
-        authenticated,
-        can_login
-    )
-VALUES (
-        'Notifyr ADMIN',
-        'Admin',
-        'Admin client for Notifyr application',
-        'Free',
-        True,
-        True
-    );
-
-
-INSERT INTO
-    clients.Challenge (
-        client_id,
-        expired_at_auth,
-        expired_at_refresh
-    )
-VALUES (
-        (
-            SELECT client_id
-            FROM clients.Client
-            WHERE
-                client_type = 'Admin'
-        ),
-        NOW() + INTERVAL '5 minute',
-        NOW() + INTERVAL '1 hour'
-    );
-
-
-SELECT cron.schedule (
-        'update_challenge_every_5_minutes', '*/5 * * * *', 'SELECT clients.update_challenge();'
-    );
-
-SELECT cron.schedule (
-        'delete_blacklist_every_5_minutes', '*/5 * * * *', 'SELECT clients.delete_blacklist();'
-    );

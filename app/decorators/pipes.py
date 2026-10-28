@@ -3,7 +3,7 @@ import json
 from typing import Any, Callable, Coroutine, Iterable, Literal, Optional, Type, TypedDict, get_args
 from beanie import Document
 from fastapi import HTTPException, Request, Response,status
-from app.classes.auth_permission import AuthPermission, TokensModel
+from app.classes.auth_permission import AccessAPIInfo, AccessDoesNotExistsError, AccessTypeAPIModel, AuthPermission, ClientAccessInfo, OwnershipMode, TokensModel
 from app.classes.broker import exception_to_json
 from app.classes.celery import AlgorithmType, SchedulerModel,TaskType
 from app.classes.email import EmailInvalidFormatError
@@ -13,9 +13,13 @@ from app.cost.ingest_cost import DeleteDocumentIngestCost
 from app.definition._cost import Cost
 from app.definition._service import BaseMiniService, BaseMiniServiceManager
 from app.depends.class_dep import ObjectsSearch,ToPydanticModelInterface
+from app.depends.dependencies import get_auth_mechanism
 from app.errors.contact_error import ContactMissingInfoKeyError, ContactNotExistsError
 from app.errors.service_error import MiniServiceStrictValueNotValidError, ServiceNotAvailableError
+from app.manager.issuer_manager import IssuerManager
 from app.manager.merchant_manager import Merchant
+from app.manager.session_manager import AuthSessionManager
+from app.manager.state_manager import StateManager
 from app.manager.task_manager import TaskManager
 from app.models.call_model import CallCustomSchedulerModel
 from app.models.orm.contacts_model import Status, SubscriptionORM
@@ -25,17 +29,20 @@ from app.models.ingest_model import DataIngestModel
 from app.models.otp_model import OTPModel
 from app.models.orm.security_model import ClientORM, GroupClientORM
 from app.models.sms_model import SMSCustomSchedulerModel
+from app.services.admin_service import ClientMiniService
 from app.services.custom_service import CustomService, NoEdgesCustomSchemaError, NoEntitiesCustomSchemaError
+from app.services.vault_service import VaultService
 from app.services.worker.celery_service import CeleryService, ChannelMiniService
 from app.services.config_service import ConfigService
 from app.services.contacts_service import ContactsService
 from app.services.file.file_service import FileService
-from app.services.security_service import JWTAuthService
+from app.services.security_service import AccessVaultConstant, JWTAuthService
 from app.definition._utils_decorator import Pipe
 from app.ntfr_tasks import TASK_REGISTRY, task_name
 from app.services.worker.arq_service import ArqIngestTaskService
-from app.utils.constant import GraphitiConstant, SpecialKeyAttributesConstant
-from app.utils.helper import DICT_SEP, AsyncAPIFilterInject, PointerIterator, SliceMode, copy_response, issubclass_of, parseToBool, slice_dict
+from app.utils.constant import GraphitiConstant, HTTPHeaderConstant, SpecialKeyAttributesConstant, VaultConstant
+from app.utils.helper import DICT_SEP, APIFilterInject, AsyncAPIFilterInject, PointerIterator, SliceMode, copy_response, issubclass_of, parseToBool, slice_dict
+from app.utils.toolbox import RunInThreadPool
 from app.utils.validation import email_validator, phone_number_validator
 from app.depends.orm_cache import ContactSummaryORMCache
 from app.models.orm.contacts_model import ContactSummary
@@ -422,17 +429,6 @@ class ForceGroupPipe(Pipe):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Group information is missing or invalid.")
 
         return {'group': group}
-
-class RefreshTokenPipe(Pipe):
-
-    def __init__(self,):
-        super().__init__(True)
-        self.jwtAuthService:JWTAuthService = Get(JWTAuthService)
-    
-    async def pipe(self,tokens:TokensModel):
-        tokens = tokens.tokens
-        tokens = self.jwtAuthService.verify_refresh_permission(tokens)
-        return {'tokens':tokens}
     
 class ContactStatusPipe(Pipe):
  
@@ -679,13 +675,34 @@ class DocumentFriendlyPipe(Pipe):
 
 class ObjectRelationalFriendlyPipe(Pipe):
 
-    def __init__(self,):
+    def __init__(self,mode:Literal['list','dict']='list',key:str=None,when:Callable[...,bool]=None):
+        self.mode = mode
+        self.key = key
+        self.when = when
         super().__init__(False)
-    
-    def pipe(self,result):
-        if hasattr(result,'to_json'):
-            return result.to_json
-        return None
+        self.filter = False
+
+    def pipe(self,result:list|Any,**kwargs):
+        if self.when != None and not APIFilterInject(self.when)(**kwargs):
+            return result
+
+        if self.mode == 'list':
+            res = []
+        else:
+            res = {}
+        if not isinstance(result,list):
+            result = [result]
+
+        for r in result:
+            if hasattr(result,'to_json'):
+                if self.mode == 'list':
+                    res.append(r.to_json)
+                else:
+                    key = getattr(r,self.key,None)
+                    if not key:
+                        continue
+                    res[key] = r.to_json
+        return res
 
 class MiniServiceInjectorPipe(Pipe):
     def __init__(self,cls:Type[BaseMiniServiceManager],key:str='profile',strict_value:str=None):
@@ -840,13 +857,15 @@ class SParams(TypedDict):
     space:bool
 class SanitizePathParameterPipe(Pipe):
 
-    def __init__(self,params:SParams, service:bool = False,agent:bool=False,profile:bool=False,template:bool=False):
+    def __init__(self,params:SParams, service:bool = False,agent:bool=False,profile:bool=False,template:bool=False,client:bool=False,session:bool=True,access:bool=True):
         super().__init__(True)
         self.service = service
         self.agent = agent
         self.profile = profile
         self.template = template
-
+        self.client = client
+        self.session = session
+        self.access = access
         self.params = params
 
     def sanitize(self,text:str):
@@ -858,15 +877,172 @@ class SanitizePathParameterPipe(Pipe):
             text = text.replace(' ','')
         return text
 
-    async def pipe(self,service:str=None,agent:str=None,profile:str=None,template:str=None):
+    async def pipe(self,service:str=None,agent:str=None,profile:str=None,template:str=None,client:str=None,session_id:str=None,access:str=None):
         data = {}
-        if service != None:
+        
+        if service != None and self.service:
             data['service'] = self.sanitize(service)
-        if agent != None:
+        if agent != None and self.agent:
             data['agent'] = self.sanitize(agent)
-        if profile != None:
+        if profile != None and self.profile:
             data['profile'] = self.sanitize(profile)
-        if template!=None:
+        if template!=None and self.template:
             data['template'] = self.sanitize(template)
+        if client != None and self.client:
+            data['client'] = self.sanitize(client)
+        if session_id != None and self.session:
+            data['session_id'] = self.sanitize(session_id)
+        if access != None and self.access:
+            data['access'] = self.sanitize(access)
+        
         return data
+
+class FunctionInjectorPipe(Pipe):
+
+    def __init__(self,callable:Callable[...,Any],key:str):
+        super().__init__(True)
+        self.callable = callable
+        self.key = key
+        self.filter = False #NOTE Override the base parameter
+
+    async def pipe(self,*args,**kwargs):
+        result = await AsyncAPIFilterInject(self.callable)(*args,**kwargs)
+        return {self.key:result}
+
+class AccessTokenModelPipe(Pipe):
+
+    def __init__(self,mode:Literal['service','info']='service',accept_none=False):
+        super().__init__(False)
+        self.mode = mode
+        self.accept_none = accept_none
+
+    def pipe(self,result:str,client:ClientMiniService=None,clientInfo:ClientAccessInfo=None):
+        if self.accept_none and result == None:
+            return None
+        auth_type = client.client.auth_type if self.mode == 'service' else clientInfo['auth_type']
+        return {'access':result,'auth_type':auth_type.value}
+
+async def refresh_logout_handler(func,*args,**kwargs):
+    try:
+        return await func(*args,**kwargs)
+    except HTTPException as e:
+        session:AuthSessionManager = kwargs.get('session',None)
+        if session:
+            session.logout()
+        raise e
+
+async def auth_state_pipe(result:Any,session:AuthSessionManager,response:Response):
+    response.headers[HTTPHeaderConstant.X_AUTH_STATE] = session.authState.value
+    return result
+
+class StateResponseInjectionPipe(Pipe):
+
+    def __init__(self,*keys:str,merge:bool=False,result:str=None):
+        """
+        result str : The key name of the result
+        """
+        super().__init__(False)
+        self.keys = keys
+        self.result = result
+        self.merge = merge
+
+    def pipe(self,result:Any,state:StateManager):
+        if not state._activated:
+            return result
+        
+        if isinstance(self.merge,bool):
+            if isinstance(result,dict):
+                for k in self.keys:
+                    result.update(state.get(k))
+            elif isinstance(result,list):
+                for k in self.keys:
+                    for r,s in zip(result,state[k]):
+                        r.update(s)
+            else:
+                result = {self.result:result}
+                for k in self.keys:
+                    result.update(state[k])
+        else:
+            if isinstance(result,dict):
+                for k in self.keys:
+                    result.update(state[k])
+            else:
+                result = {self.result:result}
+                for k in self.keys:
+                    result.update(state[k])
+                
+        return result
+
+class ClientMiniServiceResponsePipe(Pipe):
+    def __init__(self,source:Literal['result','client'],include_info=True,include_policies=True,when:Callable[...,bool]=None):
+        super().__init__(False)
+        self.source = source
+        self.when = when
+        self.include_info = include_info
+        self.include_policies = include_policies
+
+    def extract(self,client:ClientMiniService):
+        res = {}
+        if self.include_info:
+            info = client.client.to_json
+            res['client'] = info
+
+        if self.include_policies:
+            policies = client.authPermission
+            res['policies'] = policies
+
+        return res
+
+    def pipe(self,result:list[ClientMiniService]|ClientMiniService,client:ClientMiniService=None):
+        match self.source:
+            case 'client':
+                return self.extract(client)
+            case 'result':
+                if isinstance(result,list):
+                    return [self.extract(c) for c in result]
+
+                return self.extract(result)
+
+            case _:
+                return result
+
+class AccessPathPipe(Pipe):
+
+    def __init__(self,transform:bool=False,transform_empty=True):
+        super().__init__(True)
+        self.vaultService = Get(VaultService)
+        self.transform = transform
+        self.transform_empty = transform_empty
+
+    async def pipe(self,access:str):                
+        if access == 'system':
+            raise AccessDoesNotExistsError(access)
+        
+        path = AccessVaultConstant.ACCESS_PATH(access)
+        if self.transform:
+            if access == '':
+                return {'access':''}
+            try:
+                accessRes = await RunInThreadPool(self.vaultService.secrets_engine.read)(VaultConstant.INTERNAL_API_SECRETS,path)
+            except:
+                raise AccessDoesNotExistsError(access)
+            accessRes = AccessTypeAPIModel(**accessRes)
+            accessRes._input =access
+            accessRes._path = path
+            return {'access':access}
+        else:
+            if not self.transform_empty and access =='':
+                return {'access',access}
+            else:
+                return {'access':path}
+
+class IssuerModifierPipe(Pipe):
+
+    def __init__(self,disable_headers=False,ownership:OwnershipMode=None):
+        super().__init__(True)
+        self.configService = Get(ConfigService)
+        self.disable_headers = disable_headers
+        self.ownership = ownership
     
+    def pipe(self,response:Response,request:Request,issuer:IssuerManager):
+        return {}

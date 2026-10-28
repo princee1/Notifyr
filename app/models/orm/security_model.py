@@ -1,14 +1,13 @@
-from typing import Optional, Self
-from tortoise import Tortoise, fields, models
+from typing import Any, Literal, Optional, Self
+from tortoise import fields, models
 from tortoise.contrib.pydantic import pydantic_model_creator
-from pydantic import BaseModel, field_validator, model_validator
-from app.classes.auth_permission import AuthType, ClientType, Scope
-from app.utils.helper import generateId, uuid_v1_mc
-from app.utils.validation import ipv4_subnet_validator, ipv4_validator,PasswordValidator
-from tortoise.contrib.postgres.fields import ArrayField
+from pydantic import BaseModel, Field, PrivateAttr, Secret, field_validator, model_validator
+from app.classes.auth_permission import API_TOKEN_CLIENT_TYPE_SET, AuthType, ClientType, RecoveryReset, Scope
+from app.utils.constant import PostgresConstant
+from app.utils.helper import subset_model, uuid_v1_mc
+from app.utils.validation import email_validator, ipv4_subnet_validator, ipv4_validator,PasswordValidator
 
-SCHEMA = 'security'
-
+SCHEMA = 'clients'
 
 class GroupClientORM(models.Model):
     group_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
@@ -19,6 +18,7 @@ class GroupClientORM(models.Model):
     class Meta:
         schema = SCHEMA
         table = "groupclient"
+        app = PostgresConstant.SECURITY_APP
 
     @property
     def to_json(self):
@@ -31,26 +31,29 @@ class GroupClientORM(models.Model):
 
 class ClientORM(models.Model):
     client_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    client_name = fields.CharField(max_length=50, unique=True, null=True)
+    client_name = fields.CharField(max_length=50, unique=False, null=False)
+    client_email = fields.CharField(max_length=200,unique=True,null=False)
     client_username = fields.CharField(max_length=30, unique=True, null=False)
     client_description = fields.TextField()
     client_scope = fields.CharEnumField(enum_type=Scope, default=Scope.SoloDolo, max_length=25)
-    authenticated = fields.BooleanField(default=False)
-    password = fields.TextField()
-    password_salt = fields.TextField()
-    max_connection = fields.IntField(default=1)
-    current_connection_count = fields.IntField(default=0)
-    can_login = fields.BooleanField(default=False)
     client_type = fields.CharEnumField(enum_type=ClientType, default=ClientType.User, max_length=25)
-    auth_type = fields.CharEnumField(enum_type=AuthType, default=AuthType.ACCESS_TOKEN, max_length=30)
-    issued_for = fields.CharField(max_length=50, null=False, unique=True)
-    group = fields.ForeignKeyField("security.GroupClientORM", related_name="group", on_delete=fields.SET_NULL, null=True)
+    issued_for = fields.CharField(max_length=30, null=True, unique=False)
+    max_connection = fields.SmallIntField(False,null=False,default=1)
+    max_refresh = fields.SmallIntField(False,null=True,default=0)
+    recovery_reset = fields.CharEnumField(enum_type=RecoveryReset,default=RecoveryReset.All,null=True,max_length=10)
+    can_login = fields.BooleanField(default=None,null=True)
+    group = fields.ForeignKeyField(GroupClientORM, related_name="group", on_delete=fields.SET_NULL, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
 
     class Meta:
         schema = SCHEMA
         table = "client"
+        app = PostgresConstant.SECURITY_APP
+
+    @property
+    def auth_type(self):
+        return AuthType.API_TOKEN if self.client_type in API_TOKEN_CLIENT_TYPE_SET else AuthType.ACCESS_TOKEN
 
     @property
     def to_json(self):
@@ -59,91 +62,27 @@ class ClientORM(models.Model):
             "client_name": self.client_name,
             "client_username": self.client_username,
             "client_description": self.client_description,
-            "auth_type": self.auth_type.value,
             "client_scope": self.client_scope.value,
-            "authenticated": self.authenticated,
-            "max_connection":self.max_connection,
-            "current_connection_count":self.current_connection_count,
             "client_type": self.client_type.value,
+            "max_connection":self.max_connection,
+            "max_refresh":self.max_refresh,
+            "recovery_reset": None if self.recovery_reset == None else self.recovery_reset.value,
+            "can_login":self.can_login,
+            "auth_type":self.auth_type.value,
             "issued_for": self.issued_for,
             "group_id": str(self.group_id) if self.group else None,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat()
         }
 
-class ChallengeORM(models.Model):
-    client = fields.OneToOneField("security.ClientORM", pk=True, related_name="challenge", on_delete=fields.CASCADE)
-    challenge_auth = fields.TextField(generated=True)
-    created_at_auth = fields.DatetimeField(auto_now_add=True)
-    expired_at_auth = fields.DatetimeField(null=True)
-    challenge_refresh = fields.TextField(generated=True)
-    created_at_refresh = fields.DatetimeField(auto_now_add=True)
-    expired_at_refresh = fields.DatetimeField(null=True)
-    last_authz_id=fields.UUIDField(generated=True)
-
-    class Meta:
-        schema = SCHEMA
-        table = "challenge"
-
-class BlacklistORM(models.Model):
-    blacklist_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    client = fields.ForeignKeyField("security.ClientORM", related_name="blacklist", on_delete=fields.CASCADE, null=True)
-    group = fields.ForeignKeyField("security.GroupClientORM", related_name="groupclient", on_delete=fields.CASCADE, null=True)
-    created_at = fields.DatetimeField(auto_now_add=True)
-    expired_at = fields.DatetimeField(null=False)
-
-    class Meta:
-        schema = SCHEMA
-        table = "blacklist"
-
-    @property
-    def to_json(self):
-        return {
-            "blacklist_id": str(self.blacklist_id),
-            "client_id": str(self.client_id) if self.client else None,
-            "group_id": str(self.group_id) if self.group else None,
-            "created_at": self.created_at.isoformat(),
-            "expired_at": self.expired_at.isoformat() if self.expired_at else None
-        }
-
-class PolicyORM(models.Model):
-    policy_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    allowed_profiles = ArrayField('TEXT',default=list)  # TEXT[] as list
-    allowed_agents = ArrayField('TEXT', default=list)  # TEXT[] as list
-    allowed_routes = fields.JSONField(default=dict)    # JSONB as dict
-    allowed_assets = ArrayField('TEXT',default=list)   # TEXT[] as list
-    allowed_blogs = ArrayField('TEXT',default=list)   # TEXT[] as list
-
-    roles = ArrayField('Role',default=lambda: ["PUBLIC"])  # role[] as list
-    created_at = fields.DatetimeField(auto_now_add=True)
-    updated_at = fields.DatetimeField(auto_now=True)
-
-    class Meta:
-        schema = SCHEMA
-        table = "policy"
-    
-    @property
-    def to_json(self,):
-        return {
-            'policy_id':str(self.policy_id),
-            'allowed_profiles':self.allowed_profiles,
-            'allowed_agents':self.allowed_agents,
-            'allowed_routes':self.allowed_routes,
-            'allowed_assets':self.allowed_assets,
-            'allowed_blog':self.allowed_blogs,
-            'roles':self.roles,
-            'created_at':self.created_at.isoformat(),
-            'updated_at':self.updated_at.isoformat()
-
-        }
-
 class PolicyMappingORM(models.Model):
     mapping_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
-    policy = fields.ForeignKeyField("security.PolicyORM", related_name="mappings", on_delete=fields.CASCADE)
-    client = fields.ForeignKeyField("security.ClientORM", related_name="policy_mappings", on_delete=fields.CASCADE, null=True)
-    group = fields.ForeignKeyField("security.GroupClientORM", related_name="policy_mappings", on_delete=fields.CASCADE, null=True)
+    policy_id = fields.CharField(max_length=30, unique=True, null=False)
+    client = fields.ForeignKeyField(ClientORM, related_name="policy_mappings", on_delete=fields.CASCADE, null=True)
+    group = fields.ForeignKeyField(GroupClientORM, related_name="policy_mappings", on_delete=fields.CASCADE, null=True)
 
     class Meta:
+        app = PostgresConstant.SECURITY_APP
         schema = SCHEMA
         table = "policymapping"
         unique_together = [
@@ -160,13 +99,27 @@ class PolicyMappingORM(models.Model):
             'group_id':str(self.group_id) if self.group else None,
         }
 
-client_password_validator = PasswordValidator(12,60,)
+client_password_validator = PasswordValidator(10,60,)
 
-ClientModelBase = pydantic_model_creator(ClientORM, name="ClientORM", exclude=('created_at', 'updated_at','client_id',"authenticated","client_scope","group","password_salt","can_login","current_connection_count","client_username",))
+ClientModelBase = pydantic_model_creator(ClientORM, name="ClientORM", exclude=('created_at', 'updated_at','client_id',"group","can_login"))
+
+
+def validate_ip(issued_for:str,scope:Scope):
+    if scope == Scope.Organization:
+        if not ipv4_subnet_validator(issued_for):
+            raise ValueError('Invalid ipv4 subnet')
+        return
+    elif scope == Scope.SoloDolo:
+        if not ipv4_validator(issued_for):
+            raise ValueError('Invalid ipv4 address')
+    else:
+        if issued_for !=None:
+            raise ValueError('Issued For must be Null')
+    return
 
 class GroupModel(BaseModel):
     group_name: str
-    policy_ids: list[str] = []
+    policies: list[str] = []
 
     @field_validator('group_name')
     def parse_name(cls,group_name:str):
@@ -175,75 +128,128 @@ class GroupModel(BaseModel):
         group_name=group_name.lower()
         return group_name.capitalize()
 
-class ClientModel(ClientModelBase):
-    
-    client_scope:Scope
-    group_id:str | None = None
-    policy_ids:list[str] =[]
-    client_description:str = ''
-    auth_type:AuthType = AuthType.ACCESS_TOKEN
+class AdminClientModel(BaseModel):
+    client_email:str = Field(min_length=8,max_length=200)
+    client_username:str = Field(min_length=8,max_length=30)
+    issued_for:Optional[str] = Field(None,min_length=15,max_length=15)
+    client_name:str = Field(min_length=5,max_length=50)
+    client_scope:Scope = Field(Scope.Free)
+    password:Secret[str]
+
+    @field_validator('client_email')
+    def check_email(cls,e):
+        email_validator(e)
+        return e
+
+    @field_validator('password')
+    def check_password(cls,p:Secret):
+        return Secret(client_password_validator(p.get_secret_value()))
 
     @model_validator(mode="after")
     def validate_ip_issuance(self)->Self:
-        if self.client_scope == Scope.Organization:
-            if not ipv4_subnet_validator(self.issued_for):
-                raise ValueError('Invalid ipv4 subnet')
-            return self
-        elif self.client_scope == Scope.SoloDolo:
-            if not ipv4_validator(self.issued_for):
-                raise ValueError('Invalid ipv4 address')
+        validate_ip(self.issued_for,self.client_scope)
         return self
 
-    @field_validator('password')
-    def check_password(cls,password:str):
-        return client_password_validator(password)
-    
-    @field_validator('max_connection')
-    def validate_max_connection(cls,max_connection:int)->int:
-        if max_connection <1:
-            raise ValueError('max_connection must be greater than 0')
-        if max_connection >5:
-            raise ValueError('max_connection must be less than or equal to 5')
-        return max_connection
+    @field_validator('client_username')
+    def validate_username(cls,usr):
+        if ' 'in usr:
+            raise ValueError('The username cannot contain space')
+        return usr
+     
+class ClientModel(ClientModelBase):
+    password:Optional[str] = None
+    client_type:ClientType = Field(ClientType.User)
+    client_scope:Scope = Field(Scope.SoloDolo)
+    group:str | None = Field(None)
+    max_connection:int = Field(default=1,ge=1,le=15)
+    max_refresh:Optional[int] = Field(default=None,ge=0,le=999)
+    recovery_reset:Optional[RecoveryReset] = Field(default=None)
+    client_username:str = Field(min_length=8,max_length=30)
+    client_description:str = Field(default=None,max_length=500)
+    policies:list[str] = Field(default_factory=list,max_length=30)
 
+    _client_id:str = PrivateAttr(default_factory=uuid_v1_mc)
+
+    @model_validator(mode="after")
+    def validate_ip_issuance(self)->Self:
+        validate_ip(self.issued_for,self.client_scope)
+        return self
+
+    @field_validator('policies')
+    def normalize_policies(cls,val):
+        return list(set(val))
+
+    @field_validator('client_email')
+    def check_email(cls,e):
+        email_validator(e)
+        return e
+
+    @model_validator(mode='after')
+    def check_password(self):
+        if self.client_type in API_TOKEN_CLIENT_TYPE_SET and self.password:
+            raise ValueError(f'This client_type {self.client_type} is a passwordless type of authentication')
+        client_password_validator(self.password)
+        return self
+
+    @model_validator(mode='after')
+    def check_after_client_type(self):
+
+        if self.client_type not in API_TOKEN_CLIENT_TYPE_SET :
+
+            if self.max_refresh == None:
+                raise ValueError(f'This client_type {self.client_type} must set the "max_refresh" found: {None}')
+
+            if self.recovery_reset == None:
+                raise ValueError(f'This client_type {self.client_type} must set the "recovery_reset" found: {self.max_refresh}')
+        
+        if self.client_type in API_TOKEN_CLIENT_TYPE_SET :
+            if self.max_refresh != None:
+                raise ValueError(f'This client_type {self.client_type} only allow the "max_refresh" to be None found: {self.max_refresh}')
+
+            if  self.recovery_reset != None:
+                raise ValueError(f'This client_type {self.client_type} only allow the "recovery_reset" to be None found: {self.max_refresh}')
+
+        return self
+    
     @field_validator('client_type')
-    def validate_client_type(cls,clientType:AuthType):
-        if clientType == ClientType.Admin:
+    def validate_client_type(cls,clientType:ClientType):
+        if clientType == ClientType.Admin or clientType == ClientType.System:
             raise ValueError('Cannot create an Admin client')
         return clientType
     
     @field_validator('client_description')
     def validate_description(cls,description:str)->str:
-        if len(description)>500:
-            raise ValueError('Description must be less than 500 characters')
+        description = description or ''
         return description.strip()
 
-class UpdateClientModel(ClientModel):
-    client_scope:Scope|None = None
-    password:str|None = None
-    client_name:str | None = None
-    issued_for:str | None = None
-    client_description :str | None = None
+    @field_validator('client_username')
+    def validate_username(cls,usr):
 
-    #### Fields that wont be updated ######
-    auth_type:Optional[AuthType] = None
-    max_connection:Optional[int] = None
+        if ' ' in usr:
+            raise ValueError('The username cannot contain space')
+
+        return usr
 
 
+UpdateClientModelBase = subset_model(ClientModel,'UpdateClientModelBase',include={'client_name','issued_for','client_username','client_description','client_scope','group','password','policies'})
+
+class UpdateClientModel(UpdateClientModelBase):
+
+    remove_group:bool = Field(default=False)
+    
     @model_validator(mode="after")
     def validate_ip_issuance(self)->Self:
         if self.client_scope != None and self.issued_for!=None:
             return super().validate_ip_issuance()
-        if self.client_scope in [Scope.Domain,Scope.Free] and self.issued_for != None:
-            self.issued_for = generateId(20,True)
         
         return self
-    
-    @model_validator(mode="after")
-    def force_non_update(self):
-        self.auth_type = None
-        self.max_connection = None
 
+    @model_validator(mode="after")
+    def validate_group_modification(self):
+        if self.remove_group and self.group:
+            raise ValueError('We cant remove the group if the group is set to be modified')
+        return self
+    
     @field_validator('password')
     def check_password(cls, password):
         if password!=None:
@@ -255,20 +261,61 @@ class UpdateClientModel(ClientModel):
         if description!=None:
             return super().validate_description(description)
         return description
+
+    @field_validator('policies')
+    def normalize_policies(cls,val):
+        if val!=None:
+            return super().normalize_policies(val)
+        return val
     
-    # @model_validator(mode="after")
-    # def final_validate(self) -> Self:
-    #     if all([self.client_scope is None, self.password is None, self.client_name is None, self.issued_for is None,self.group_id]):
-    #         raise ValueError('At least one field must be provided for update.')
-    #     return self
+    @model_validator(mode="after")
+    def final_validate(self) -> Self:
+        if all([self.client_scope is None, self.password is None, self.client_name is None, self.issued_for is None,self.group_id]):
+            raise ValueError('At least one field must be provided for update.')
+        return self
+
+    @field_validator('client_username')
+    def validate_username(cls,usr):
+        if usr == None:
+            return  usr
+        
+        if ' ' in usr:
+            raise ValueError('The username cannot contain space')
+
+        return usr
 
 
-async def raw_revoke_challenges(client:ClientORM):
-    query = "SELECT security.raw_revoke_challenges($1::UUID);"
-    tortoise_client = Tortoise.get_connection('default')
-    return await tortoise_client.execute_query(query, [client.client_id])
+class BlacklistModel(BaseModel):
+    mode:Literal['group','client','session']
+    identity:str  = Field(min_length=1,max_length=500,description='If mode == session the format should be {client}@{session}')
+    time:float = Field(3600,le=36000,ge=3600)
+    force:bool = Field(False)
 
-async def raw_revoke_auth_token(client:ClientORM):
-    query = "SELECT security.raw_revoke_auth_token($1::UUID);"
-    tortoise_client = Tortoise.get_connection('default')
-    return await tortoise_client.execute_query(query, [client.client_id])
+    @model_validator(mode='after')
+    def validate_session(self):
+        if self.mode == 'session':
+            part =self.identity.strip().split('@')
+            if len(part) != 2:
+                raise ValueError('format not available, try {client}@{session}')
+
+        return self
+
+
+class RevokeSessionModel(BaseModel):
+
+    session:Optional[str]  = Field(default='',max_length=100)
+    can_login:Optional[bool] = Field(default=None)
+
+    @field_validator('session')
+    def normalize_session(cls,s):
+        if s == None:
+            s=''
+        return s
+
+
+
+class UnRevokeGenerationIDModel(BaseModel):
+    version:int|None = None
+    destroy:bool = False
+    delete:bool = False
+    version_to_delete:list[int] = []

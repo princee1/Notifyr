@@ -45,7 +45,6 @@ redis.register_function('credit_transaction', function(keys, args)
     return after
 end)
 
-
 redis.register_function('bill_squash', function(keys, args)
 
     local bill_key = keys[1]
@@ -111,4 +110,26 @@ redis.register_function('bill_squash', function(keys, args)
     redis.call("LPUSH", receipts, cjson.encode(squashed))
 
     return squashed
+end)
+
+redis.register_function('credit_deduction',function(keys,args)
+    local balance = redis.call("GET", keys[1])
+
+    if not balance then
+        return {1}
+    end
+
+    balance = tonumber(balance)
+    local bill_total = tonumber(args[1])
+    local overdraft_allowed = args[2] == "1"
+
+    if balance < bill_total and not overdraft_allowed then
+        return {2, balance, bill_total}
+    end
+
+    local new_balance = balance - bill_total
+
+    redis.call("SET", keys[1], new_balance)
+
+    return {0, balance, new_balance}
 end)

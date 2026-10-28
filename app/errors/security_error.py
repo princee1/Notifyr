@@ -1,48 +1,229 @@
+from typing import Any, Literal
+
+from app.classes.auth_permission import AuthType, ClientType
 from app.definition._error import BaseError
 
 
-class ClientDoesNotExistError(BaseError):
-    ...
+class SecurityBaseError(BaseError):
+    def __init__(self, message: str | None = None, **context: Any):
+        self.message = message or self.__class__.__name__
+        self.context = context
+        super().__init__(self.message)
 
-class GroupAlreadyBlacklistedError(BaseError):
-    def __init__(self, group_id,group_name,reversed_ =False) -> None:
+    @property
+    def detail(self):
+        return {"message": self.message, **self.context}
+
+
+class ClientDoesNotExistError(SecurityBaseError):
+    def __init__(self, client_id: str, from_auth: bool = False):
+        self.client_id = client_id
+        self.from_auth = from_auth
+        super().__init__("Client does not exist", client_id=client_id, from_auth=from_auth)
+
+
+class ClientAlreadyExistError(SecurityBaseError):
+    def __init__(self, client_id: str | None = None):
+        self.client_id = client_id
+        super().__init__("Client already exists", client_id=client_id)
+
+
+class GroupDoesNotExistError(SecurityBaseError):
+    def __init__(self, group_id: str):
         self.group_id = group_id
-        self.group_name = group_name
-        self.reversed = reversed_
-        super().__init__(f'Group {group_id} is already blacklisted')
-
-class CouldNotCreateRefreshTokenError(BaseError):
-    def __init__(self) -> None:
-        super().__init__('Could not create refresh token')
-
-class CouldNotCreateAuthTokenError(BaseError):
-    def __init__(self) -> None:
-        super().__init__('Could not create auth token')
+        super().__init__("Group does not exist", group_id=group_id)
 
 
-class SecurityIdentityNotResolvedError(BaseError):
-    
-    def __init__(self, *args):
-        super().__init__('Both group and client cant be None')
+class CouldNotCreateRefreshTokenError(SecurityBaseError):
+    def __init__(self, reason: str | None = None):
+        self.reason = reason
+        super().__init__("Could not create refresh token", reason=reason)
 
 
-class GroupIdNotMatchError(BaseError):
+class CouldNotCreateAuthTokenError(SecurityBaseError):
+    def __init__(self, reason: str | None = None):
+        self.reason = reason
+        super().__init__("Could not create auth token", reason=reason)
 
+
+class SecurityIdentityNotResolvedError(SecurityBaseError):
+    def __init__(self, token: str, reason: str):
+        self.token = token
+        self.reason = reason
+        super().__init__("Security identity could not be resolved", reason=reason)
+
+
+class GroupIdNotMatchError(SecurityBaseError):
     def __init__(self, client_group_id, group_id):
         self.client_group_id = client_group_id
         self.group_id = group_id
-        super().__init__()
+        super().__init__("Group id does not match", client_group_id=client_group_id, group_id=group_id)
 
 
-class AlreadyBlacklistedClientError(BaseError):
-
-    def __init__(self, reversed_=False):
+class IdentityAlreadyBlacklistedError(SecurityBaseError):
+    def __init__(self, identity: str, mode: Literal['client', 'group', 'session'], reversed_: bool = False):
+        self.identity = identity
+        self.mode = mode
         self.reversed_ = reversed_
-        super().__init__()
-
-class ClientTokenHeaderNotProvidedError(BaseError):
-    ...
+        super().__init__("Identity is already blacklisted", identity=identity, mode=mode, reversed_=reversed_)
 
 
-class AuthzIdMisMatchError(BaseError):
-    ...
+class ClientTokenHeaderNotProvidedError(SecurityBaseError):
+    def __init__(self, header_name: str = 'Authorization'):
+        self.header_name = header_name
+        super().__init__("Client token header not provided", header_name=header_name)
+
+
+class AuthzSignatureMisMatchError(SecurityBaseError):
+    def __init__(self, client_id: str,reason:str=''):
+        self.client_id = client_id
+        self.reason = reason
+        super().__init__("Authorization signature mismatch", client_id=client_id,reason=reason)
+
+
+class PasswordLessAuthTypeStrategyError(SecurityBaseError):
+    def __init__(self, client_type: ClientType, auth_type: AuthType, reason: str):
+        self.client_type = client_type
+        self.auth_type = auth_type
+        self.reason = reason
+        super().__init__("Passwordless auth strategy not allowed", client_type=str(client_type), auth_type=str(auth_type), reason=reason)
+
+
+class JWTInvalidTokenError(SecurityBaseError):
+    def __init__(self, token: str | None = None, reason: str | None = None):
+        self.token = token
+        self.reason = reason
+        super().__init__("Invalid token", reason=reason)
+
+
+class TokenExpiredError(SecurityBaseError):
+    def __init__(self, token: str | None = None, token_type: str = 'token', reason: str | None = None):
+        self.token = token
+        self.token_type = token_type
+        self.reason = reason
+        super().__init__("Token expired", token_type=token_type, reason=reason)
+
+
+class TokenGenerationMismatchError(SecurityBaseError):
+    def __init__(self, expected_generation_id: str | None = None, actual_generation_id: str | None = None, token_type: str = 'token'):
+        self.expected_generation_id = expected_generation_id
+        self.actual_generation_id = actual_generation_id
+        self.token_type = token_type
+        super().__init__("Token generation id mismatch", expected_generation_id=expected_generation_id, actual_generation_id=actual_generation_id, token_type=token_type)
+
+
+class TokenDataMissingError(SecurityBaseError):
+    def __init__(self, missing_fields: list[str] | tuple[str, ...] | None = None, token: str | None = None):
+        self.missing_fields = list(missing_fields or [])
+        self.token = token
+        super().__init__("Token data is missing required fields", missing_fields=self.missing_fields)
+
+
+class APIKeyMissingError(SecurityBaseError):
+    def __init__(self, source: str = 'api_key'):
+        self.source = source
+        super().__init__("API key is missing", source=source)
+
+class APIKeyMismatchError(SecurityBaseError):
+    def __init__(self, source: str = 'api_key', provided: str | None = None):
+        self.source = source
+        self.provided = provided
+        super().__init__("API key provided does not match", source=source, provided=provided)
+
+
+class ProvidedHashNotEquivalentError(SecurityBaseError):
+    def __init__(self, source_id: str | None = None, source_mode: str | None = None):
+        self.source_id = source_id
+        self.source_mode = source_mode
+        super().__init__("Provided hash does not match the stored value", source_id=source_id, source_mode=source_mode)
+
+
+class IdentityBlacklistedError(SecurityBaseError):
+    def __init__(self, identity: str, identity_type: str):
+        self.identity = identity
+        self.identity_type = identity_type
+        super().__init__("Identity is blacklisted", identity=identity, identity_type=identity_type)
+
+
+class ClientAuthenticationConfusionError(SecurityBaseError):
+    def __init__(self, client_id: str,session_id:str,source:Literal['refresh','access']):
+        self.client_id = client_id
+        self.source = source
+        self.session_id =session_id
+        super().__init__("Client authentication state confusion",session_id=session_id, client_id=client_id,source=source)
+
+class SessionNotValidatedError(SecurityBaseError):
+
+    def __init__(self,client_id:str,session:str,reason:str=None):
+        self.client_id = client_id 
+        self.session = session
+        self.reason = reason
+        super().__init__('Session Could not be validated',client_id=client_id,session_provided=session,reason=reason)
+
+
+class RequestOriginIsNotValidError(SecurityBaseError):
+
+    def __init__(self, message:str , client_id:str, client_type:str,client_scope:str,issued_for):
+        super().__init__('Request origin is not valid', detailed_message = message, client_id=client_id, client_type=client_type,client_scope=client_scope)
+
+class ClientNotAllowedToLoginError(SecurityBaseError):
+
+    def __init__(self, username:str):
+        self.username = username
+        super().__init__('Client is not allowed to login at the moment', username=username)
+
+
+class PrimarySessionNotValidatedError(SecurityBaseError):
+
+    def __init__(self,client_id:str,session_id:str):
+        self.client_id = client_id
+        self.session_id = session_id
+
+        super().__init__('Primary session is needed to do this operation',client_id=client_id,session_id=session_id)
+
+
+class MaximumSessionReachedError(SecurityBaseError):
+
+    def __init__(self, client_id:str,session_id:str,max_session_allowed):
+        self.client_id = client_id
+        self.session_id = session_id 
+        self.max_session_allowed = max_session_allowed
+        super().__init__('Maximum session reached', client_id=client_id,session_id =session_id,max_session_allowed=max_session_allowed)
+
+
+class MaximumRefreshReuseReachedError(SecurityBaseError):
+    def __init__(self, client_id:str,session_id:str,max_refresh_allowed:int):
+        super().__init__('Maximum Refresh Reuse reached', client_id=client_id,session_id=session_id,max_refresh_allowed=max_refresh_allowed)
+
+class SessionMechanismOperationError(SecurityBaseError):
+
+    def __init__(self,reason:str,mechanism:str):
+        self.reason = reason
+        self.mechanism = mechanism
+        super().__init__('Session Mechanism Operation Error',reason=reason,mechanism=mechanism)
+
+
+class RefreshTokenIdentityMismatchError(SecurityBaseError):
+    def __init__(self,client_id:str,refresh_client_id:str,session_id:str):
+        super().__init__('Refresh Token Identity Mismatch',client_id=client_id,refresh_client_id=refresh_client_id,session_id=session_id)
+
+
+class CipherDoesNotExistError(SecurityBaseError):
+    def __init__(self,mode):
+        super().__init__('Cipher specified does not exists', cipher_mode=mode)
+
+
+class CipherSchemeNotValidError(SecurityBaseError):
+    def __init__(self,scheme):
+        super().__init__('Cipher scheme not valid', scheme =scheme)
+
+
+class BadAuthMechanismContextError(SecurityBaseError):
+
+    def __init__(self,required:str,provided:str,context:Literal['global','route']='global'):
+        super().__init__('Bad Auth Mechanism Context Error', required=required,provided=provided,context=context)
+
+class RootSetupNotConfiguredError(SecurityBaseError):
+
+    def __init__(self,keys:str):
+        super().__init__('Root Configuration not setup')

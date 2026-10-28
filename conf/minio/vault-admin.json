@@ -1,0 +1,23 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "s3:ListAllMyBuckets",
+                "s3:GetBucketLocation",
+                "admin:ListUsers",
+                "admin:GetUser",
+                "admin:ListServiceAccounts",
+                "admin:AddServiceAccount",
+                "admin:UpdateServiceAccount",
+                "admin:RemoveServiceAccount",
+                "admin:ListPolicies",
+                "admin:GetPolicy"
+            ],
+            "Resource": [
+                "arn:aws:s3:::*"
+            ]
+        }
+    ]
+}

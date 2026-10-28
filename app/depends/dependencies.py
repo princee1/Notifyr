@@ -5,14 +5,16 @@ Module to easily manage retrieving user information from the request object.
 from typing import Annotated, Any, Callable, Type, TypeVar, Literal
 from fastapi import Depends, HTTPException, Request, Response,status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials,HTTPBearer
+from app.classes.auth_permission import AuthMechanism
 from app.services.config_service import ConfigService
 from app.utils.constant import FastAPIConstant, HTTPHeaderConstant
-from app.utils.helper import parse_value, reverseDict
+from app.utils.helper import parse_value, reverseDict, uuid_v1_mc
 from app.container import Get
 
 configService:ConfigService = Get(ConfigService)
 
 D = TypeVar('D',bound=type)
+Context = Literal['request','call']
 
 def get_user_language(request: Request) -> str:
     """
@@ -32,10 +34,13 @@ def get_user_language(request: Request) -> str:
         A string representing the user's preferred language code (e.g., 'en', 'es', 'fr').
         If no language preference is found, it may return a default language or None.
     """
-    return ... 
+    return request.headers.get('Accept-Language', 'en')
 
 def get_user_agent(request: Request) -> str:
-    return request.headers.get('User-Agent')
+    return request.headers.get('User-Agent',None)
+
+def get_device_name(request:Request)->str:
+    return None
 
 def get_timezone(request:Request)->str:
     ...
@@ -52,22 +57,6 @@ def get_client_ip(request: Request) -> str:
 def get_balancer_ip(request: Request) -> str:
     return request.client.host
 
-
-def get_response_id(r:Response = None)-> str | None:
-
-    try:
-        if r:
-            return r.headers[HTTPHeaderConstant.REQUEST_ID]
-        return APIKeyHeader(name=HTTPHeaderConstant.REQUEST_ID)
-    except KeyError as e:
-        return None
-
-
-def get_api_key(request: Request=None) -> str:
-    if request:
-        return request.headers.get(HTTPHeaderConstant.API_KEY_HEADER)
-    return APIKeyHeader(name=HTTPHeaderConstant.API_KEY_HEADER)
-
 def get_bearer_token(credentials: Annotated[HTTPAuthorizationCredentials, Depends(HTTPBearer())]) -> str:
     # if isinstance(credentials,Request):
     #     return credentials.headers['Authorization'].replace('Bearer ','')
@@ -79,31 +68,11 @@ def get_bearer_token_from_request(request: Request):
     except KeyError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization header missing")
 
-def get_admin_token(request: Request = None):
-    if request:
-        return request.headers.get(HTTPHeaderConstant.ADMIN_KEY)
-    return APIKeyHeader(name=HTTPHeaderConstant.ADMIN_KEY)
-
-def get_auth_permission(request: Request):
-    if not configService.SECURITY_FLAG:
-        return None
-    if not hasattr(request.state, "authPermission") or request.state.authPermission is None:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    return request.state.authPermission
-
 def wrapper_auth_permission(request:Request):
     try:
         return get_auth_permission(request)
     except:
         return None
-
-async def get_client_from_request(request:Request):
-    if not configService.SECURITY_FLAG:
-        return None
-
-    if not hasattr(request.state, "client") or request.state.client is None:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    return request.state.client
 
 def is_mcp_request(request:Request):
     return getattr(request.state,'from_mcp_user',False)
@@ -113,16 +82,18 @@ async def get_request_id(request: Request):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not retrieve request id")
     return request.state.request_id
 
-def get_query_params(name,default=None,parse=False,return_none=False,raise_except=False,checker:Callable[[Any],bool]=None)->Callable[[Request],str|None]:
+def get_query_params(name,default=None,parse=False,return_none=False,raise_except=False,cls:Type[str|bool|int|float|Any]=Any,checker:Callable[[Any],bool]=None)->Callable[[Request],str|None]:
     """ return_none: only if parsing was failed choose wether to return None or the string
     """
     def depends(request:Request):
         value = request.query_params.get(name,default)
         if parse and value != None:
             value = parse_value(value,return_none)
+            if value!=None and cls != Any and not isinstance(value,cls):
+                raise HTTPException(400,detail=f'Query params {name} does not meet the require type: found: "{type(value)}" required: {cls.__name__} ',headers=FastAPIConstant.OO_SCOPE_HEADERS)
         
         if value == None and raise_except:
-            raise HTTPException(400,detail=f'Query {name} not properly specified',headers=FastAPIConstant.OO_SCOPE_HEADERS)
+            raise HTTPException(400,detail=f'Query params {name} not properly specified',headers=FastAPIConstant.OO_SCOPE_HEADERS)
 
         if checker:
             mess = checker(value)
@@ -131,14 +102,76 @@ def get_query_params(name,default=None,parse=False,return_none=False,raise_excep
         return value
     return depends
 
-
 def get_contact_token():
     return APIKeyHeader(name=HTTPHeaderConstant.CONTACT_TOKEN)
 
+def get_auth_mechanism(request:Request)-> AuthMechanism | None:
+    auth_mechanism = request.headers.get(HTTPHeaderConstant.X_AUTH_MECHANISM,None)
+    if configService.AUTH_MECHANISM == 'both':
+        if auth_mechanism == None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail='Error while getting the auth mechanism')
+    return auth_mechanism
+        
+def get_client_info(request:Request,context:Annotated[Context,Depends(lambda:'request')]='request'):
+    mechanism = configService.AUTH_MECHANISM
+    while True:
+        match mechanism:
+            case 'userpass':
+                if not hasattr(request.state, "clientInfo") or request.state.clientInfo is None:
+                    raise HTTPException(status_code=401, detail="Unauthorized 'clientInfo' not found")
+                return request.state.clientInfo       
+            case 'both':
+                if request.headers.get(HTTPHeaderConstant.X_AUTH_MECHANISM,None) == 'userpass':
+                    mechanism = 'userpass'
+                    continue
+                return None
+            case 'token':
+                if context == 'call':
+                    raise HTTPException(status_code=401, detail="Bad Authentication Method required: userpass")
+                else:
+                    return None
+            case 'none':
+                return None
 
+def get_auth_permission(request: Request,context:Annotated[Context,Depends(lambda:'request')]='request'):
+    mechanism = configService.AUTH_MECHANISM
+    while True:
+        match mechanism:
+            case 'userpass':
+                if not hasattr(request.state, "authPermission") or request.state.authPermission is None:
+                    raise HTTPException(status_code=401, detail="Unauthorized 'authPermission' not found")
+                return request.state.authPermission
+            case 'both':
+                if get_auth_mechanism(request) == 'userpass':
+                    mechanism = 'userpass'
+                    continue
+                return None
+            case 'token':
+                raise HTTPException(status_code=401, detail="Bad Authentication Method required: userpass")
+            case 'none':
+                return None
 
-def get_session_id(request: Request):
+def get_access_info(request:Request,context:Annotated[Context,Depends(lambda:'request')]='request'):
+    mechanism = configService.AUTH_MECHANISM
+    while True:
+        match mechanism:
+            case 'token':
+                if not hasattr(request.state, "accessInfo") or request.state.accessInfo is None:
+                    raise HTTPException(status_code=401, detail="Unauthorized 'access' not found ")
+                return request.state.accessInfo       
+            case 'both':
+                if request.headers.get(HTTPHeaderConstant.X_AUTH_MECHANISM,None) == 'token':
+                    mechanism = 'token'
+                    continue
+                return None
+            case 'userpass':
+                if  context == 'call':
+                    raise HTTPException(status_code=401, detail="Bad Authentication Method required: token")
+                else:
+                    return None
+            case 'none':
+                return None
+
+def get_session_id(request: Request,default:Annotated[str,Depends(lambda:str(uuid_v1_mc()))]):
     ...
 
-def get_router_name(request: Request):
-    ...

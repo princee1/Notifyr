@@ -14,7 +14,9 @@ from app.utils.constant import LLMProviderConstant
 class BillItem:
     description: str
     amount: int
+    """price of a single item"""
     quantity: int = 1
+    """quantity of the bill item"""
     subtotal: int = field(init=False)
 
     def __post_init__(self) -> None:
@@ -207,3 +209,7 @@ class CostMoreThanZeroError(CostException):
     def __init__(self, total):
         super().__init__()
         self.total = total
+
+
+class CostMechanismNotActivatedError(CostException):
+    """COST_FLAG deactivated the cost mechanism"""

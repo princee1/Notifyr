@@ -23,7 +23,7 @@ if APP_MODE == ApplicationMode.server:
 
 
 REDIS_CREDIT_KEY_BUILDER= lambda credit_key: f"notifyr/credit:{credit_key}"
-DEDUCT_CREDITS_SCRIPT='credit-deduction'
+DEDUCT_CREDITS_SCRIPT='credit_deduction'
 
 CREDIT_TO_CAPABILITIES:dict[CostConstant.Credit,str] = {
     'email':'email',
@@ -99,7 +99,8 @@ class CostService(BaseService):
         
         if APP_MODE == ApplicationMode.server:
             storage_uri=self.redisService.compute_url(db=RedisConstant.LIMITER_DB)
-            storage_uri = None if self.configService.MODE == MODE.DEV_MODE else None # TODO redis url + f'/{RedisConstant.LIMITER_DB}'
+            storage_uri = None
+
             self.GlobalLimiter = Limiter(get_remote_address, storage_uri=storage_uri, headers_enabled=True)
 
         if self.configService.MODE == MODE.PROD_MODE:
@@ -116,6 +117,11 @@ class CostService(BaseService):
         else:
             self.service_status = ServiceStatus.AVAILABLE
  
+
+    def pingService(self, infinite_wait, data, profile = None, as_manager = False, **kwargs):
+        if not self.configService.COST_FLAG:
+            raise 
+
     ###################################################                        #######################################
 
     ###################################################                        #######################################
@@ -124,7 +130,7 @@ class CostService(BaseService):
     async def check_enough_credits(self,credit_key:str,purchase_cost:int):
         current_balance = await self.redisService.retrieve(RedisConstant.COST_DB,credit_key)
         if current_balance == None:
-            raise InvalidPurchaseRequestError
+            raise InvalidPurchaseRequestError(f'Balance on credit: {credit_key} is not available')
         
         current_balance = int(current_balance)
 
@@ -137,13 +143,13 @@ class CostService(BaseService):
     @CreditSilentFail()
     @RedisCreditKeyBuilder
     async def refund_credits(self,credit_key:str,bill:Bill):
+        balance = await self.get_credit_balance(credit_key,__builder__=False)
+
         async with self.redisService.db[RedisConstant.COST_DB].pipeline(transaction=False) as pipe:
             refund_cost = bill['total']
-            balance = await self.get_credit_balance(credit_key,__builder__=False,redis=pipe)
-            
             pipe.multi()
 
-            await self.redisService.decrement(RedisConstant.COST_DB,credit_key,refund_cost,pipe)
+            await self.redisService.decrement(RedisConstant.COST_DB,credit_key,refund_cost,redis=pipe)
             self.set_balance(bill, balance)
             await self.push_bill(credit_key,bill,redis=pipe)
 
@@ -158,12 +164,13 @@ class CostService(BaseService):
 
         try:
             result = await self.redisService.redis_cost.fcall(DEDUCT_CREDITS_SCRIPT,1,credit_key,bill_total,overdraft_allowed)
-        except:
+        except Exception as e:
+            print(e)
             raise CreditDeductionFailedError()
 
         status = result[0]
         if status == 1:
-            raise InvalidPurchaseRequestError()
+            raise InvalidPurchaseRequestError(f'Balance on {credit_key} is not available')
 
         old_balance = int(result[1])
         new_balance = int(result[2])

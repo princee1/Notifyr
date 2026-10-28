@@ -15,10 +15,6 @@ class TwilioInterface(Interface):
 
         return formatted_number
    
-    
-    async def verify_twilio_token(self, request: Request):
-        ...
-
     async def phone_lookup(self, phone_number: str,carrier=True,caller_name=False) -> tuple[int, dict]:
         ...
 
