@@ -158,6 +158,8 @@ class AdminClientModel(BaseModel):
      
 class ClientModel(ClientModelBase):
     password:Optional[str] = None
+    client_type:ClientType = Field(ClientType.User)
+    client_scope:Scope = Field(Scope.SoloDolo)
     group:str | None = Field(None)
     max_connection:int = Field(default=1,ge=1,le=15)
     max_refresh:Optional[int] = Field(default=None,ge=0,le=999)

@@ -1,7 +1,7 @@
 from fastapi import Cookie, Request, Response
 from app.classes.auth_permission import AuthState
 from app.container import Get
-from app.errors.security_error import ClientAuthenticationConfusionError, RefreshTokenIdentityMismatch, SecurityIdentityNotResolvedError, TokenExpiredError
+from app.errors.security_error import ClientAuthenticationConfusionError, RefreshTokenIdentityMismatchError, SecurityIdentityNotResolvedError, TokenExpiredError
 from app.models.orm.security_model import ClientORM
 from app.services.config_service import ConfigService
 from app.services.security_service import JWTAuthService
@@ -35,7 +35,7 @@ class AuthSessionManager:
         
         client_id = str(clientORM.client_id)
         if refresh['client_id'] != client_id:
-            raise RefreshTokenIdentityMismatch(client_id,refresh['client_id'],refresh['session_id'],)
+            raise RefreshTokenIdentityMismatchError(client_id,refresh['client_id'],refresh['session_id'],)
 
         match refresh['status']:
             case 'expired':

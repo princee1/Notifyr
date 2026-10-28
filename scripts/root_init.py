@@ -68,6 +68,7 @@ class InitStepCallback(StepCallback):
 async def main():
     vaultService:VaultService = Get(VaultService)
     redisService:RedisService = Get(RedisService)
+    configService:ConfigService = Get(ConfigService)
     tortoiseService:TortoiseConnectionService = Get(TortoiseConnectionService)
 
     await tortoiseService.init_connection()
@@ -78,7 +79,7 @@ async def main():
         skip()
 
         system_access = AccessTypeAPIModel(token = f'app:{generateId(75)}',type='System',description='The access of Notifyr System, this is the superuser',
-            allowed_ip=['{COMES FROM ENV}'],alias = f'Notifyr System')
+            allowed_ip=[configService.SYSTEM_IP],alias = f'Notifyr System')
         system_access._path = AccessVaultConstant.ACCESS_PATH('system')
         system_file['access'] = system_access.model_dump(mode='json')
         system_file.save()
@@ -88,7 +89,7 @@ async def main():
         skip()
         
         systemInfo = {'client_email':'system@noreply-notifyr.ca','client_name':'Notifyr System','client_username' :'notifyr_system',
-                        'client_description':'Root Super user account that can login and do Admin operation and super user operation','issued_for':'{COMES FROM ENV}'}
+                        'client_description':'Root Super user account that can login and do Admin operation and super user operation','issued_for':configService.SYSTEM_IP}
         systemORM = security.ClientORM(client_type=ClientType.System,max_connection=1,max_refresh=25,can_login=True,**systemInfo)
         system_client = InjectInMiniService(ClientMiniService,client=systemORM,group_id=None,policies=[])
         password = generateId(22)

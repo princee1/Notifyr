@@ -243,6 +243,7 @@ class ConfigService(_service.BaseService):
         # SECURITY CONFIG #
         self.AUTH_MECHANISM:AuthMechanism  = self.getenv('AUTH_MECHANISM','userpass').lower()
 
+        self.SYSTEM_IP:str = self.getenv('SYSTEM_IP','172.25.0.1')
 
     def verify(self):
         if self.S3_CRED_TYPE not in ['MINIO','AWS']:

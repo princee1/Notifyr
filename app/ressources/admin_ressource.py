@@ -107,11 +107,28 @@ class ClientRessource(BaseHTTPRessource):
     inject_session_query = bool_query_creator('session','false')
 
     @staticmethod
-    def session_guard(session:bool,source:SourceMode):
+    async def session_guard(session:bool,source:SourceMode):
         if session and source != 'memory':
             raise HTTPException(400,detail='Cant fetch the session if the source is not "memory"')
 
         return True,''
+
+    @staticmethod
+    def filter_source_builder(filtered_source:SourceMode):
+        def filter(source:SourceMode):
+            return source == filtered_source
+        return filter
+
+    @staticmethod
+    def client_filter(c:ClientORM,clientType:ClientType):
+        if c.client_type == ClientType.System:
+            return False
+        
+        if c.client_type == ClientType.Admin and clientType!=ClientType.System:
+            return False
+        
+        return True
+    
 
     @InjectInMethod()
     def __init__(self, configService: ConfigService, securityService: SecurityService, jwtAuthService: JWTAuthService, adminService: AdminService,tortoiseService:TortoiseConnectionService,redisService:RedisService):
@@ -142,7 +159,7 @@ class ClientRessource(BaseHTTPRessource):
             raise ClientAlreadyExistError(clientModel.client_username or clientModel.client_email)
         
         valid_policies = await RunInThreadPool(self.vaultService.security_engine.list)('policies')
-        if len((policies_error:=set(clientModel).difference(valid_policies)))>0:
+        if len((policies_error:=set(clientModel.policies).difference(valid_policies)))>0:
             raise PoliciesNotMatchingError(policies_error)
 
         client_data = { **clientModel.model_dump(),'client_id':clientModel._client_id}
@@ -236,15 +253,16 @@ class ClientRessource(BaseHTTPRessource):
     @UseHandler(MiniServiceHandler,DataSourceHandler)
     @UsePipe(SanitizePathParameterPipe({},client=True))
     @UsePipe(StateResponseInjectionPipe('sessions',merge=True),before=False)
-    @UsePipe(ObjectRelationalFriendlyPipe(when=lambda source: source == 'database'),before=False)
-    @UsePipe(ClientMiniServiceResponsePipe('result',when=lambda source: source == 'memory'),before=False)
+    @UsePipe(ObjectRelationalFriendlyPipe(when=filter_source_builder('database')),before=False)
+    @UsePipe(ClientMiniServiceResponsePipe('result',when=filter_source_builder('memory')),before=False)
     @BaseHTTPRessource.Get('/{client:path}')
     async def read_client(self,request:Request,response:Response,state:Annotated[StateManager,Depends(StateManager)],client:str='',session:bool = Depends(inject_session_query),source:SourceMode=Depends(source_mode_query),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info)):
+        
         match source:
             case 'database':
                 state.deactivate()
                 if client == '':
-                    return [ c for c in await ClientORM.all() if (c.client_type!=ClientType.Admin and clientInfo['client_type'] != ClientType.System )]
+                    return [c for c in await ClientORM.all() if self.client_filter(c,clientInfo['client_type'])]
                 else:
                     clientORM  = await ClientORM.filter(client_id=client).exclude(client_type=ClientType.System).first()
                     if clientORM == None or (clientORM.client_type == ClientType.Admin and clientInfo['client_type'] != ClientType.System):
@@ -269,7 +287,7 @@ class ClientRessource(BaseHTTPRessource):
                 else:
                     clients = []
                     ref:list = state.store('sessions',[])
-                    async for service in self.adminService.MiniServiceStore.aiter(predicate=lambda c:(c.client.client_type!=ClientType.Admin and clientInfo['client_type'] != ClientType.System )):
+                    async for service in self.adminService.MiniServiceStore.aiter(predicate=lambda c:(self.client_filter(c.client, clientInfo['client_type']))):
                         if session:
                             sessions = await service.read_sessions()
                             ref.append(sessions)

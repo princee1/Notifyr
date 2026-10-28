@@ -6,7 +6,7 @@ from starlette import status
 from app.classes.auth_permission import AccessModel, AuthPermission, AuthSignature, AuthState, AuthType, ClientAccessInfo, ClientRefresh, ClientType, Credentials, EncryptedRecoveryTokens, RecoveryCredentials, RecoveryTokenGenerator, RecoveryTokens, Role
 from app.container import InjectInMethod, Get
 from app.decorators.guards import BlacklistClientGuard, ClientAuthTypeGuard, PrimarySessionGuard
-from app.decorators.handlers import ClientHandler, MiniServiceHandler, ORMCacheHandler, RedisHandler, ClientSecurityHandler, VaultHandler
+from app.decorators.handlers import ClientHandler, MiniServiceHandler, ORMCacheHandler, RedisHandler, ClientSecurityHandler, TortoiseHandler, VaultHandler
 from app.decorators.interceptors import InvalidBlacklistTokenInterceptor
 from app.decorators.permissions import ClientTypesPermission, JWTRouteHTTPPermission, UserPermission
 from app.decorators.pipes import AccessTokenModelPipe, ClientMiniServiceResponsePipe, MiniServiceInjectorPipe, ObjectRelationalFriendlyPipe, SanitizePathParameterPipe, auth_state_pipe, refresh_logout_handler
@@ -37,7 +37,7 @@ SessionMode = Literal['public','private']
 session_choices = get_args(SessionMode)
 
 @PingService([VaultService])
-@UseHandler(VaultHandler,ClientHandler)
+@UseHandler(VaultHandler,ClientHandler,TortoiseHandler)
 @HTTPRessource('auth')
 class AuthRessource(BaseHTTPRessource):
 

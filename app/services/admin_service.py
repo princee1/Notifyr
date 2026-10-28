@@ -10,6 +10,7 @@ from app.services.config_service import ConfigService
 from app.services.database.redis_service import REDIS_PREFIX_BUILDER, RedisService
 from app.services.database.tortoise_service import SECURITY_CREDS, TortoiseConnectionService
 from app.services.security_service import JWTAuthService, SecurityService
+from app.services.setting_service import SettingService
 from app.services.vault_service import VaultService
 from app.utils.constant import RedisConstant
 from app.utils.helper import generateId, uuid_v1_mc
@@ -52,7 +53,7 @@ EncryptedPassword = str
 @MiniService()
 class ClientMiniService(BaseMiniService):
 
-    def __init__(self,vaultService:VaultService,configService:ConfigService,jwtService:JWTAuthService,securityService:SecurityService,redisService:RedisService,client:ClientORM,group_id:str, policies:list[PolicyModel]=[]):
+    def __init__(self,vaultService:VaultService,configService:ConfigService,jwtService:JWTAuthService,securityService:SecurityService,redisService:RedisService,settingService:SettingService,client:ClientORM,group_id:str, policies:list[PolicyModel]=[]):
         self.client = client
         self._group_id = group_id
         super().__init__(None, str(self.client.client_id))
@@ -61,6 +62,7 @@ class ClientMiniService(BaseMiniService):
         self.jwtService = jwtService
         self.redisService = redisService
         self.securityService = securityService
+        self.settingService = settingService
         self.authPermission:AuthPermission = self.combine_policy(policies)
 
         self.sessions:dict[str,ChaCha20SecretsWrapper] = {}
@@ -224,7 +226,7 @@ class ClientMiniService(BaseMiniService):
                 
             case 'redis' | 'redis+sync':
                 path = ClientVaultPath.SESSIONS_REDIS_PATH(self.client_id,session_id)
-                expire = 0 if self.client.auth_type == AuthType.API_TOKEN else 60*60
+                expire = 0 if self.client.auth_type == AuthType.API_TOKEN else 60*60*60
                 await self.redisService.store(RedisConstant.SECURITY_DB,path,authSignature,expire)
 
         return authSignature,session_id
@@ -472,7 +474,7 @@ SYNC_ADMIN_BUILD_STATE = 4234
         ])
 class AdminService(BaseMiniServiceManager[ClientMiniService]):
 
-    def __init__(self,configService:ConfigService,jwtAuthService:JWTAuthService,tortoiseConnService:TortoiseConnectionService,vaultService:VaultService,redisService:RedisService,securityService:SecurityService):
+    def __init__(self,configService:ConfigService,jwtAuthService:JWTAuthService,tortoiseConnService:TortoiseConnectionService,vaultService:VaultService,redisService:RedisService,securityService:SecurityService,settingService:SettingService):
         super().__init__()
         self.configService = configService
         self.jwtAuthService = jwtAuthService
@@ -480,6 +482,7 @@ class AdminService(BaseMiniServiceManager[ClientMiniService]):
         self.vaultService = vaultService
         self.redisService = redisService
         self.securityService = securityService
+        self.settingService = settingService
 
         self.policies:dict[str,PolicyModel] = {}
         self.mappings:list[dict] = []
@@ -513,6 +516,7 @@ class AdminService(BaseMiniServiceManager[ClientMiniService]):
                                         self.jwtAuthService,
                                         self.securityService,
                                         self.redisService,
+                                        self.settingService,
                                         client,group_id,policy)
             service._builder(BaseMiniService.QUIET_MINI_SERVICE,build_state,self.CONTAINER_LIFECYCLE_SCOPE)
             self.MiniServiceStore.add(service)
