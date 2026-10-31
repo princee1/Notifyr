@@ -17,6 +17,12 @@ if [ "$INIT_NOTIFYR_DB" = "on" ]; then
         --username "$MONGO_INITDB_ROOT_USERNAME" \
         --password "$MONGO_INITDB_ROOT_PASSWORD" \
         --authenticationDatabase admin \
+        /notifyr/static_user.js
+    
+    mongosh \
+        --username "$MONGO_INITDB_ROOT_USERNAME" \
+        --password "$MONGO_INITDB_ROOT_PASSWORD" \
+        --authenticationDatabase admin \
         --eval 'db.getSiblingDB("notifyr").getUsers()'
 fi
 

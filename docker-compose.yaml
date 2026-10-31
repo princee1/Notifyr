@@ -504,6 +504,7 @@ services:
       - ./scripts/entrypoint/mongo-entrypoint.sh:/usr/local/bin/mongo-entrypoint.sh
       - ./scripts/db-init/mongo-init.sh:/docker-entrypoint-initdb.d/mongo-init.sh
       - ./database/mongodb/notifyr/admin.js:/notifyr/admin.js
+      - ./database/mongodb/users/static_user.js:/notifyr/static_user.js
     environment:
       INIT_NOTIFYR_DB: on
       MONGO_INITDB_DATABASE: app

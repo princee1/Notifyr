@@ -351,6 +351,13 @@ setup_database_config(){
         rollback_statements="DROP ROLE IF EXISTS \"{{name}}\";" \
         revocation_statements="REVOKE vault_ntfr_app_role FROM \"{{name}}\";
                         DROP ROLE IF EXISTS \"{{name}}\";"
+    
+    vault write notifyr-database/static-roles/app-postgres-ntfr-role \
+        db_name="postgres" \
+        rotation_period="7d" \
+        username="vault_ntfr_app_static_user"
+    
+    vault write -f notifyr-database/rotate-role/app-postgres-ntfr-role
 
     vault write notifyr-database/roles/app-postgres-security-ntfr-role \
         db_name="postgres-notifyr" \
@@ -361,6 +368,14 @@ setup_database_config(){
         rollback_statements="DROP ROLE IF EXISTS \"{{name}}\";" \
         revocation_statements="REVOKE vault_ntfr_client_role FROM \"{{name}}\";
                         DROP ROLE IF EXISTS \"{{name}}\";"
+    
+    vault write notifyr-database/static-roles/app-postgres-security-ntfr-role \
+        db_name="postgres-notifyr" \
+        rotation_period="7d" \
+        username="vault_ntfr_client_static_user"
+    
+    vault write -f notifyr-database/rotate-role/app-postgres-security-ntfr-role
+
 
     vault write notifyr-database/roles/admin-postgres-ntfr-role \
       db_name="postgres" \
@@ -401,6 +416,14 @@ setup_database_config(){
       default_ttl="12h" \
       max_ttl="16h"
     
+    vault write notifyr-database/static-roles/agentic-mongo-ntfr-role \
+      db_name="mongodb-notifyr" \
+      rotation_period="7d" \
+      username="vault_ntfr_agentic_static_user"
+    
+    vault write -f notifyr-database/rotate-role/agentic-mongo-ntfr-role
+
+    
     vault write notifyr-database/roles/admin-mongo-agentic-ntfr-role \
       db_name="mongodb-notifyr" \
       default_ttl="30m" \
@@ -422,6 +445,14 @@ setup_database_config(){
       default_ttl="12h" \
       max_ttl="16h"
 
+    vault write notifyr-database/static-roles/app-mongo-ntfr-role \
+      db_name="mongodb-notifyr" \
+      rotation_period="7d" \
+      username="vault_ntfr_app_static_user"
+    
+    vault write -f notifyr-database/rotate-role/app-mongo-ntfr-role
+
+
     vault write notifyr-database/roles/admin-mongo-ntfr-role \
       db_name="mongodb-notifyr" \
       default_ttl="30m" \
@@ -439,6 +470,13 @@ setup_database_config(){
       { "role": "readWrite", "db": "notifyr", "collection":"tasks" }]}' \
       default_ttl="12h" \
       max_ttl="16h"
+    
+    vault write notifyr-database/static-roles/app-mongo-jobs-ntfr-role \
+      db_name="mongodb" \
+      rotation_period="7d" \
+      username="vault_ntfr_jobs_static_user"
+    
+    vault write -f notifyr-database/rotate-role/app-mongo-jobs-ntfr-role
 
     vault write notifyr-database/roles/admin-mongo-jobs-ntfr-role \
       db_name="mongodb" \
@@ -625,7 +663,6 @@ database_connection_config(){
 
     setup_config_kv2 "postgres_connection" "set"
   fi
-
 
   # --- MONGODB CONNECTION ---
   if ! setup_config_kv2 "mongodb_connection" "check"; then
