@@ -1,0 +1,7 @@
+user vault_ntfr_app_celery_broker_static_user on >vaultpass ~notifyr/celery/broker/* &notifyr/celery/broker/* +PING +SELECT +LPUSH +RPUSH +BRPOP +BLPOP +LPOP +LLEN +DEL +EXPIRE +PEXPIRE +SCAN +EVAL +@pubsub
+user vault_ntfr_app_celery_backend_static_user on >vaultpass ~notifyr/celery/backend/* &notifyr/celery/backend/* +@string +@transaction +@hash +@list +@set +@sortedset +@stream +@keyspace +@pubsub -@admin -@dangerous -@connection +PING +SELECT +SCAN +EXEC +EVALSHA +script|load +script|exists +MULTI
+user vault_ntfr_app_credit_static_user on >vaultpass ~notifyr/credit:* +@transaction +GET +SET +INCRBY +DECRBY +LPUSH +LTRIM +LRANGE +SELECT +FCALL +EVAL +EXISTS
+user vault_ntfr_app_security_static_user on >vaultpass ~notifyr/security/* +@transaction +@string +EXISTS +SELECT +KEYS +DEL +EXPIRE
+user vault_ntfr_app_config_static_user on >vaultpass ~notifyr/config/* +@transaction +@string +EXISTS +KEYS +DEL +EXPIRE +SELECT
+user vault_ntfr_app_static_user on >vaultpass ~* &* +@string +@hash +@list +@set +@sortedset +@transaction +@stream +@keyspace +@pubsub -@admin -@dangerous -@connection +PING +SELECT +SCAN +INFO +KEYS +EVALSHA
+user vault_ntfr_agentic_static_user on >vaultpass ~notifyr/agentic/* &notifyr/agentic/* +@all

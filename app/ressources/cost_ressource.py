@@ -83,7 +83,7 @@ class CostRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/bills/{credit}/', methods=[HTTPMethod.GET],)
     async def get_bills(self,credit:CostConstant.Credit, request: Request,start:int = Query(0),stop:int=Query(-1), authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         """Placeholder for billing/history endpoint. Implement retrieval from DB/audit store when available."""
-        credit = (await self.credit_pipe(credit))['credit']
+        
         bill_key = self.costService.bill_key(credit)
         return await self.redisService.range(RedisConstant.LIMITER_DB,bill_key,start,stop) or []
 
@@ -100,7 +100,6 @@ class CostRessource(BaseHTTPRessource):
     @BaseHTTPRessource.HTTPRoute('/receipts/{credit}/', methods=[HTTPMethod.GET],)
     async def get_receipts(self,credit:CostConstant.Credit, request: Request,start:int = Query(0),stop:int=Query(-1),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         
-        credit = (await self.credit_pipe(credit))['credit']
         receipt_key =  self.costService.receipts_key(credit)
         return await self.redisService.range(RedisConstant.LIMITER_DB,receipt_key,start,stop) or []
         

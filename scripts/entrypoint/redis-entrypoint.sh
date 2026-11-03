@@ -2,6 +2,7 @@
 set -e
 
 ACL_FILE="/data/etc/.users/users.acl"
+STATIC_ACL_FILE="/etc/redis/users.acl"
 mkdir -p "$(dirname "$ACL_FILE")"
 
 USER_NAME="redis-vaultadmin"
@@ -11,7 +12,7 @@ URL="redis://$USER_NAME:$USER_PASS@localhost:6379/1"
 
 TO_LOAD_FUNC="false"
 
-if [ ! -f "$ACL_FILE" ]; then
+if [ ! -s "$ACL_FILE" ]; then
     TO_LOAD_FUNC="true"
     echo "Initializing Redis ACL file at $ACL_FILE..."
     
@@ -27,19 +28,34 @@ if [ ! -f "$ACL_FILE" ]; then
         echo "default user mode: off"
     fi
 
-    # Create the default admin user
-    echo "user $USER_NAME on >$USER_PASS ~* &* +@all" >> "$ACL_FILE"
-
-    if [ "$CELERY_EXTERNAL" = "false" ]; then
-        echo "user $REDIS_USER on >$REDIS_PASSWORD ~* &* +@all" >> "$ACL_FILE"
-        echo "created the a admin user for celery only"
-    fi
-
-    chown -R redis:redis $ACL_FILE
-    echo "ACL file created."
-else
-    echo "ACL file already exists at $ACL_FILE. Skipping creation."
 fi
+
+# Create runtime admin users if they are not already present.
+if ! grep -q "^user $USER_NAME " "$ACL_FILE"; then
+    echo "user $USER_NAME on >$USER_PASS ~* &* +@all" >> "$ACL_FILE"
+fi
+
+if [ "$CELERY_EXTERNAL" = "false" ] && ! grep -q "^user $REDIS_USER " "$ACL_FILE"; then
+    echo "user $REDIS_USER on >$REDIS_PASSWORD ~* &* +@all" >> "$ACL_FILE"
+    echo "Created the admin user for Celery."
+fi
+
+# Seed static users only when absent, preserving passwords rotated by Vault.
+if [ -f "$STATIC_ACL_FILE" ]; then
+    while IFS= read -r ACL_ENTRY || [ -n "$ACL_ENTRY" ]; do
+        case "$ACL_ENTRY" in
+            user\ *)
+                ACL_USER=$(printf '%s\n' "$ACL_ENTRY" | awk '{print $2}')
+                if ! grep -q "^user $ACL_USER " "$ACL_FILE"; then
+                    printf '%s\n' "$ACL_ENTRY" >> "$ACL_FILE"
+                fi
+                ;;
+        esac
+    done < "$STATIC_ACL_FILE"
+fi
+
+chown redis:redis "$ACL_FILE"
+echo "Redis ACL file ready at $ACL_FILE."
 
 # --- IMPORTANT CHANGE: Configuration directives moved to the EXEC line ---
 

@@ -555,6 +555,55 @@ setup_database_config(){
       creation_statements='["~notifyr/credit:*", "+GET", "+SET", "+INCRBY","+DECRBY", "+LPUSH", "+LTRIM", "+LRANGE", "+SELECT", "+FCALL","+EXISTS"]'
     setup_config_kv2 "redis_roles" "set"
   fi
+
+  # --- REDIS STATIC ROLES ---
+  if ! setup_config_kv2 "redis_static_roles" "check"; then
+    echo "Configuring Redis static roles..."
+
+    vault write notifyr-database/static-roles/app-redis-celery-broker-ntfr-role \
+      db_name="redis" \
+      rotation_period="7d" \
+      username="vault_ntfr_app_celery_broker_static_user"
+    vault write -f notifyr-database/rotate-role/app-redis-celery-broker-ntfr-role
+
+    vault write notifyr-database/static-roles/app-redis-celery-backend-ntfr-role \
+      db_name="redis" \
+      rotation_period="7d" \
+      username="vault_ntfr_app_celery_backend_static_user"
+    vault write -f notifyr-database/rotate-role/app-redis-celery-backend-ntfr-role
+
+    vault write notifyr-database/static-roles/app-redis-credit-ntfr-role \
+      db_name="redis-notifyr" \
+      rotation_period="7d" \
+      username="vault_ntfr_app_credit_static_user"
+    vault write -f notifyr-database/rotate-role/app-redis-credit-ntfr-role
+
+    vault write notifyr-database/static-roles/app-redis-security-ntfr-role \
+      db_name="redis-notifyr" \
+      rotation_period="7d" \
+      username="vault_ntfr_app_security_static_user"
+    vault write -f notifyr-database/rotate-role/app-redis-security-ntfr-role
+
+    vault write notifyr-database/static-roles/app-redis-config-ntfr-role \
+      db_name="redis-notifyr" \
+      rotation_period="7d" \
+      username="vault_ntfr_app_config_static_user"
+    vault write -f notifyr-database/rotate-role/app-redis-config-ntfr-role
+
+    vault write notifyr-database/static-roles/app-redis-ntfr-role \
+      db_name="redis-notifyr" \
+      rotation_period="7d" \
+      username="vault_ntfr_app_static_user"
+    vault write -f notifyr-database/rotate-role/app-redis-ntfr-role
+
+    vault write notifyr-database/static-roles/agentic-redis-ntfr-role \
+      db_name="redis-notifyr" \
+      rotation_period="7d" \
+      username="vault_ntfr_agentic_static_user"
+    vault write -f notifyr-database/rotate-role/agentic-redis-ntfr-role
+
+    setup_config_kv2 "redis_static_roles" "set"
+  fi
   
   # --- MINIO ROLES ---
   if ! setup_config_kv2 "minio_roles" "check"; then

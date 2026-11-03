@@ -484,6 +484,7 @@ services:
     volumes:
       - redis-data:/data
       - ./scripts/entrypoint/redis-entrypoint.sh:/entrypoint.sh
+      - ./database/redis/users.acl:/etc/redis/users.acl:ro
       - ./scripts/credit/ncs-lib.lua:/functions/ncs-lib.lua
     networks:
       - data_net

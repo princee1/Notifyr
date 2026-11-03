@@ -60,12 +60,12 @@ def _deserialize_redis_value(value:Any)->Any:
 
 
 REDIS_PREFIX_BUILDER:dict[int|str,Callable[[str],str]] ={
-    #RedisConstant.COST_DB: lambda c:f'notifyr/credit:{c}',
+    RedisConstant.COST_DB: lambda c:f'notifyr/credit:{c}',
     RedisConstant.SECURITY_DB: lambda s:f'notifyr/security/{s}',
     RedisConstant.AGENTIC_DB: lambda a:f'notifyr/agentic/{a}',
     RedisConstant.CONFIG_DB:lambda c:f'notifyr/config/{c}',
     'agentic':lambda a:f'notifyr/agentic/{a}',
-    #'cost':lambda c:f'notifyr/credit:{c}',
+    'cost':lambda c:f'notifyr/credit:{c}',
     'security':lambda s: f'notifyr/security/{s}',
     'config':lambda c:f'notifyr/config/{c}',
 }
