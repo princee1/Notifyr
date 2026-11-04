@@ -1,10 +1,10 @@
 import asyncio
 from contextlib import asynccontextmanager, contextmanager
-from typing import Literal, Type, TypeVar
+from typing import Callable, Literal, Type, TypeVar
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from psycopg2 import sql
-from tortoise import Tortoise,connections
+from tortoise import BaseDBAsyncClient, Tortoise,connections
 from tortoise.connection import get_connection
 from tortoise.context import TortoiseContext
 from tortoise.models import Model
@@ -12,13 +12,13 @@ from app.definition._service import DEFAULT_BUILD_STATE, LinkDep, Service, Servi
 from app.errors.db_error import TortoiseContextAlreadyExistError, TortoiseContextDoesNotExistError, TortoiseContextNotSetupError, TortoiseTransactionFailureError, VaultCredentialNameDoesNotExistError
 from app.errors.service_error import BuildFailureError
 from app.services.config_service import ConfigService
-from app.services.database.base_db_service import CredentialName, TempCredentialsDatabaseService
+from app.services.database.base_db_service import CredentialConfig, CredentialName, ExportRoleFunc, TempCredentialsDatabaseService
 from app.services.file.file_service import FileService
 from app.services.timer_service import TimerService
 from app.services.vault_service import VaultService
-from app.utils.constant import HostConstant, PostgresConstant, VaultConstant, VaultTTLSyncConstant
+from app.utils.constant import HostConstant, PostgresConstant, SetupRootConstant, VaultConstant, VaultTTLSyncConstant
 from app.utils.toolbox import RunInThreadPool
-from tortoise.transactions import in_transaction
+from tortoise.transactions import in_transaction, TransactionContext
 from tortoise.exceptions import OperationalError,ConfigurationError,IntegrityError
 from pydantic import BaseModel
 
@@ -37,6 +37,17 @@ NOTIFYR_MODELS = [
 SECURITY_MODELS = ['app.models.orm.security_model']
 R = TypeVar('R',bound=Model)
 
+DB_MAP: dict[CredentialName,str] = {
+    'default':PostgresConstant.NOTIFYR_APP,
+    SECURITY_CREDS:PostgresConstant.SECURITY_APP
+}
+
+PG_CRED_NAME_TO_ROLE_MAP: dict[CredentialName,tuple[str,str]] = {
+    'default':('app',None),
+    'security':('app','security')
+}
+
+pg_role_export = ExportRoleFunc(PG_CRED_NAME_TO_ROLE_MAP)
 
 class TortoiseContextStore:
     
@@ -79,8 +90,15 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
     def __init__(self, configService: ConfigService,vaultService:VaultService,fileService:FileService,timerService:TimerService):
         super().__init__(configService,fileService,vaultService,timerService,VaultTTLSyncConstant.POSTGRES_AUTH_TTL)
         self.contextStore = TortoiseContextStore()
+        self.PG_CRED_NAME_TO_HOST = {
+            'default':self.configService.POSTGRES_HOST,
+            SECURITY_CREDS:HostConstant.POSTGRES_HOST
+        }
 
-    def build(self,build_state=-1):
+    def build(self,build_state=DEFAULT_BUILD_STATE):
+        if build_state == SetupRootConstant.ROOT_BUILD_STATE:
+            return
+
         try:
             self.generate_credentials()
             self.init_sync_connection()
@@ -102,11 +120,11 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
                 ...
 
     def generate_credentials(self):
-        self.add_credentials(VaultConstant.POSTGRES_ROLE)
-        self.add_credentials(VaultConstant.POSTGRES_ROLE,SECURITY_CREDS,suffix='security')
+        self.add_credentials(VaultConstant.POSTGRES_ROLE,'default',**pg_role_export('default'))
+        self.add_credentials(VaultConstant.POSTGRES_ROLE,SECURITY_CREDS,**pg_role_export(SECURITY_CREDS))
 
-    def compute_url(self,host:str,port:int=5432,creds:CredentialName='default',database=PostgresConstant.DEFAULT_DATABASE_NAME):
-        return f'postgres://{self.db_user(creds)}:{self.db_password(creds)}@{host}:{port}/{database}'
+    def compute_url(self,host:str,port:int=5432,creds:CredentialName='default',database=PostgresConstant.DEFAULT_DATABASE_NAME,username:str=None,password:str=None):
+        return f'postgres://{username or self.db_user(creds)}:{password or self.db_password(creds)}@{host}:{port}/{database}'
 
     def fetch(self,model:Type[R],projection:list[str]=None,mode:Literal['json','orm']='json',listing:Literal['list','generator','dict']='generator',key=None):
         proj = projection or []
@@ -201,10 +219,46 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
         self.contextStore.clear()
 
     @contextmanager
-    def sync_context(self):
-        with self.sync_conn:
-            with self.sync_conn.cursor(cursor_factory=RealDictCursor) as cur:
+    def sync_context(self,conn=None,transaction=False):
+        if conn is None:
+            conn = self.sync_conn
+        with conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 yield cur
+
+    @contextmanager
+    def pg_dynamic_synccontext(self,name:CredentialName,transaction:bool=False):
+        config:CredentialConfig = self.configuration(name)
+        creds = self.vaultService.database_engine.generate_credentials(VaultConstant.POSTGRES_ROLE,config.prefix,config.suffix,'dynamic')
+        url = self.compute_url(config.host,database=config.database,username=creds['data']['username'],password=creds['data']['password'])
+        conn = psycopg2.connect(url)
+        with self.sync_context(conn, transaction=transaction) as cur:
+            yield cur
+        self.vaultService.revoke_lease(creds['lease_id'])
+        conn.close()
+
+    @asynccontextmanager
+    async def pg_dynamic_asynccontext(self,name:CredentialName,models=[],transaction:bool=False):
+        config:CredentialConfig = self.configuration(name)
+        creds = self.vaultService.database_engine.generate_credentials(VaultConstant.POSTGRES_ROLE,config.prefix,config.suffix,'dynamic')
+        url = self.compute_url(config.host,database=config.database,username=creds['data']['username'],password=creds['data']['password'])
+        async with TortoiseContext() as ctx:
+            config = {'connections':{'default':url},'apps':{'app':{'models':models,'default_connection':'default'}}}
+            await ctx.init(config=config)
+            if transaction:
+                conn = lambda: ctx.connections.get('default')
+                yield conn
+            else:
+                yield ctx
+        self.vaultService.revoke_lease(creds['lease_id'])
+
+    def configuration(self, name:CredentialName)->CredentialConfig:
+        if name not in CREDENTIALS_SET:
+            raise VaultCredentialNameDoesNotExistError(name)
+        host = self.PG_CRED_NAME_TO_HOST.get(name,HostConstant.POSTGRES_HOST)
+        database = DB_MAP.get(name,PostgresConstant.DEFAULT_DATABASE_NAME)
+        prefix,suffix = PG_CRED_NAME_TO_ROLE_MAP.get(name,(None,None))
+        return CredentialConfig(host=host, database=database, prefix=prefix, suffix=suffix)
 
     async def _creds_rotator(self):
         await self.close_connections()
@@ -213,13 +267,16 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
         await RunInThreadPool(self.init_sync_connection)()
     
     @asynccontextmanager
-    async def transaction(self,name:CredentialName='default',retries=1,timeout=5,wait=1,silent=False,lock:ServiceLockType='none'):
-        if name not in CREDENTIALS_SET:
-            raise VaultCredentialNameDoesNotExistError(name)
-        connection = 'notifyr' if name == 'default' else 'security'
+    async def transaction(self,name:CredentialName='default',retries=1,timeout=5,wait=1,silent=False,lock:ServiceLockType='none',conn:Callable[[],TransactionContext]=None):
+        if conn is None:
+            if name not in CREDENTIALS_SET:
+                raise VaultCredentialNameDoesNotExistError(name)
+            connection = 'notifyr' if name == 'default' else 'security'
+        
         async with self.lock(lock):
             for attempts in range(retries):
-                async with get_connection(connection)._in_transaction() as ctx:
+
+                async with (get_connection(connection)._in_transaction() if conn is None else conn()) as ctx:
                     try:
                         yield ctx
                         break
@@ -237,4 +294,5 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
         async with self.lock(lock):
             conn = self.contextStore.get_connection(credentials) 
             yield conn
-            
+
+    

@@ -1,5 +1,5 @@
 import asyncio
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from typing import List, Literal, Type, TypeVar, Union
 from pymongo.errors import ConnectionFailure,ConfigurationError, PyMongoError, ServerSelectionTimeoutError
 from pymongo import MongoClient
@@ -9,11 +9,11 @@ from app.errors.service_error import BuildFailureError
 from app.errors.db_error import *
 from beanie import Document, PydanticObjectId, init_beanie
 from app.services.config_service import ConfigService
-from app.services.database.base_db_service import CredentialName, TempCredentialsDatabaseService
+from app.services.database.base_db_service import CredentialConfig, CredentialName, ExportRoleFunc, TempCredentialsDatabaseService
 from app.services.file.file_service import FileService
 from app.services.timer_service import TimerService
 from app.services.vault_service import VaultService
-from app.utils.constant import AgenticConstant, HostConstant, MongooseDBConstant, VaultConstant, VaultTTLSyncConstant
+from app.utils.constant import AgenticConstant, HostConstant, MongooseDBConstant, SetupRootConstant, VaultConstant, VaultTTLSyncConstant
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import ConnectionFailure, OperationFailure
 
@@ -35,9 +35,17 @@ DB_MAP:dict[CredentialName,str]= {
     JOBS_CREDS:MongooseDBConstant.JOB_DATABASE_NAME
 }
 
+MONGO_CRED_NAME_TO_ROLE_MAP:dict[CredentialName,tuple[str,str]] = {
+    'default': ('app', None),
+    AGENTIC_CREDS: ('agentic', None),
+    JOBS_CREDS: ('app','jobs')
+}
+
+export = ExportRoleFunc(MONGO_CRED_NAME_TO_ROLE_MAP)
+
 class MongoClientStore:
 
-    def __init__(self,):
+    def __init__(self):
         self.clients:dict[CredentialName,dict[ClientMode,Union[MongoClient,AsyncIOMotorClient]]] = {}
     
     def get_client(self,name:CredentialName,mode:ClientMode='async'):
@@ -74,7 +82,16 @@ class MongoClientStore:
             for t,client in m.items():
                 if mode==None or t ==mode:
                     yield n,client
-
+    
+    def factory(self,uri:str,mode:ClientMode):
+        match mode:
+            case "sync":
+                return MongoClient(uri)
+            case 'async':
+                return AsyncIOMotorClient(uri)
+            case _:
+                raise ValueError(f"Unsupported client mode: {mode}")
+    
     def clear(self):
         self.clients.clear()
 
@@ -94,6 +111,11 @@ class MongooseService(TempCredentialsDatabaseService):
         self.client_store = MongoClientStore()
         self._documents = []
         self.mongoConstant = MongooseDBConstant()
+        self.MONGO_CRED_NAME_TO_HOST = {
+            'default':HostConstant.MONGOOSE_HOST,
+            AGENTIC_CREDS:HostConstant.MONGOOSE_HOST,
+            JOBS_CREDS:self.configService.MONGO_HOST,
+            }
 
     ##################################################
     # CRUD-like API (Beanie style)
@@ -230,6 +252,9 @@ class MongooseService(TempCredentialsDatabaseService):
     ##################################################
 
     def build(self, build_state=DEFAULT_BUILD_STATE):
+        if build_state == SetupRootConstant.ROOT_BUILD_STATE:
+            return
+
         try:
             self.generate_credentials()
             self.db_connection()
@@ -268,9 +293,9 @@ class MongooseService(TempCredentialsDatabaseService):
         self.client_store.add_client(AGENTIC_CREDS,self.compute_url(HostConstant.MONGOOSE_HOST,MongooseDBConstant.AGENTIC_DATABASE_NAME,AGENTIC_CREDS))
 
     def generate_credentials(self):
-        self.add_credentials(VaultConstant.MONGO_ROLE,'default',prefix='app')
-        self.add_credentials(VaultConstant.MONGO_ROLE,JOBS_CREDS,suffix='jobs')
-        self.add_credentials(VaultConstant.MONGO_ROLE,AGENTIC_CREDS,prefix='agentic')
+        self.add_credentials(VaultConstant.MONGO_ROLE,'default',**export('default'))
+        self.add_credentials(VaultConstant.MONGO_ROLE,JOBS_CREDS,**export(JOBS_CREDS))
+        self.add_credentials(VaultConstant.MONGO_ROLE,AGENTIC_CREDS,**export(AGENTIC_CREDS))
 
     async def _creds_rotator(self):
         self.close_connection()
@@ -314,14 +339,41 @@ class MongooseService(TempCredentialsDatabaseService):
         temp.update(list(documents))
         self._documents = list(temp)
 
+    ##################################################
+    # Connectivity
+    ##################################################
+
+    @contextmanager
+    def mongo_dynamic_synccontext(self,name:CredentialName,transaction=False):
+        config:CredentialConfig = self.configuration(name)
+        creds = self.vaultService.database_engine.generate_credentials(VaultConstant.MONGO_ROLE,config['prefix'],config['suffix'],mode='dynamic')
+        uri = self.compute_url(config['host'],config['database'],username=creds['data']['username'],password=creds['data']['password'])
+        client:MongoClient = self.client_store.factory(uri,mode='sync')
+        yield client
+        client.close()
+        self.vaultService.revoke_lease(creds['lease_id'])
+
     @asynccontextmanager
-    async def transaction(self,name:CredentialName='default', retries=1,timeout=5,wait=1,lock:ServiceLockType='none'):
+    async def mongo_dynamic_asynccontext(self,name:CredentialName):
+        config:CredentialConfig = self.configuration(name)
+        creds = self.vaultService.database_engine.generate_credentials(VaultConstant.MONGO_ROLE,config['prefix'],config['suffix'],mode='dynamic')
+        uri = self.compute_url(config['host'],config['database'],username=creds['data']['username'],password=creds['data']['password'])
+        client:AsyncIOMotorClient = self.client_store.factory(uri,mode='async')
+        yield client
+        await client.close()
+        self.vaultService.revoke_lease(creds['lease_id'])
+
+    @asynccontextmanager
+    async def transaction(self,name:CredentialName='default', retries=1,timeout=5,wait=1,lock:ServiceLockType='none',conn=None):
         if name not in CREDENTIALS_SET:
             raise VaultCredentialNameDoesNotExistError(name)
 
         lock = lock or 'none'
         async with self.lock(lock):
-            client = self.client_store.get_client(name)
+            if not conn:
+                client = self.client_store.get_client(name)
+            else:
+                client = conn
             async with await client.start_session() as session:
                 for attempt in range(retries):
                     try:
@@ -340,10 +392,10 @@ class MongooseService(TempCredentialsDatabaseService):
     # Connection string
     ##################################################
 
-    def compute_url(self,host:str,database=MongooseDBConstant.JOB_DATABASE_NAME,name:CredentialName='default',authSource=None):
+    def compute_url(self,host:str,database=MongooseDBConstant.JOB_DATABASE_NAME,name:CredentialName='default',authSource=None,username:str=None,password:str=None):
         replica = self.configService.getenv('MONGO_REPLICA_NAME','notifyr-0')
         authSource = authSource or database
-        return f"mongodb://{self.db_user(name)}:{self.db_password(name)}@{host}:27017/{database}?replicaSet={replica}"
+        return f"mongodb://{username or self.db_user(name)}:{password or self.db_password(name)}@{host}:27017/{database}?replicaSet={replica}"
     
     def get_credentials_name(self,model:Type[D]|D)->CredentialName:
 
@@ -358,6 +410,18 @@ class MongooseService(TempCredentialsDatabaseService):
 
         raise MongoCollectionDoesNotExists(model._collection)
 
+    def configuration(self,name:CredentialName)->CredentialConfig:
+        if name not in CREDENTIALS_SET:
+            raise VaultCredentialNameDoesNotExistError(name)
+        host = self.MONGO_CRED_NAME_TO_HOST.get(name,HostConstant.MONGOOSE_HOST)
+        database = DB_MAP.get(name,MongooseDBConstant.DEFAULT_DATABASE_NAME)
+        prefix,suffix = MONGO_CRED_NAME_TO_ROLE_MAP.get(name,(None,None))
+        return {
+            'host':host,
+            'database':database,
+            'prefix':prefix,
+            'suffix':suffix,
+        }
 
     ##################################################
     # Healthcheck

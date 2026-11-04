@@ -610,4 +610,6 @@ class SetupRootConstant:
     ADMIN_ACCESS_KEY = 'admin-access'
     ADMIN_LOGIN_KEY = 'admin-login'
 
+    ROOT_BUILD_STATE= 12443
+
     KEYS  = [SYSTEM_ACCESS_KEY,SYSTEM_LOGIN_KEY,ADMIN_ACCESS_KEY,ADMIN_LOGIN_KEY]

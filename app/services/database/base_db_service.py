@@ -2,7 +2,7 @@
 import asyncio
 from random import randint, random
 import time
-from typing import Dict, Union
+from typing import Dict, TypedDict, Union
 import hvac
 from typing_extensions import Literal
 from app.classes.vault_engine import VaultDatabaseCredentials
@@ -22,6 +22,21 @@ CREDS_NAME_KEY='__cred_name__'
 CredentialName = Union[Literal['default'],str]
 MultiCredentialsStore = Dict[Literal['default']|str,VaultDatabaseCredentials]
 
+class CredentialConfig(TypedDict):
+    prefix:str
+    suffix:str
+    host:str
+    database:str
+
+def ExportRoleFunc(map:str):
+    def export(name:str):
+        if name not in map:
+            raise VaultCredentialNameDoesNotExistError(name)
+        
+        prefix,suffix = map.get(name,(None,None))
+        return {'prefix':prefix,'suffix':suffix}
+    
+    return export
 
 
 @AbstractServiceClass()

@@ -77,7 +77,7 @@ class ClientMiniService(BaseMiniService):
 
             case 'redis+sync':
                 self.sessions.clear()
-                with self.redisService.redis_synccontext(RedisConstant.SECURITY_DB,'security') as redis:
+                with self.redisService.redis_dynamic_synccontext(RedisConstant.SECURITY_DB,'security') as redis:
                     path = ClientVaultPath.SESSIONS_REDIS_PATH(self.client_id,'*')
                     prefix = REDIS_PREFIX_BUILDER[RedisConstant.SECURITY_DB]
                     sessions = redis.keys(prefix(path))
