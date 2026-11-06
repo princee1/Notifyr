@@ -20,9 +20,10 @@ class RabbitMQService(TempCredentialsDatabaseService,BrokerService):
             raise BuildWarningError("Redis is set as the broker; skipping RabbitMQ setup.")
     
     def generate_credentials(self):
-        if 'default' in self.creds:
-            self.revoke_lease()
-        self.creds['default']=self.vaultService.rabbitmq_engine.generate_credentials()
+        self.add_credentials(...,'default')
+
+    def fetch_credentials(self, name, role, prefix, suffix):
+        self.creds[name]=self.vaultService.rabbitmq_engine.generate_credentials()
 
     def build(self, build_state = ...):
         self.generate_credentials()

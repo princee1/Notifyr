@@ -64,7 +64,7 @@ GroupType = Literal['domain','contact']
 class GraphitiService(TempCredentialsDatabaseService):
       
     def __init__(self,configService:ConfigService,timerService:TimerService,redisService:RedisService,workerService:WorkerService,vaultService:VaultService,mongooseService:MongooseService,llmProviderService:LLMService,customService:CustomService,fileService:FileService):
-        super().__init__(configService,fileService,vaultService,VaultTTLSyncConstant.VAULT_TOKEN_TTL)
+        super().__init__(configService,fileService,vaultService,'dynamic',VaultTTLSyncConstant.VAULT_TOKEN_TTL)
         self.workerService = workerService
         self.mongooseService = mongooseService
         self.llmProviderService = llmProviderService

@@ -106,7 +106,7 @@ class MongooseService(TempCredentialsDatabaseService):
         vaultService: VaultService,
         timerService:TimerService
     ):
-        super().__init__(configService, fileService,vaultService,timerService,VaultTTLSyncConstant.MONGODB_AUTH_TTL)
+        super().__init__(configService, fileService,vaultService,timerService,'static',VaultTTLSyncConstant.MONGODB_AUTH_TTL)
 
         self.client_store = MongoClientStore()
         self._documents = []

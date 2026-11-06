@@ -13,8 +13,9 @@ class VaultDatabaseCredentialsData(TypedDict):
 
 class VaultDatabaseCredentials(TypedDict, total=False):
     request_id: str
-    lease_id: str
-    lease_duration: int
+    lease_id: str | None
+    lease_duration: int |None
+    ttl:str|None
     renewable: bool
     data: VaultDatabaseCredentialsData
     wrap_info: Optional[Dict[str, Any]]
@@ -52,6 +53,7 @@ ROLE_PREFIX='app-'
 class VaultError(BaseError):
     ...
 
+CredentialsMode = Literal['dynamic','static']
 
 class VaultEngine:
     def __init__(self,client:Client,mount_point:str):
@@ -252,15 +254,21 @@ class TransitVaultEngine(VaultEngine):
 
 class DatabaseVaultEngine(VaultEngine):
 
-    def generate_credentials(self,role:VaultConstant.NotifyrDynamicSecretsRole,prefix:Literal['app','agentic']|str|None=None,suffix:str=None,mode:Literal['dynamic','static']='static')->VaultDatabaseCredentials:
+    def generate_credentials(self,role:VaultConstant.NotifyrDynamicSecretsRole,prefix:Literal['app','agentic']|str|None=None,suffix:str=None,mode:CredentialsMode='static')->VaultDatabaseCredentials:
         prefix = f"{prefix}-" if prefix != None else None
         suffix = f"-{suffix}" if suffix != None else None
-        role=f"{prefix or ROLE_PREFIX}{role}{suffix or ''}{ROLE_SUFFIX}"        
-        credentials = self.client.secrets.database.generate_credentials(
-            name=role,
-            mount_point=self.mount_point
-            )
-        return VaultDatabaseCredentials(**credentials)
+        role=f"{prefix or ROLE_PREFIX}{role}{suffix or ''}{ROLE_SUFFIX}-{mode}"    
+        if mode == 'dynamic':    
+            return self.client.secrets.database.generate_credentials(
+                name=role,
+                mount_point=self.mount_point
+                )
+        else:
+            return self.client.secrets.database.get_static_credentials(
+                    name=role,
+                    mount_point=self.mount_point
+                    )
+       
     
 class MinioS3VaultEngine(VaultEngine):
     

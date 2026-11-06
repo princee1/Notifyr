@@ -90,7 +90,7 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
     GROUP = 'NOTIFYR-GROUP'
     
     def __init__(self,configService:ConfigService,reactiveService:ReactiveService,vaultService:VaultService,workerService:WorkerService,fileService:FileService,timerService:TimerService):
-        super().__init__(configService,fileService,vaultService,timerService,60*60*24*29,)
+        super().__init__(configService,fileService,vaultService,timerService,'static',60*60*24*29,)
         self.configService = configService
         self.reactiveService = reactiveService
         self.workerService = workerService
@@ -295,7 +295,6 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
             yield redis
         self.vaultService.revoke_lease(cred['lease_id'])
 
-    
     def configuration(self,name:CredentialName,db:RedisDB)->CredentialConfig:
         if name not in REDIS_CRED_NAME_TO_ROLE_MAP:
             raise VaultCredentialNameDoesNotExistError(name)
@@ -303,7 +302,6 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         prefix,suffix = REDIS_CRED_NAME_TO_ROLE_MAP.get(name,(None,None))
         return CredentialConfig(host=host, prefix=prefix, suffix=suffix)
 
-    
     def build(self,build_state=-1):
         if build_state == SetupRootConstant.ROOT_BUILD_STATE:
             return

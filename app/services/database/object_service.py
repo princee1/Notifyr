@@ -31,7 +31,7 @@ MINIO_OBJECT_DESTROY_STATE = 1001
 class ObjectS3Service(TempCredentialsDatabaseService):
     
     def __init__(self,configService:ConfigService,fileService:FileService,vaultService:VaultService,timerService:TimerService) -> None:
-        TempCredentialsDatabaseService.__init__(self,configService,fileService,vaultService,timerService,VaultTTLSyncConstant.MINIO_TTL)
+        TempCredentialsDatabaseService.__init__(self,configService,fileService,vaultService,timerService,'static',VaultTTLSyncConstant.MINIO_TTL)
         
         self.STORAGE_METHOD = 'mount(same FS)','s3 object storage(source of truth)'
         self.download_cache = {}

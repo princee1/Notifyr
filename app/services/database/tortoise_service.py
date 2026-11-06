@@ -64,7 +64,6 @@ class TortoiseContextStore:
         print(self.store[credential].connections._get_storage())
         #await self.get_connection('default').create_connection(True)
 
-    
     def clear(self):
         self.store.clear()
 
@@ -88,7 +87,7 @@ class TortoiseContextStore:
 class TortoiseConnectionService(TempCredentialsDatabaseService):
 
     def __init__(self, configService: ConfigService,vaultService:VaultService,fileService:FileService,timerService:TimerService):
-        super().__init__(configService,fileService,vaultService,timerService,VaultTTLSyncConstant.POSTGRES_AUTH_TTL)
+        super().__init__(configService,fileService,vaultService,timerService,'static',VaultTTLSyncConstant.POSTGRES_AUTH_TTL)
         self.contextStore = TortoiseContextStore()
         self.PG_CRED_NAME_TO_HOST = {
             'default':self.configService.POSTGRES_HOST,

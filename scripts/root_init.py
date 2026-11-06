@@ -51,7 +51,7 @@ from app.classes.step import LambdaStepRunner, StepCallback
 
 from app.container import InjectInMethod, build_container, Get, InjectInMiniService
 PrettyPrinter_.message(f'Building container for the admin creation')
-build_container()
+build_container(build_state=SetupRootConstant.ROOT_BUILD_STATE)
 
 ADMIN_INIT_KEY='admin-init'
 
@@ -78,7 +78,7 @@ async def main():
    
     async with redisService.redis_dynamic_asynccontext(RedisConstant.CONFIG_DB,CONFIG_CREDS) as redis:
         callback = InitStepCallback(redis=redis)
-        
+
         async with LambdaStepRunner(callback,SetupRootConstant.SYSTEM_ACCESS_KEY) as skip:
             skip()
 
@@ -88,6 +88,9 @@ async def main():
             system_file['access'] = system_access.model_dump(mode='json')
             system_file.save()
             await RunInThreadPool(vaultService.secrets_engine.put)(VaultConstant.INTERNAL_API_SECRETS,system_access.model_dump(),system_access._path)
+
+    async with redisService.redis_dynamic_asynccontext(RedisConstant.CONFIG_DB,CONFIG_CREDS) as redis:
+        callback = InitStepCallback(redis=redis)
 
         async with LambdaStepRunner(callback,SetupRootConstant.SYSTEM_LOGIN_KEY) as skip:
             skip()
@@ -106,7 +109,10 @@ async def main():
                     system_file['client'] = {'password':password,**systemInfo,}
                     system_file.save()
                     await system_client.store_password(encrypted_password,salt)
-    
+
+    async with redisService.redis_dynamic_asynccontext(RedisConstant.CONFIG_DB,CONFIG_CREDS) as redis:
+        callback = InitStepCallback(redis=redis)
+
         async with LambdaStepRunner(callback,SetupRootConstant.ADMIN_LOGIN_KEY) as skip:
             skip()
 
@@ -119,6 +125,9 @@ async def main():
                 async with tortoiseService.transaction(conn=conn) as ctx:
                     await adminORM.save(ctx)
                     await admin_client.store_password(encrypted_password,salt)
+    
+    async with redisService.redis_dynamic_asynccontext(RedisConstant.CONFIG_DB,CONFIG_CREDS) as redis:
+        callback = InitStepCallback(redis=redis)
 
         async with LambdaStepRunner(callback,SetupRootConstant.ADMIN_ACCESS_KEY) as skip:
             skip()

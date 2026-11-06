@@ -512,6 +512,7 @@ services:
       MONGO_INITDB_ROOT_USERNAME: mongo-vaultadmin
       MONGO_INITDB_ROOT_PASSWORD: ${VAULTPASS:-vaultpass}
       MONGO_REPLICA_NAME: ${MONGO_REPLICA_NAME:-nrp}
+      VAULTPASS: ${VAULTPASS:-vaultpass}
       NOTIFYR_MONGO_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:?Mongo root user must be set}
       NOTIFYR_MONGO_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?Mongo root password must be set}
     networks:
@@ -530,6 +531,7 @@ services:
       INIT_NOTIFYR_DB: on
       POSTGRES_DB: security
       POSTGRES_USER: pg-vaultadmin
+      VAULTPASS: ${VAULTPASS:-vaultpass}
       POSTGRES_PASSWORD: ${VAULTPASS:-vaultpass}
       NOTIFYR_POSTGRES_USER: ${POSTGRES_USER:?Postgres user must be set}
       NOTIFYR_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Postgres password must be set}

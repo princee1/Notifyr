@@ -340,9 +340,9 @@ setup_database_config(){
   # This function sets up ROLES for all database engines (Postgres, Mongo, Redis, Minio, RabbitMQ)
 
   # --- POSTGRES ROLES ---
-  if ! setup_config_kv2 "postgres_roles" "check"; then
+  if ! setup_config_kv2 "postgres_roles_suffix" "check"; then
     echo "Configuring Postgres roles..."
-    vault write notifyr-database/roles/app-postgres-ntfr-role \
+    vault write notifyr-database/roles/app-postgres-ntfr-role-dynamic \
         db_name="postgres" \
         default_ttl="12h" \
         max_ttl="16h" \
@@ -352,14 +352,7 @@ setup_database_config(){
         revocation_statements="REVOKE vault_ntfr_app_role FROM \"{{name}}\";
                         DROP ROLE IF EXISTS \"{{name}}\";"
     
-    vault write notifyr-database/static-roles/app-postgres-ntfr-role \
-        db_name="postgres" \
-        rotation_period="7d" \
-        username="vault_ntfr_app_static_user"
-    
-    vault write -f notifyr-database/rotate-role/app-postgres-ntfr-role
-
-    vault write notifyr-database/roles/app-postgres-security-ntfr-role \
+    vault write notifyr-database/roles/app-postgres-security-ntfr-role-dynamic \
         db_name="postgres-notifyr" \
         default_ttl="12h" \
         max_ttl="16h" \
@@ -369,15 +362,7 @@ setup_database_config(){
         revocation_statements="REVOKE vault_ntfr_client_role FROM \"{{name}}\";
                         DROP ROLE IF EXISTS \"{{name}}\";"
     
-    vault write notifyr-database/static-roles/app-postgres-security-ntfr-role \
-        db_name="postgres-notifyr" \
-        rotation_period="7d" \
-        username="vault_ntfr_client_static_user"
-    
-    vault write -f notifyr-database/rotate-role/app-postgres-security-ntfr-role
-
-
-    vault write notifyr-database/roles/admin-postgres-ntfr-role \
+    vault write notifyr-database/roles/admin-postgres-ntfr-role-dynamic \
       db_name="postgres" \
       default_ttl="3h" \
       max_ttl="5h" \
@@ -386,9 +371,9 @@ setup_database_config(){
       rollback_statements="DROP ROLE IF EXISTS \"{{name}}\";" \
       revocation_statements="REVOKE vault_ntfr_admin_role FROM \"{{name}}\"; \
                             DROP ROLE IF EXISTS \"{{name}}\";"
-    setup_config_kv2 "postgres_roles" "set"
+    setup_config_kv2 "postgres_roles_suffix" "set"
 
-    vault write notifyr-database/roles/admin-postgres-security-ntfr-role \
+    vault write notifyr-database/roles/admin-postgres-security-ntfr-role-dynamic \
       db_name="postgres-notifyr" \
       default_ttl="3h" \
       max_ttl="5h" \
@@ -397,14 +382,14 @@ setup_database_config(){
       rollback_statements="DROP ROLE IF EXISTS \"{{name}}\";" \
       revocation_statements="REVOKE vault_ntfr_admin_client_role FROM \"{{name}}\"; \
                             DROP ROLE IF EXISTS \"{{name}}\";"
-    setup_config_kv2 "postgres_roles" "set"
+    setup_config_kv2 "postgres_roles_suffix" "set"
 
   fi
 
   # --- MONGO ROLES ---
-  if ! setup_config_kv2 "mongo_roles" "check"; then
+  if ! setup_config_kv2 "mongo_roles_suffix" "check"; then
     echo "Configuring Mongo roles..."
-    vault write notifyr-database/roles/agentic-mongo-ntfr-role \
+    vault write notifyr-database/roles/agentic-mongo-ntfr-role-dynamic \
       db_name="mongodb-notifyr" \
       creation_statements='{ "db": "agentic", "roles": [
       { "role": "readWrite", "db": "agentic", "collection":"agent" },
@@ -416,15 +401,7 @@ setup_database_config(){
       default_ttl="12h" \
       max_ttl="16h"
     
-    vault write notifyr-database/static-roles/agentic-mongo-ntfr-role \
-      db_name="mongodb-notifyr" \
-      rotation_period="7d" \
-      username="vault_ntfr_agentic_static_user"
-    
-    vault write -f notifyr-database/rotate-role/agentic-mongo-ntfr-role
-
-    
-    vault write notifyr-database/roles/admin-mongo-agentic-ntfr-role \
+    vault write notifyr-database/roles/admin-mongo-agentic-ntfr-role-dynamic \
       db_name="mongodb-notifyr" \
       default_ttl="30m" \
       max_ttl="1h" \
@@ -433,7 +410,7 @@ setup_database_config(){
           {"role": "userAdmin", "db":"agentic"}
       ]}'
 
-    vault write notifyr-database/roles/app-mongo-ntfr-role \
+    vault write notifyr-database/roles/app-mongo-ntfr-role-dynamic \
       db_name="mongodb-notifyr" \
       creation_statements='{ "db": "app", "roles": [
       { "role": "readWrite", "db": "app", "collection":"communication" },
@@ -445,15 +422,7 @@ setup_database_config(){
       default_ttl="12h" \
       max_ttl="16h"
 
-    vault write notifyr-database/static-roles/app-mongo-ntfr-role \
-      db_name="mongodb-notifyr" \
-      rotation_period="7d" \
-      username="vault_ntfr_app_static_user"
-    
-    vault write -f notifyr-database/rotate-role/app-mongo-ntfr-role
-
-
-    vault write notifyr-database/roles/admin-mongo-ntfr-role \
+    vault write notifyr-database/roles/admin-mongo-ntfr-role-dynamic \
       db_name="mongodb-notifyr" \
       default_ttl="30m" \
       max_ttl="1h" \
@@ -462,7 +431,7 @@ setup_database_config(){
           {"role": "userAdmin", "db":"app"}
       ]}'
     
-    vault write notifyr-database/roles/app-mongo-jobs-ntfr-role \
+    vault write notifyr-database/roles/app-mongo-jobs-ntfr-role-dynamic \
       db_name="mongodb" \
       creation_statements='{ "db": "notifyr", "roles": [
       { "role": "readWrite", "db": "notifyr", "collection":"aps" },
@@ -471,14 +440,7 @@ setup_database_config(){
       default_ttl="12h" \
       max_ttl="16h"
     
-    vault write notifyr-database/static-roles/app-mongo-jobs-ntfr-role \
-      db_name="mongodb" \
-      rotation_period="7d" \
-      username="vault_ntfr_jobs_static_user"
-    
-    vault write -f notifyr-database/rotate-role/app-mongo-jobs-ntfr-role
-
-    vault write notifyr-database/roles/admin-mongo-jobs-ntfr-role \
+    vault write notifyr-database/roles/admin-mongo-jobs-ntfr-role-dynamic \
       db_name="mongodb" \
       default_ttl="30m" \
       max_ttl="1h" \
@@ -486,125 +448,76 @@ setup_database_config(){
           { "role": "dbOwner", "db": "notifyr" },
       ]}'
 
-    setup_config_kv2 "mongo_roles" "set"
+    setup_config_kv2 "mongo_roles_suffix" "set"
   fi
   #           { "role":"createIndexes","db":"notifyr","collection":"aps"}
 
   # --- REDIS ROLES ---
-  if ! setup_config_kv2 "redis_roles" "check"; then
+  if ! setup_config_kv2 "redis_roles_suffix" "check"; then
     echo "Configuring Redis roles..."
-    vault write notifyr-database/roles/app-redis-celery-broker-ntfr-role \
+    vault write notifyr-database/roles/app-redis-celery-broker-ntfr-role-dynamic \
       db_name="redis" \
       default_ttl="35d" \
       max_ttl="35d" \
       creation_statements='["~notifyr/celery/broker/*","&notifyr/celery/broker/*","+PING","+SELECT","+LPUSH","+RPUSH","+BRPOP","+BLPOP","+LPOP","+LLEN","+DEL","+EXPIRE","+PEXPIRE","+SCAN","+EVAL","+@pubsub"]'
 
-    vault write notifyr-database/roles/app-redis-celery-backend-ntfr-role \
+    vault write notifyr-database/roles/app-redis-celery-backend-ntfr-role-dynamic \
       db_name="redis" \
       default_ttl="35d" \
       max_ttl="35d" \
       creation_statements='["~notifyr/celery/backend/*","&notifyr/celery/backend/*", "+@string","+@transaction", "+@hash", "+@list", "+@set", "+@sortedset", "+@stream","+@keyspace", "+@pubsub", "-@admin", "-@dangerous", "-@connection", "+PING","+SELECT","+SCAN","+EXEC","+EVALSHA","+script|load", "+script|exists","+MULTI"]'
       #creation_statements='["~notifyr/celery/backend/*", "+PING","+SELECT","+SET","+SETEX","+GET","+DEL","+EXPIRE","+PEXPIRE","+TTL","+PTTL","+SCAN","+@hash","+@sortedset","+@read","+SMEMBERS","+PUBLISH","+SUBSCRIBE","+EXISTS","+EVAL", "+EVALSHA","+script|load", "+script|exists","+MULTI"]'
 
-    vault write notifyr-database/roles/admin-redis-celery-ntfr-role \
+    vault write notifyr-database/roles/admin-redis-celery-ntfr-role-dynamic \
       db_name="redis" \
       default_ttl="2h" \
       max_ttl="5h" \
       creation_statements='["~*","+@all"]'
     
-    vault write notifyr-database/roles/app-redis-credit-ntfr-role \
+    vault write notifyr-database/roles/app-redis-credit-ntfr-role-dynamic \
       db_name="redis-notifyr" \
       default_ttl="35d" \
       max_ttl="35d" \
       creation_statements='["~notifyr/credit:*","+@transaction", "+GET", "+SET", "+INCRBY","+DECRBY", "+LPUSH", "+LTRIM", "+LRANGE", "+SELECT", "+FCALL", "+EVAL", "+EXISTS"]'
 
-    vault write notifyr-database/roles/app-redis-security-ntfr-role \
+    vault write notifyr-database/roles/app-redis-security-ntfr-role-dynamic \
       db_name="redis-notifyr" \
       default_ttl="35d" \
       max_ttl="35d" \
       creation_statements='["~notifyr/security/*","+@transaction","+@string","+EXISTS","+SELECT","+KEYS","+DEL","+EXPIRE"]'
     
-    vault write notifyr-database/roles/app-redis-config-ntfr-role \
+    vault write notifyr-database/roles/app-redis-config-ntfr-role-dynamic \
       db_name="redis-notifyr" \
       default_ttl="35d" \
       max_ttl="35d" \
       creation_statements='["~notifyr/config/*","+@transaction","+@string","+EXISTS","+KEYS","+DEL","+EXPIRE","+SELECT"]'
     
-    vault write notifyr-database/roles/app-redis-ntfr-role \
+    vault write notifyr-database/roles/app-redis-ntfr-role-dynamic \
       db_name="redis-notifyr" \
       default_ttl="35d" \
       max_ttl="35d" \
       creation_statements='["~*","&*", "+@string", "+@hash", "+@list", "+@set", "+@sortedset","+@transaction", "+@stream","+@keyspace", "+@pubsub", "-@admin", "-@dangerous", "-@connection", "+PING","+SELECT","+SCAN","+INFO","+KEYS","+EVALSHA"]'
 
-    vault write notifyr-database/roles/agentic-redis-ntfr-role \
+    vault write notifyr-database/roles/agentic-redis-ntfr-role-dynamic \
       db_name="redis-notifyr" \
       default_ttl="12h" \
       max_ttl="24h" \
       creation_statements='["~notifyr/agentic/*","&notifyr/agentic/*","+@all"]'
     
-    vault write notifyr-database/roles/admin-redis-ntfr-role \
+    vault write notifyr-database/roles/admin-redis-ntfr-role-dynamic \
       db_name="redis-notifyr" \
       default_ttl="2h" \
       max_ttl="5h" \
       creation_statements='["~*","+@all"]'
 
-    vault write notifyr-database/roles/ncs-redis-ntfr-role \
+    vault write notifyr-database/roles/ncs-redis-ntfr-role-dynamic \
       db_name="redis-notifyr" \
       default_ttl="10m" \
       max_ttl="20m" \
       creation_statements='["~notifyr/credit:*", "+GET", "+SET", "+INCRBY","+DECRBY", "+LPUSH", "+LTRIM", "+LRANGE", "+SELECT", "+FCALL","+EXISTS"]'
-    setup_config_kv2 "redis_roles" "set"
+    setup_config_kv2 "redis_roles_suffix" "set"
   fi
 
-  # --- REDIS STATIC ROLES ---
-  if ! setup_config_kv2 "redis_static_roles" "check"; then
-    echo "Configuring Redis static roles..."
-
-    vault write notifyr-database/static-roles/app-redis-celery-broker-ntfr-role \
-      db_name="redis" \
-      rotation_period="7d" \
-      username="vault_ntfr_app_celery_broker_static_user"
-    vault write -f notifyr-database/rotate-role/app-redis-celery-broker-ntfr-role
-
-    vault write notifyr-database/static-roles/app-redis-celery-backend-ntfr-role \
-      db_name="redis" \
-      rotation_period="7d" \
-      username="vault_ntfr_app_celery_backend_static_user"
-    vault write -f notifyr-database/rotate-role/app-redis-celery-backend-ntfr-role
-
-    vault write notifyr-database/static-roles/app-redis-credit-ntfr-role \
-      db_name="redis-notifyr" \
-      rotation_period="7d" \
-      username="vault_ntfr_app_credit_static_user"
-    vault write -f notifyr-database/rotate-role/app-redis-credit-ntfr-role
-
-    vault write notifyr-database/static-roles/app-redis-security-ntfr-role \
-      db_name="redis-notifyr" \
-      rotation_period="7d" \
-      username="vault_ntfr_app_security_static_user"
-    vault write -f notifyr-database/rotate-role/app-redis-security-ntfr-role
-
-    vault write notifyr-database/static-roles/app-redis-config-ntfr-role \
-      db_name="redis-notifyr" \
-      rotation_period="7d" \
-      username="vault_ntfr_app_config_static_user"
-    vault write -f notifyr-database/rotate-role/app-redis-config-ntfr-role
-
-    vault write notifyr-database/static-roles/app-redis-ntfr-role \
-      db_name="redis-notifyr" \
-      rotation_period="7d" \
-      username="vault_ntfr_app_static_user"
-    vault write -f notifyr-database/rotate-role/app-redis-ntfr-role
-
-    vault write notifyr-database/static-roles/agentic-redis-ntfr-role \
-      db_name="redis-notifyr" \
-      rotation_period="7d" \
-      username="vault_ntfr_agentic_static_user"
-    vault write -f notifyr-database/rotate-role/agentic-redis-ntfr-role
-
-    setup_config_kv2 "redis_static_roles" "set"
-  fi
-  
   # --- MINIO ROLES ---
   if ! setup_config_kv2 "minio_roles" "check"; then
     echo "Configuring Minio roles..."
@@ -659,9 +572,9 @@ setup_database_config(){
   fi
 
   # --- NEO4J ROLES ---
-  if ! setup_config_kv2 "neo4j_roles" "check"; then
+  if ! setup_config_kv2 "neo4j_roles_suffix" "check"; then
 
-    vault write notifyr-database/roles/app-neo4j-ntfr-role \
+    vault write notifyr-database/roles/app-neo4j-ntfr-role-dynamic \
       db_name="neo4j" \
       default_ttl="1d" \
       max_ttl="2d" \
@@ -669,14 +582,14 @@ setup_database_config(){
       # creation_statements='{ "db": "notifyr", "roles": [{ "role": "notifyr-app"}] }'
 
 
-    vault write notifyr-database/roles/admin-neo4j-ntfr-role \
+    vault write notifyr-database/roles/admin-neo4j-ntfr-role-dynamic \
         db_name="neo4j" \
         default_ttl="30m" \
         max_ttl="1h" \
         creation_statements='{ "db": "notifyr", "roles": [{ "role": "admin" }] }'
         #creation_statements='{ "db": "notifyr", "roles": [{ "role": "notifyr-admin" }] }'
       
-    setup_config_kv2 "neo4j_roles" "set"
+    setup_config_kv2 "neo4j_roles_suffix" "set"
   fi
 
 }
@@ -685,14 +598,14 @@ database_connection_config(){
   # This function sets up CONNECTION CONFIGURATIONS for all database engines
  
   # --- POSTGRES CONNECTION ---
-  if ! setup_config_kv2 "postgres_connection" "check"; then
+  if ! setup_config_kv2 "postgres_connection_role_suffix" "check"; then
     echo "waiting for postgres server" && sleep 10
 
     echo "Configuring Postgres connection..."
 
     vault write notifyr-database/config/postgres-notifyr \
       plugin_name="postgresql-database-plugin" \
-      allowed_roles="app-postgres-security-ntfr-role, admin-postgres-security-ntfr-role" \
+      allowed_roles="app-postgres-security-ntfr-role-dynamic, app-postgres-security-ntfr-role-static, admin-postgres-security-ntfr-role-dynamic" \
       connection_url="postgresql://{{username}}:{{password}}@postgres:5432/security" \
       max_open_connections=50 \
       max_idle_connections=20 \
@@ -702,7 +615,7 @@ database_connection_config(){
 
     vault write notifyr-database/config/postgres \
       plugin_name="postgresql-database-plugin" \
-      allowed_roles="admin-postgres-ntfr-role, app-postgres-ntfr-role" \
+      allowed_roles="admin-postgres-ntfr-role-dynamic, app-postgres-ntfr-role-dynamic, app-postgres-ntfr-role-static" \
       connection_url="postgresql://{{username}}:{{password}}@$POSTGRES_HOST:5432/notifyr" \
       max_open_connections=50 \
       max_idle_connections=20 \
@@ -710,18 +623,18 @@ database_connection_config(){
       password="$NOTIFYR_POSTGRES_PASSWORD"
     vault write -f notifyr-database/rotate-root/postgres
 
-    setup_config_kv2 "postgres_connection" "set"
+    setup_config_kv2 "postgres_connection_role_suffix" "set"
   fi
 
   # --- MONGODB CONNECTION ---
-  if ! setup_config_kv2 "mongodb_connection" "check"; then
+  if ! setup_config_kv2 "mongodb_connection_role_suffix" "check"; then
 
     echo "waiting for mongodb server" && sleep 10
     echo "Configuring MongoDB connection..."
 
     vault write notifyr-database/config/mongodb-notifyr \
       plugin_name="mongodb-database-plugin" \
-      allowed_roles="admin-mongo-ntfr-role, app-mongo-ntfr-role, agentic-mongo-ntfr-role, admin-mongo-agentic-ntfr-role" \
+      allowed_roles="admin-mongo-ntfr-role-dynamic, app-mongo-ntfr-role-dynamic, app-mongo-ntfr-role-static, agentic-mongo-ntfr-role-dynamic, agentic-mongo-ntfr-role-static, admin-mongo-agentic-ntfr-role-dynamic" \
       connection_url="mongodb://{{username}}:{{password}}@mongodb:27017/admin?replicaSet=$MONGO_REPLICA_NAME" \
       username="mongo-vaultadmin" \
       password="$VAULTPASS"
@@ -729,17 +642,17 @@ database_connection_config(){
 
     vault write notifyr-database/config/mongodb \
       plugin_name="mongodb-database-plugin" \
-      allowed_roles="app-mongo-jobs-ntfr-role, admin-mongo-jobs-ntfr-role " \
+      allowed_roles="app-mongo-jobs-ntfr-role-dynamic, app-mongo-jobs-ntfr-role-static, admin-mongo-jobs-ntfr-role-dynamic" \
       connection_url="mongodb://{{username}}:{{password}}@$MONGO_HOST:27017/notifyr?replicaSet=$MONGO_REPLICA_NAME" \
       username="$NOTIFYR_MONGO_USERNAME" \
       password="$NOTIFYR_MONGO_PASSWORD"
     vault write -f notifyr-database/rotate-root/mongodb
     
-    setup_config_kv2 "mongodb_connection" "set"
+    setup_config_kv2 "mongodb_connection_role_suffix" "set"
   fi
 
   # --- REDIS CONNECTION ---
-  if ! setup_config_kv2 "redis_connection" "check"; then
+  if ! setup_config_kv2 "redis_connection_role_suffix" "check"; then
     echo "Configuring Redis connection and static role..."
     vault write notifyr-database/config/redis-notifyr \
         plugin_name="redis-database-plugin" \
@@ -747,7 +660,7 @@ database_connection_config(){
         port=6379 \
         username="redis-vaultadmin" \
         password="$VAULTPASS" \
-        allowed_roles="admin-redis-ntfr-role, app-redis-ntfr-role, ncs-redis-ntfr-role, agentic-redis-ntfr-role, app-redis-credit-ntfr-role, app-redis-security-ntfr-role, app-redis-config-ntfr-role"
+        allowed_roles="admin-redis-ntfr-role-dynamic, app-redis-ntfr-role-dynamic, app-redis-ntfr-role-static, ncs-redis-ntfr-role-dynamic, agentic-redis-ntfr-role-dynamic, agentic-redis-ntfr-role-static, app-redis-credit-ntfr-role-dynamic, app-redis-credit-ntfr-role-static, app-redis-security-ntfr-role-dynamic, app-redis-security-ntfr-role-static, app-redis-config-ntfr-role-dynamic, app-redis-config-ntfr-role-static"
     vault write -f notifyr-database/rotate-root/redis-notifyr
     
     vault write notifyr-database/config/redis \
@@ -756,10 +669,10 @@ database_connection_config(){
         port=6379 \
         username="$REDIS_USER" \
         password="$REDIS_PASSWORD" \
-        allowed_roles="app-redis-celery-backend-ntfr-role, app-redis-celery-broker-ntfr-role, admin-redis-celery-ntfr-role"
+        allowed_roles="app-redis-celery-backend-ntfr-role-dynamic, app-redis-celery-backend-ntfr-role-static, app-redis-celery-broker-ntfr-role-dynamic, app-redis-celery-broker-ntfr-role-static, admin-redis-celery-ntfr-role-dynamic"
     
     vault write -f notifyr-database/rotate-root/redis
-    setup_config_kv2 "redis_connection" "set"
+    setup_config_kv2 "redis_connection_role_suffix" "set"
   fi
 
   # --- MINIO CONNECTION ---
@@ -788,11 +701,11 @@ database_connection_config(){
   echo "waiting for neo4j server" && sleep 15
 
   # --- NEO4J CONNECTION ---
-  if ! setup_config_kv2 "neo4j_connection" "check"; then
+  if ! setup_config_kv2 "neo4j_connection_role_suffix" "check"; then
     echo "Configuring Neo4J Connection..."
     vault write notifyr-database/config/neo4j \
       plugin_name="neo4j-vault-database-plugin" \
-      allowed_roles="admin-neo4j-ntfr-role, app-neo4j-ntfr-role" \
+      allowed_roles="admin-neo4j-ntfr-role-dynamic, app-neo4j-ntfr-role-dynamic" \
       connection_url="$GRAPHITI_PROTOCOL://@$GRAPHITI_HOST:7687" \
       username="$NEO4J_USER" \
       password="$NEO4J_PASSWORD" \
@@ -800,9 +713,90 @@ database_connection_config(){
       edition="$NEO4J_EDITION"
       
     vault write -f notifyr-database/rotate-root/neo4j
-    setup_config_kv2 "neo4j_connection" "set"
+    setup_config_kv2 "neo4j_connection_role_suffix" "set"
   fi
     
+}
+
+setup_database_static_roles(){
+  if setup_config_kv2 "database_static_roles_after_connections" "check"; then
+    return
+  fi
+  echo "Configuring database static roles..."
+
+  vault write notifyr-database/static-roles/app-postgres-ntfr-role-static \
+    db_name="postgres" \
+    rotation_period="7d" \
+    username="vault_ntfr_app_static_user"
+  vault write -f notifyr-database/rotate-role/app-postgres-ntfr-role-static
+
+  vault write notifyr-database/static-roles/app-postgres-security-ntfr-role-static \
+    db_name="postgres-notifyr" \
+    rotation_period="7d" \
+    username="vault_ntfr_client_static_user"
+  vault write -f notifyr-database/rotate-role/app-postgres-security-ntfr-role-static
+
+  vault write notifyr-database/static-roles/agentic-mongo-ntfr-role-static \
+    db_name="mongodb-notifyr" \
+    rotation_period="7d" \
+    username="vault_ntfr_agentic_static_user"
+  vault write -f notifyr-database/rotate-role/agentic-mongo-ntfr-role-static
+
+  vault write notifyr-database/static-roles/app-mongo-ntfr-role-static \
+    db_name="mongodb-notifyr" \
+    rotation_period="7d" \
+    username="vault_ntfr_app_static_user"
+  vault write -f notifyr-database/rotate-role/app-mongo-ntfr-role-static
+
+  vault write notifyr-database/static-roles/app-mongo-jobs-ntfr-role-static \
+    db_name="mongodb" \
+    rotation_period="7d" \
+    username="vault_ntfr_jobs_static_user"
+  vault write -f notifyr-database/rotate-role/app-mongo-jobs-ntfr-role-static
+
+  vault write notifyr-database/static-roles/app-redis-celery-broker-ntfr-role-static \
+    db_name="redis" \
+    rotation_period="7d" \
+    username="vault_ntfr_app_celery_broker_static_user"
+  vault write -f notifyr-database/rotate-role/app-redis-celery-broker-ntfr-role-static
+
+  vault write notifyr-database/static-roles/app-redis-celery-backend-ntfr-role-static \
+    db_name="redis" \
+    rotation_period="7d" \
+    username="vault_ntfr_app_celery_backend_static_user"
+  vault write -f notifyr-database/rotate-role/app-redis-celery-backend-ntfr-role-static
+
+  vault write notifyr-database/static-roles/app-redis-credit-ntfr-role-static \
+    db_name="redis-notifyr" \
+    rotation_period="7d" \
+    username="vault_ntfr_app_credit_static_user"
+  vault write -f notifyr-database/rotate-role/app-redis-credit-ntfr-role-static
+
+  vault write notifyr-database/static-roles/app-redis-security-ntfr-role-static \
+    db_name="redis-notifyr" \
+    rotation_period="7d" \
+    username="vault_ntfr_app_security_static_user"
+  vault write -f notifyr-database/rotate-role/app-redis-security-ntfr-role-static
+
+  vault write notifyr-database/static-roles/app-redis-config-ntfr-role-static \
+    db_name="redis-notifyr" \
+    rotation_period="7d" \
+    username="vault_ntfr_app_config_static_user"
+  vault write -f notifyr-database/rotate-role/app-redis-config-ntfr-role-static
+
+  vault write notifyr-database/static-roles/app-redis-ntfr-role-static \
+    db_name="redis-notifyr" \
+    rotation_period="7d" \
+    username="vault_ntfr_app_static_user"
+  vault write -f notifyr-database/rotate-role/app-redis-ntfr-role-static
+
+  vault write notifyr-database/static-roles/agentic-redis-ntfr-role-static \
+    db_name="redis-notifyr" \
+    rotation_period="7d" \
+    username="vault_ntfr_agentic_static_user"
+  vault write -f notifyr-database/rotate-role/agentic-redis-ntfr-role-static
+
+  setup_config_kv2 "database_static_roles_after_connections" "set"
 }
 
 create_aws_config(){
@@ -879,6 +873,9 @@ setup_database_config
 
 echo "*************************** CREATE DATABASE CONNECTIONS (Checkpoints: postgres_connection, mongodb_connection, redis_connection, minio_connection, rabbitmq_connection, neo4j_connection) *********************"
 database_connection_config
+
+echo "*************************** SETUP DATABASE STATIC ROLES *********************"
+setup_database_static_roles
 
 echo "*************************** CREATE AWS ENGINE *********************"
 # create_aws_config

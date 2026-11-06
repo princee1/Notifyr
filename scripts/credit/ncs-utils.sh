@@ -140,9 +140,6 @@ transaction() {
     esac
 }
 
-
-
-
 # 1. topup: INCRBY for 'phone', 'sms', 'email, notification, message, webhook'
 topup_cost() {
     echo "🚀 Topping up phone, sms, email credits in Redis DB $REDIS_DB from $COSTS_FILE"
