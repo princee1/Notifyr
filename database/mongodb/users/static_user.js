@@ -3,12 +3,13 @@ const vaultpass = process.env.VAULTPASS;
 const appDb = db.getSiblingDB("app");
 const agenticDb = db.getSiblingDB("agentic");
 const creditDb = db.getSiblingDB("credit");
+const adminDb = db.getSiblingDB('admin')
 
 const app_vault_user = 'vault_ntfr_app_static_user';
 const agentic_vault_user = 'vault_ntfr_agentic_static_user';
 const credit_vault_user = 'vault_ntfr_credit_static_user';
 
-appDb.createUser({
+adminDb.createUser({
     user: app_vault_user,
     pwd: vaultpass,
     roles: [
@@ -20,7 +21,7 @@ appDb.createUser({
         { "role": "readWrite", "db": "app", "collection": "workflow" }]
 });
 
-agenticDb.createUser({
+adminDb.createUser({
     user: agentic_vault_user,
     pwd: vaultpass,
     roles: [
@@ -32,8 +33,8 @@ agenticDb.createUser({
         { "role": "readWrite", "db": "agentic", "collection": "chat_write" }]
 });
 
-creditDb.createUser({
-    user: credit_vault_user,
-    pwd: vaultpass,
-    roles: []
-});
+// adminDb.createUser({
+//     user: credit_vault_user,
+//     pwd: vaultpass,
+//     roles: []
+// });

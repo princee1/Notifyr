@@ -17,13 +17,15 @@ from app.utils.constant import AgenticConstant, HostConstant, MongooseDBConstant
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import ConnectionFailure, OperationFailure
 
+from app.utils.globals import APP_MODE, ApplicationMode
 from app.utils.helper import subset_model
 from app.utils.toolbox import RunInThreadPool
 
 AGENTIC_CREDS='agentic'
 JOBS_CREDS='jobs'
+CREDIT_CREDS='credit'
 
-CREDENTIALS_SET:set[CredentialName] = {'default',AGENTIC_CREDS,JOBS_CREDS} 
+CREDENTIALS_SET:set[CredentialName] = {'default',AGENTIC_CREDS,JOBS_CREDS,CREDIT_CREDS} 
 
 D = TypeVar('D',bound=BaseDocument)
 
@@ -32,13 +34,16 @@ ClientMode  = Literal['async','sync']
 DB_MAP:dict[CredentialName,str]= {
     'default':MongooseDBConstant.DEFAULT_DATABASE_NAME,
     AGENTIC_CREDS:MongooseDBConstant.AGENTIC_DATABASE_NAME,
-    JOBS_CREDS:MongooseDBConstant.JOB_DATABASE_NAME
+    JOBS_CREDS:MongooseDBConstant.JOB_DATABASE_NAME,
+    CREDIT_CREDS:MongooseDBConstant.CREDIT_DATABASE_NAME
 }
+
 
 MONGO_CRED_NAME_TO_ROLE_MAP:dict[CredentialName,tuple[str,str]] = {
     'default': ('app', None),
     AGENTIC_CREDS: ('agentic', None),
-    JOBS_CREDS: ('app','jobs')
+    JOBS_CREDS: ('app','jobs'),
+    AGENTIC_CREDS: ('credit',None)
 }
 
 export = ExportRoleFunc(MONGO_CRED_NAME_TO_ROLE_MAP)
@@ -290,7 +295,8 @@ class MongooseService(TempCredentialsDatabaseService):
         self.client_store.clear()
         self.client_store.add_client('default',self.compute_url(HostConstant.MONGOOSE_HOST,MongooseDBConstant.DEFAULT_DATABASE_NAME))
         self.client_store.add_client(JOBS_CREDS,self.compute_url(self.configService.MONGO_HOST,MongooseDBConstant.JOB_DATABASE_NAME,name=JOBS_CREDS))
-        self.client_store.add_client(AGENTIC_CREDS,self.compute_url(HostConstant.MONGOOSE_HOST,MongooseDBConstant.AGENTIC_DATABASE_NAME,AGENTIC_CREDS))
+        if APP_MODE == ApplicationMode.agentic:
+            self.client_store.add_client(AGENTIC_CREDS,self.compute_url(HostConstant.MONGOOSE_HOST,MongooseDBConstant.AGENTIC_DATABASE_NAME,AGENTIC_CREDS))
 
     def generate_credentials(self):
         self.add_credentials(VaultConstant.MONGO_ROLE,'default',**export('default'))
@@ -394,8 +400,8 @@ class MongooseService(TempCredentialsDatabaseService):
 
     def compute_url(self,host:str,database=MongooseDBConstant.JOB_DATABASE_NAME,name:CredentialName='default',authSource=None,username:str=None,password:str=None):
         replica = self.configService.getenv('MONGO_REPLICA_NAME','notifyr-0')
-        authSource = authSource or database
-        return f"mongodb://{username or self.db_user(name)}:{password or self.db_password(name)}@{host}:27017/{database}?replicaSet={replica}"
+        authSource = f'authSource={authSource}&' if authSource else ''
+        return f"mongodb://{username or self.db_user(name)}:{password or self.db_password(name)}@{host}:27017/{database}?{authSource}replicaSet={replica}"
     
     def get_credentials_name(self,model:Type[D]|D)->CredentialName:
 

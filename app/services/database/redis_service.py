@@ -278,20 +278,20 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
     @contextmanager
     def redis_dynamic_synccontext(self,db:RedisDB,name:CredentialName):
         config = self.configuration(name,db)
-        cred = self.vaultService.database_engine.generate_credentials(VaultConstant.REDIS_ROLE, config.prefix, config.suffix, mode='dynamic')
+        cred = self.vaultService.database_engine.generate_credentials(VaultConstant.REDIS_ROLE, config['prefix'], config['suffix'], mode='dynamic')
         username = cred['data']['username']
         password = cred['data']['password']
-        with SyncRedis(host=config.host,db=db,username=username,password=password) as redis:
+        with SyncRedis(host=config['host'],db=db,username=username,password=password) as redis:
             yield redis
         self.vaultService.revoke_lease(cred['lease_id'])
 
     @asynccontextmanager
     async def redis_dynamic_asynccontext(self,db:RedisDB,name:CredentialName):
         config = self.configuration(name,db)
-        cred = self.vaultService.database_engine.generate_credentials(VaultConstant.REDIS_ROLE, config.prefix, config.suffix, mode='dynamic')
+        cred = self.vaultService.database_engine.generate_credentials(VaultConstant.REDIS_ROLE, config['prefix'], config['suffix'], mode='dynamic')
         username = cred['data']['username']
         password = cred['data']['password']
-        async with Redis(host=config.host,db=db,username=username,password=password) as redis:
+        async with Redis(host=config['host'],db=db,username=username,password=password) as redis:
             yield redis
         self.vaultService.revoke_lease(cred['lease_id'])
 

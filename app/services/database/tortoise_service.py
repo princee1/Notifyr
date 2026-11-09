@@ -18,13 +18,11 @@ from app.services.timer_service import TimerService
 from app.services.vault_service import VaultService
 from app.utils.constant import HostConstant, PostgresConstant, SetupRootConstant, VaultConstant, VaultTTLSyncConstant
 from app.utils.toolbox import RunInThreadPool
-from tortoise.transactions import in_transaction, TransactionContext
+from tortoise.backends.base.client import TransactionContext
 from tortoise.exceptions import OperationalError,ConfigurationError,IntegrityError
-from pydantic import BaseModel
 
 
 SECURITY_CREDS='security'
-
 CREDENTIALS_SET:set[CredentialName] = {'default',SECURITY_CREDS}
 
 NOTIFYR_MODELS = [
@@ -228,8 +226,8 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
     @contextmanager
     def pg_dynamic_synccontext(self,name:CredentialName,transaction:bool=False):
         config:CredentialConfig = self.configuration(name)
-        creds = self.vaultService.database_engine.generate_credentials(VaultConstant.POSTGRES_ROLE,config.prefix,config.suffix,'dynamic')
-        url = self.compute_url(config.host,database=config.database,username=creds['data']['username'],password=creds['data']['password'])
+        creds = self.vaultService.database_engine.generate_credentials(VaultConstant.POSTGRES_ROLE,config['prefix'],config['suffix'],'dynamic')
+        url = self.compute_url(config['host'],database=config.database,username=creds['data']['username'],password=creds['data']['password'])
         conn = psycopg2.connect(url)
         with self.sync_context(conn, transaction=transaction) as cur:
             yield cur
@@ -239,8 +237,8 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
     @asynccontextmanager
     async def pg_dynamic_asynccontext(self,name:CredentialName,models=[],transaction:bool=False):
         config:CredentialConfig = self.configuration(name)
-        creds = self.vaultService.database_engine.generate_credentials(VaultConstant.POSTGRES_ROLE,config.prefix,config.suffix,'dynamic')
-        url = self.compute_url(config.host,database=config.database,username=creds['data']['username'],password=creds['data']['password'])
+        creds = self.vaultService.database_engine.generate_credentials(VaultConstant.POSTGRES_ROLE,config['prefix'],config['suffix'],'dynamic')
+        url = self.compute_url(config['host'],database=config.database,username=creds['data']['username'],password=creds['data']['password'])
         async with TortoiseContext() as ctx:
             config = {'connections':{'default':url},'apps':{'app':{'models':models,'default_connection':'default'}}}
             await ctx.init(config=config)
