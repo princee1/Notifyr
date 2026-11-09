@@ -10,7 +10,7 @@ import app.models.orm.security_model as security
 from app.services.config_service import ConfigService
 from app.services.database.redis_service import CONFIG_CREDS
 from app.services.security_service import AccessVaultConstant
-from app.utils.constant import RedisConstant, SetupRootConstant, VaultConstant
+from app.utils.constant import PostgresConstant, RedisConstant, SetupRootConstant, VaultConstant
 from app.utils.fileIO import JSONFile
 from app.utils.prettyprint import PrettyPrinter_
 from app.utils.toolbox import RunAsync, RunInThreadPool
@@ -46,7 +46,7 @@ from app.services import RedisService
 
 from app.classes.auth_permission import AccessTypeAPIModel, ClientType
 from app.services.admin_service import ClientMiniService
-from app.services.database.tortoise_service import SECURITY_CREDS
+from app.services.database.tortoise_service import SECURITY_CREDS, SECURITY_MODELS
 from app.classes.step import LambdaStepRunner, StepCallback
 
 from app.container import InjectInMethod, build_container, Get, InjectInMiniService
@@ -57,13 +57,13 @@ ADMIN_INIT_KEY='admin-init'
 
 class InitStepCallback(StepCallback):
 
-    @InjectInMethod()
+    @InjectInMethod(accept_others=True)
     def __init__(self,redisService:RedisService,redis:Redis=None):
         self.redisService  = redisService
         self.redis = redis
 
     async def before_enter(self,key:str):
-        return bool(await self.redisService.retrieve(RedisConstant.CONFIG_DB,key),redis=self.redis)
+        return bool(await self.redisService.retrieve(RedisConstant.CONFIG_DB,key,redis=self.redis))
 
     async def after_exit(self,key:str):
         await self.redisService.store(RedisConstant.CONFIG_DB,key,int(True),0,redis=self.redis)
@@ -94,15 +94,15 @@ async def main():
 
         async with LambdaStepRunner(callback,SetupRootConstant.SYSTEM_LOGIN_KEY) as skip:
             skip()
+            async with tortoiseService.pg_dynamic_asynccontext(SECURITY_CREDS,transaction=True) as conn:
             
-            systemInfo = {'client_email':'system@noreply-notifyr.ca','client_name':'Notifyr System','client_username' :'notifyr_system',
-                            'client_description':'Root Super user account that can login and do Admin operation and super user operation','issued_for':configService.SYSTEM_IP}
-            systemORM = security.ClientORM(client_type=ClientType.System,max_connection=1,max_refresh=25,can_login=True,**systemInfo)
-            system_client = InjectInMiniService(ClientMiniService,client=systemORM,group_id=None,policies=[])
-            password = generateId(22)
-            encrypted_password,salt = await system_client.encrypt_password(password)
+                systemInfo = {'client_email':'system@noreply-notifyr.ca','client_name':'Notifyr System','client_username' :'notifyr_system',
+                                'client_description':'Root Super user account that can login and do Admin operation and super user operation','issued_for':configService.SYSTEM_IP}
+                systemORM = security.ClientORM(client_type=ClientType.System,max_connection=1,max_refresh=25,can_login=True,group=None,**systemInfo)
+                system_client = InjectInMiniService(ClientMiniService,client=systemORM,group_id=None,policies=[])
+                password = generateId(22)
+                encrypted_password,salt = await system_client.encrypt_password(password)
 
-            async with tortoiseService.pg_dynamic_asynccontext(SECURITY_CREDS,models=[security.ClientORM],transaction=True) as conn:
                 async with tortoiseService.transaction(conn=conn) as ctx:
                     await systemORM.save(ctx)
                     slice_dict(systemInfo,{'client_username','client_email'},'include')
@@ -115,13 +115,13 @@ async def main():
 
         async with LambdaStepRunner(callback,SetupRootConstant.ADMIN_LOGIN_KEY) as skip:
             skip()
+            async with tortoiseService.pg_dynamic_asynccontext(SECURITY_CREDS,transaction=True) as conn:
 
-            admin_info = admin.model_dump(mode='python',exclude={'password',})
-            adminORM = security.ClientORM(client_type=ClientType.Admin,max_connection=1,can_login=True,max_refresh=50,client_description='Admin Account',**admin_info)
-            admin_client = InjectInMiniService(ClientMiniService,client=adminORM,group_id=None,policies=[])
-            encrypted_password,salt = await admin_client.encrypt_password(admin.password.get_secret_value())
+                admin_info = admin.model_dump(mode='python',exclude={'password',})
+                adminORM = security.ClientORM(client_type=ClientType.Admin,max_connection=1,can_login=True,max_refresh=50,client_description='Admin Account',group=None,**admin_info)
+                admin_client = InjectInMiniService(ClientMiniService,client=adminORM,group_id=None,policies=[])
+                encrypted_password,salt = await admin_client.encrypt_password(admin.password.get_secret_value())
 
-            async with tortoiseService.pg_dynamic_asynccontext(SECURITY_CREDS,models=[security.ClientORM],transaction=True) as conn:
                 async with tortoiseService.transaction(conn=conn) as ctx:
                     await adminORM.save(ctx)
                     await admin_client.store_password(encrypted_password,salt)

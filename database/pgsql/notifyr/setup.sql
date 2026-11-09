@@ -73,4 +73,6 @@ CALL bootstrap_admin.grant_admin_role_privileges('vault_ntfr_admin_role',ARRAY['
 
 CREATE ROLE vault_ntfr_app_static_user LOGIN PASSWORD :'static_db_password';
 
+GRANT vault_ntfr_app_role TO vault_ntfr_app_static_user;
+
 DROP SCHEMA bootstrap_admin CASCADE;

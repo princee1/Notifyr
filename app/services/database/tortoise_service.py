@@ -33,6 +33,10 @@ NOTIFYR_MODELS = [
                 ]
 
 SECURITY_MODELS = ['app.models.orm.security_model']
+APP_TO_MODEL_MAP = {
+    PostgresConstant.NOTIFYR_APP:NOTIFYR_MODELS,
+    PostgresConstant.SECURITY_APP:SECURITY_MODELS
+}
 R = TypeVar('R',bound=Model)
 
 DB_MAP: dict[CredentialName,str] = {
@@ -227,7 +231,7 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
     def pg_dynamic_synccontext(self,name:CredentialName,transaction:bool=False):
         config:CredentialConfig = self.configuration(name)
         creds = self.vaultService.database_engine.generate_credentials(VaultConstant.POSTGRES_ROLE,config['prefix'],config['suffix'],'dynamic')
-        url = self.compute_url(config['host'],database=config.database,username=creds['data']['username'],password=creds['data']['password'])
+        url = self.compute_url(config['host'],database=config['database'],username=creds['data']['username'],password=creds['data']['password'])
         conn = psycopg2.connect(url)
         with self.sync_context(conn, transaction=transaction) as cur:
             yield cur
@@ -235,16 +239,17 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
         conn.close()
 
     @asynccontextmanager
-    async def pg_dynamic_asynccontext(self,name:CredentialName,models=[],transaction:bool=False):
+    async def pg_dynamic_asynccontext(self,name:CredentialName,transaction:bool=False):
         config:CredentialConfig = self.configuration(name)
         creds = self.vaultService.database_engine.generate_credentials(VaultConstant.POSTGRES_ROLE,config['prefix'],config['suffix'],'dynamic')
-        url = self.compute_url(config['host'],database=config.database,username=creds['data']['username'],password=creds['data']['password'])
+        url = self.compute_url(config['host'],database=config['database'],username=creds['data']['username'],password=creds['data']['password'])
+        app = DB_MAP[name]
+        models = APP_TO_MODEL_MAP[app]
         async with TortoiseContext() as ctx:
-            config = {'connections':{'default':url},'apps':{'app':{'models':models,'default_connection':'default'}}}
+            config = {'connections':{'default':url},'apps':{app:{'models':models,'default_connection':'default'}}}
             await ctx.init(config=config)
             if transaction:
-                conn = lambda: ctx.connections.get('default')
-                yield conn
+                yield ctx.connections.get('default')
             else:
                 yield ctx
         self.vaultService.revoke_lease(creds['lease_id'])
@@ -264,7 +269,7 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
         await RunInThreadPool(self.init_sync_connection)()
     
     @asynccontextmanager
-    async def transaction(self,name:CredentialName='default',retries=1,timeout=5,wait=1,silent=False,lock:ServiceLockType='none',conn:Callable[[],TransactionContext]=None):
+    async def transaction(self,name:CredentialName='default',retries=1,timeout=5,wait=1,silent=False,lock:ServiceLockType='none',conn:None|BaseDBAsyncClient=None):
         if conn is None:
             if name not in CREDENTIALS_SET:
                 raise VaultCredentialNameDoesNotExistError(name)
@@ -272,8 +277,9 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
         
         async with self.lock(lock):
             for attempts in range(retries):
-
-                async with (get_connection(connection)._in_transaction() if conn is None else conn()) as ctx:
+                if conn is None:
+                    conn = get_connection(connection)
+                async with (conn._in_transaction()) as ctx:
                     try:
                         yield ctx
                         break

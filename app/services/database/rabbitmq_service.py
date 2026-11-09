@@ -13,7 +13,7 @@ from app.utils.toolbox import RunInThreadPool
 class RabbitMQService(TempCredentialsDatabaseService,BrokerService):
     
     def __init__(self, configService:ConfigService, fileService:FileService, vaultService:VaultService,timerService:TimerService):
-        super().__init__(configService, fileService, vaultService,timerService,60*60*24*29)
+        super().__init__(configService, fileService, vaultService,timerService,'dynamic',60*60*24*29)
     
     def verify_dependency(self):
         if self.configService.CELERY_BROKER_PROVIDER == 'redis':

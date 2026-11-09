@@ -343,16 +343,10 @@ class AppServer(EventInterface):
 
     @register_hook('shutdown')
     async def revoke_dynamic_lease(self):
-        mongooseService: MongooseService = Get(MongooseService)
-        tortoiseConnService = Get(TortoiseConnectionService)
-        redisService = Get(RedisService)
         vaultService = Get(VaultService)
         rabbitmqService = Get(RabbitMQService)
 
         await RunInThreadPool(rabbitmqService.revoke_lease)()
-        await RunInThreadPool(mongooseService.revoke_lease)()
-        await RunInThreadPool(tortoiseConnService.revoke_lease)()
-        await RunInThreadPool(redisService.revoke_lease)()
 
         if CAPABILITIES['object']:
             objectS3Service = Get(ObjectS3Service)
