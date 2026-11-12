@@ -8,7 +8,6 @@ from app.utils.helper import uuid_v1_mc
 from tortoise.contrib.pydantic import pydantic_model_creator
 from pydantic import BaseModel, field_validator, model_validator
 
-SCHEMA = 'twilio'
 
 # Define Enums
 class SMSStatusEnum(str, Enum):
@@ -53,7 +52,7 @@ class SMSTrackingORM(models.Model):
     price_unit = fields.CharField(max_length=10, null=True)  # Added price_unit field
 
     class Meta:
-        schema = SCHEMA
+        schema = PostgresConstant.TWILIO_SCHEMA
         app = PostgresConstant.NOTIFYR_APP
         table = "smstracking"
 
@@ -90,7 +89,7 @@ class CallTrackingORM(models.Model):
     price_unit = fields.CharField(max_length=10, null=True)  # Added price_unit field
 
     class Meta:
-        schema = SCHEMA
+        schema = PostgresConstant.TWILIO_SCHEMA
         app = PostgresConstant.NOTIFYR_APP
         table = "calltracking"
 
@@ -135,7 +134,7 @@ class SMSEventORM(models.Model):
 
 
     class Meta:
-        schema = SCHEMA
+        schema = PostgresConstant.TWILIO_SCHEMA
         app = PostgresConstant.NOTIFYR_APP
         table = "smsevent"
 
@@ -184,7 +183,7 @@ class CallEventORM(models.Model):
         
     class Meta:
         app = PostgresConstant.NOTIFYR_APP
-        schema = SCHEMA
+        schema = PostgresConstant.TWILIO_SCHEMA
         table = "callevent"
 
     @property
@@ -217,7 +216,7 @@ class SMSAnalyticsORM(models.Model):
     #average_price = fields.FloatField(default=0)
 
     class Meta:
-        schema = SCHEMA
+        schema = PostgresConstant.TWILIO_SCHEMA
         app = PostgresConstant.NOTIFYR_APP
         table = "smsanalytics"
         unique_together = ("week_start_date", "direction")
@@ -262,7 +261,7 @@ class CallAnalyticsORM(models.Model):
 
     class Meta:
         app = PostgresConstant.NOTIFYR_APP
-        schema = SCHEMA
+        schema = PostgresConstant.TWILIO_SCHEMA
         table = "callanalytics"
         unique_together = ("week_start_date", "direction", "country", "state", "city")
 

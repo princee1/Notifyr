@@ -210,6 +210,14 @@ class PostgresConstant:
     SECURITY_DATABASE_NAME = 'security'
     SECURITY_APP = 'security'
     NOTIFYR_APP = 'notifyr'
+
+
+    EMAILS_SCHEMA = 'emails'
+    TWILIO_SCHEMA = 'twilio'
+    LINK_SCHEMA = 'links'
+    SECURITY_SCHEMA = 'clients'
+    CONTACTS_SCHEMA = 'contacts'
+    
             
 ########################                     ########################################
 

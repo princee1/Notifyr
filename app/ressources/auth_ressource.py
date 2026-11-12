@@ -77,7 +77,6 @@ class AuthRessource(BaseHTTPRessource):
             i+=1
 
         await client.update_recovery_code(recovery.export(tokens))
-
         return recovery.export()
 
     @Throttle(normal=(300,30))
@@ -112,6 +111,7 @@ class AuthRessource(BaseHTTPRessource):
                 
                 authSignature,session_id = await client.upsert_session(session_id,origin,user_agent,device_name)
                 auth_token,refresh_token = await client.generate_access(session_id,authSignature.get('signature',None),ctx=ctx)
+                session.set_session_id(session_id)
 
                 await client.update_recovery_code(index=index)
                 session.login(refresh_token)
@@ -146,11 +146,12 @@ class AuthRessource(BaseHTTPRessource):
                     client.verify_client_origin(origin)
                     reuse_counter = await client.verify_refresh_token(refreshPermission)
 
-                    new_signature,_ = await client.upsert_session(refreshPermission['session_id'])
+                    new_signature,session_id = await client.upsert_session(refreshPermission['session_id'])
                     auth_token,refresh_token = await client.generate_access(refreshPermission['session_id'],new_signature.get('signature',None),reuse_counter,ctx=ctx)
 
                     session.login(refresh_token)
                     session.update_auth_state(AuthState.AUTH_BY_REFRESH)
+                    session.set_session_id(session_id)
                     res = self.access_token_pipe.pipe(auth_token,client)
                 else: # inactive
                     await client.verify_refresh_token(refreshPermission,__raise__=False)
@@ -195,7 +196,9 @@ class AuthRessource(BaseHTTPRessource):
                 await client.verify_login_count(session_id)
                 authSignature,session_id = await client.upsert_session(session_id,origin,user_agent,device_name)
                 auth_token,refresh_token = await client.generate_access(session_id,authSignature.get('signature',None),ctx=ctx)
-                
+
+                session.set_session_id(session_id)
+
                 if mode == 'private':
                     session.login(refresh_token)
                     session.update_auth_state(AuthState.LOGIN)

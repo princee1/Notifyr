@@ -8,6 +8,7 @@ from tortoise import BaseDBAsyncClient, Tortoise,connections
 from tortoise.connection import get_connection
 from tortoise.context import TortoiseContext
 from tortoise.models import Model
+from app.classes.vault_engine import CredentialsMode
 from app.definition._service import DEFAULT_BUILD_STATE, LinkDep, Service, ServiceLockType
 from app.errors.db_error import TortoiseContextAlreadyExistError, TortoiseContextDoesNotExistError, TortoiseContextNotSetupError, TortoiseTransactionFailureError, VaultCredentialNameDoesNotExistError
 from app.errors.service_error import BuildFailureError
@@ -102,23 +103,14 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
 
         try:
             self.generate_credentials()
-            self.init_sync_connection()
-            conn = psycopg2.connect(
-                dbname=PostgresConstant.DEFAULT_DATABASE_NAME,
-                user=self.db_user(),
-                password=self.db_password(),
-                host=self.configService.POSTGRES_HOST,
-                port=5432)
+            for name in CREDENTIALS_SET:
+                with self.pg_dynamic_synccontext(name,mode='static') as conn:
+                    ...
+
             if build_state == DEFAULT_BUILD_STATE:
                 super().build(build_state)
         except Exception as e:
             raise BuildFailureError(f"Error during Tortoise ORM connection: {e}")
-        finally:
-            try:
-                if conn:
-                    conn.close()
-            except:
-                ...
 
     def generate_credentials(self):
         self.add_credentials(VaultConstant.POSTGRES_ROLE,'default',**pg_role_export('default'))
@@ -145,7 +137,10 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
                 schema=sql.Identifier(model.Meta.schema),
                 table=sql.Identifier(model.Meta.table),)
         objs = []
-        with self.sync_context() as cur:
+
+        segment = self.get_credentials_name(model)
+
+        with self.pg_dynamic_synccontext(segment) as cur:
             cur.execute(query)
             response = {} if listing == 'dict' else []
             objs = cur.fetchall()
@@ -165,18 +160,6 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
         
         if listing != 'generator':
             return response
-
-    def init_sync_connection(self):
-        self.sync_conn = psycopg2.connect(
-                            dbname=PostgresConstant.SECURITY_DATABASE_NAME,
-                            user=self.db_user(SECURITY_CREDS),
-                            password=self.db_password(SECURITY_CREDS),
-                            host=HostConstant.POSTGRES_HOST,
-                            port=5432
-                        )
-
-    def close_sync_connection(self):
-        self.sync_conn.close()
 
     def build_configuration(self):
         security_url = self.compute_url(HostConstant.POSTGRES_HOST,creds=SECURITY_CREDS,database=PostgresConstant.SECURITY_DATABASE_NAME)
@@ -216,32 +199,36 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
         for context in self.contextStore.iter():
             await context.close_connections()
         await Tortoise.close_connections()
-        await RunInThreadPool(self.close_sync_connection)()  
         self.contextStore.clear()
 
     @contextmanager
-    def sync_context(self,conn=None,transaction=False):
-        if conn is None:
-            conn = self.sync_conn
+    def sync_context(self,conn,transaction=False):
         with conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 yield cur
 
     @contextmanager
-    def pg_dynamic_synccontext(self,name:CredentialName,transaction:bool=False):
+    def pg_dynamic_synccontext(self,name:CredentialName,transaction:bool=False,mode:CredentialsMode='dynamic'):
         config:CredentialConfig = self.configuration(name)
-        creds = self.vaultService.database_engine.generate_credentials(VaultConstant.POSTGRES_ROLE,config['prefix'],config['suffix'],'dynamic')
+        if mode == 'dynamic':
+            creds = self.vaultService.database_engine.generate_credentials(VaultConstant.POSTGRES_ROLE,config['prefix'],config['suffix'],'dynamic')
+        else:
+            creds = self.get_credentials(name)
         url = self.compute_url(config['host'],database=config['database'],username=creds['data']['username'],password=creds['data']['password'])
         conn = psycopg2.connect(url)
         with self.sync_context(conn, transaction=transaction) as cur:
             yield cur
-        self.vaultService.revoke_lease(creds['lease_id'])
         conn.close()
+        if mode == 'dynamic':
+            self.vaultService.revoke_lease(creds['lease_id'])
 
     @asynccontextmanager
-    async def pg_dynamic_asynccontext(self,name:CredentialName,transaction:bool=False):
+    async def pg_dynamic_asynccontext(self,name:CredentialName,transaction:bool=False,mode:CredentialsMode='dynamic'):
         config:CredentialConfig = self.configuration(name)
-        creds = self.vaultService.database_engine.generate_credentials(VaultConstant.POSTGRES_ROLE,config['prefix'],config['suffix'],'dynamic')
+        if mode == 'dynamic':
+            creds = self.vaultService.database_engine.generate_credentials(VaultConstant.POSTGRES_ROLE,config['prefix'],config['suffix'],'dynamic')
+        else:
+            creds = self.get_credentials(name)
         url = self.compute_url(config['host'],database=config['database'],username=creds['data']['username'],password=creds['data']['password'])
         app = DB_MAP[name]
         models = APP_TO_MODEL_MAP[app]
@@ -252,7 +239,14 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
                 yield ctx.connections.get('default')
             else:
                 yield ctx
-        self.vaultService.revoke_lease(creds['lease_id'])
+        if mode == 'dynamic':
+            self.vaultService.revoke_lease(creds['lease_id'])
+
+    def get_credentials_name(self,model:Type[R])->CredentialName:
+        if model.Meta.app == PostgresConstant.NOTIFYR_APP:
+            return 'default'
+        if model.Meta.app == PostgresConstant.SECURITY_APP:
+            return SECURITY_CREDS
 
     def configuration(self, name:CredentialName)->CredentialConfig:
         if name not in CREDENTIALS_SET:
@@ -266,7 +260,6 @@ class TortoiseConnectionService(TempCredentialsDatabaseService):
         await self.close_connections()
         await RunInThreadPool(self.generate_credentials)()
         await self.init_connection(False)
-        await RunInThreadPool(self.init_sync_connection)()
     
     @asynccontextmanager
     async def transaction(self,name:CredentialName='default',retries=1,timeout=5,wait=1,silent=False,lock:ServiceLockType='none',conn:None|BaseDBAsyncClient=None):

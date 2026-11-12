@@ -32,7 +32,7 @@ class NotifyrMongoDBJobStore(MongoDBJobStore):
 
 
 # configuration
-LEADER_LOCK_KEY = REDIS_PREFIX_BUILDER['config'](f"apscheduler@leader_lock")
+LEADER_LOCK_KEY = REDIS_PREFIX_BUILDER['event'](f"apscheduler@leader_lock")
 LEADER_LOCK_TTL = 600
 LEADER_LOCK_TTL_LOWER_BOUND = int(LEADER_LOCK_TTL * 0.50)
 LEADER_LOCK_TTL_UPPER_BOUND = int(LEADER_LOCK_TTL * 5.50)
@@ -84,7 +84,7 @@ class TaskService(BaseService,SchedulerInterface):
         if self._builded:
             self.shutdown(False)
 
-        self.redis_client = self.redisService.db[RedisConstant.CONFIG_DB]
+        self.redis_client = self.redisService[RedisConstant.EVENT_DB]
         jobstore = self.configService.JOBSTORE_DB
 
         jobstores = {'memory':MemoryJobStore(),}

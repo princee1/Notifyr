@@ -4,6 +4,7 @@ from typing import List, Literal, Type, TypeVar, Union
 from pymongo.errors import ConnectionFailure,ConfigurationError, PyMongoError, ServerSelectionTimeoutError
 from pymongo import MongoClient
 from app.classes.mongo import BaseDocument, MongoCondition, simple_number_validation, validate_filter
+from app.classes.vault_engine import CredentialsMode
 from app.definition._service import DEFAULT_BUILD_STATE, LinkDep, Service, ServiceLockType
 from app.errors.service_error import BuildFailureError
 from app.errors.db_error import *
@@ -17,7 +18,7 @@ from app.utils.constant import HostConstant, MongooseDBConstant, SetupRootConsta
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import ConnectionFailure, OperationFailure
 
-from app.utils.globals import APP_MODE, ApplicationMode
+from app.utils.globals import APP_MODE, CAPABILITIES, ApplicationMode
 from app.utils.helper import subset_model
 from app.utils.toolbox import RunInThreadPool
 
@@ -74,19 +75,35 @@ class MongoClientStore:
         if mode == None or mode == 'async':
             self.clients[name]['async'] = AsyncIOMotorClient(uri)
     
-    def get_database(self,name:CredentialName,mode:ClientMode='async'):
+    def get_database(self,name:CredentialName,mode:ClientMode='async',client=None):
         database=DB_MAP[name]
-        return self.get_client(name,mode)[database]
+        if client == None:
+            client = self.get_client(name,mode)
+        return client[database]
     
-    def get_collection(self,name:CredentialName,collection:str,mode:ClientMode='async'):
-        return self.get_database(name,mode)[collection]
+    def get_collection(self,name:CredentialName,collection:str,mode:ClientMode='async',client=None):
+        return self.get_database(name,mode,client)[collection]
     
-    def iterator(self,mode:ClientMode|None = None):
+    def iterator(self,mode:ClientMode|None = None,include:set[CredentialName]=None):
         for n,m in self.clients.items():
+            if include != None and n not in include:
+                continue
             for t,client in m.items():
                 if mode==None or t ==mode:
-                    yield n,client
-    
+                    yield n,m,client
+
+    def close(self,mode:ClientMode,name:CredentialName,delete=True):
+        client = self.get_client(name,mode)
+        flag = True
+        try:
+            client.close()
+        except:
+            flag = False
+        if delete:
+            del self.clients[name][mode]
+
+        return flag
+
     def factory(self,uri:str,mode:ClientMode):
         match mode:
             case "sync":
@@ -160,9 +177,10 @@ class MongooseService(TempCredentialsDatabaseService):
             raise MongoCollectionDoesNotExists(collection,model.__class__.__name__)
 
         segment = self.get_credentials_name(model)
-
-        mongo_collection = self.client_store.get_collection(segment,collection,'sync')
-        docs = mongo_collection.find(filter,projection).to_list()
+        
+        with self.mongo_dynamic_synccontext(segment) as client:
+            mongo_collection = self.client_store.get_collection(segment,collection,client=client)
+            docs = mongo_collection.find(filter,projection).to_list()
 
         if issubclass(model,BaseDocument) and return_model and as_subset_model:
             model = subset_model(model,model.__name__,optional=False,__cache__=True) 
@@ -259,13 +277,13 @@ class MongooseService(TempCredentialsDatabaseService):
     def build(self, build_state=DEFAULT_BUILD_STATE):
         if build_state == SetupRootConstant.ROOT_BUILD_STATE:
             return
-
         try:
             self.generate_credentials()
             self.db_connection()
-            for n,client in self.client_store.iterator('sync'):
-                client.admin.command("ping")
-
+            for name in CREDENTIALS_SET:
+                with self.mongo_dynamic_synccontext(name,mode='static') as client:
+                    client.admin.command("ping")
+                
             if build_state == DEFAULT_BUILD_STATE:
                 super().build(build_state)
                 
@@ -293,14 +311,21 @@ class MongooseService(TempCredentialsDatabaseService):
     def db_connection(self):
         # fetch fresh creds from Vault
         self.client_store.clear()
-        self.client_store.add_client('default',self.compute_url(self.MONGO_CRED_NAME_TO_HOST['default'],DB_MAP['default'],authSource='admin'))
-        self.client_store.add_client(JOBS_CREDS,self.compute_url(self.MONGO_CRED_NAME_TO_HOST[JOBS_CREDS],DB_MAP[JOBS_CREDS],name=JOBS_CREDS,authSource='notifyr'))
-        self.client_store.add_client(AGENTIC_CREDS,self.compute_url(self.MONGO_CRED_NAME_TO_HOST[AGENTIC_CREDS],DB_MAP[AGENTIC_CREDS],AGENTIC_CREDS,authSource='admin'))
+        self.client_store.add_client('default',self.compute_url(self.MONGO_CRED_NAME_TO_HOST['default'],DB_MAP['default'],authSource='admin'),'async')
+        self.client_store.add_client(CREDIT_CREDS,self.compute_url(self.MONGO_CRED_NAME_TO_HOST['default'],DB_MAP['default'],authSource='admin'),'async')
+        
+        if self.configService.JOBSTORE_DB == 'mongodb':
+            self.client_store.add_client(JOBS_CREDS,self.compute_url(self.MONGO_CRED_NAME_TO_HOST[JOBS_CREDS],DB_MAP[JOBS_CREDS],name=JOBS_CREDS,authSource='notifyr'))
+        
+        if CAPABILITIES['agentic']:
+            agentic_mode = None if APP_MODE == ApplicationMode.agentic else 'async'
+            self.client_store.add_client(AGENTIC_CREDS,self.compute_url(self.MONGO_CRED_NAME_TO_HOST[AGENTIC_CREDS],DB_MAP[AGENTIC_CREDS],AGENTIC_CREDS,authSource='admin'),agentic_mode)
 
     def generate_credentials(self):
         self.add_credentials(VaultConstant.MONGO_ROLE,'default',**export('default'))
         self.add_credentials(VaultConstant.MONGO_ROLE,JOBS_CREDS,**export(JOBS_CREDS))
         self.add_credentials(VaultConstant.MONGO_ROLE,AGENTIC_CREDS,**export(AGENTIC_CREDS))
+        self.add_credentials(VaultConstant.MONGO_ROLE,CREDIT_CREDS,**export(CREDIT_CREDS))
 
     async def _creds_rotator(self):
         self.close_connection()
@@ -349,24 +374,31 @@ class MongooseService(TempCredentialsDatabaseService):
     ##################################################
 
     @contextmanager
-    def mongo_dynamic_synccontext(self,name:CredentialName,transaction=False):
+    def mongo_dynamic_synccontext(self,name:CredentialName,transaction=False,mode:CredentialsMode='dynamic'):
         config:CredentialConfig = self.configuration(name)
-        creds = self.vaultService.database_engine.generate_credentials(VaultConstant.MONGO_ROLE,config['prefix'],config['suffix'],mode='dynamic')
+        if mode == 'dynamic':
+            creds = self.vaultService.database_engine.generate_credentials(VaultConstant.MONGO_ROLE,config['prefix'],config['suffix'],mode='dynamic')
+        else:
+            creds = self.get_credentials(name)
         uri = self.compute_url(config['host'],config['database'],username=creds['data']['username'],password=creds['data']['password'])
         client:MongoClient = self.client_store.factory(uri,mode='sync')
         yield client
-        client.close()
-        self.vaultService.revoke_lease(creds['lease_id'])
+        if mode == 'dynamic':
+            self.vaultService.revoke_lease(creds['lease_id'])
 
     @asynccontextmanager
-    async def mongo_dynamic_asynccontext(self,name:CredentialName):
+    async def mongo_dynamic_asynccontext(self,name:CredentialName,mode:CredentialsMode='dynamic'):
         config:CredentialConfig = self.configuration(name)
-        creds = self.vaultService.database_engine.generate_credentials(VaultConstant.MONGO_ROLE,config['prefix'],config['suffix'],mode='dynamic')
+        if mode == 'dynamic':
+            creds = self.vaultService.database_engine.generate_credentials(VaultConstant.MONGO_ROLE,config['prefix'],config['suffix'],mode='dynamic')
+        else:
+            creds = self.get_credentials(name)
         uri = self.compute_url(config['host'],config['database'],username=creds['data']['username'],password=creds['data']['password'])
         client:AsyncIOMotorClient = self.client_store.factory(uri,mode='async')
         yield client
         await client.close()
-        self.vaultService.revoke_lease(creds['lease_id'])
+        if mode == 'dynamic':
+            self.vaultService.revoke_lease(creds['lease_id'])
 
     @asynccontextmanager
     async def transaction(self,name:CredentialName='default', retries=1,timeout=5,wait=1,lock:ServiceLockType='none',conn=None):

@@ -49,11 +49,9 @@ class ContentType(Enum):
 
 ##################################################################              ##############################################################3333333333
 
-CONTACTS_SCHEMA = "contacts"
-
 def table_builder (name:str):
     return name
-    return f"{CONTACTS_SCHEMA}.{name}"
+    return f"{PostgresConstant.CONTACTS_SCHEMA}.{name}"
 
 class ContactORM(Model):
     contact_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
@@ -96,7 +94,7 @@ class ContactORM(Model):
         return f"{self.first_name} {self.last_name}"
 
     class Meta:
-        schema = CONTACTS_SCHEMA
+        schema = PostgresConstant.CONTACTS_SCHEMA
         table = "contact"
         app = PostgresConstant.NOTIFYR_APP
 
@@ -116,7 +114,7 @@ class SecurityContactORM(Model):
         return f"{self.security_id} {self.contact}"
 
     class Meta:
-        schema = CONTACTS_SCHEMA
+        schema = PostgresConstant.CONTACTS_SCHEMA
         app = PostgresConstant.NOTIFYR_APP
         table = "securitycontact"
 
@@ -134,7 +132,7 @@ class SubscriptionContactStatusORM(Model):
     class Meta:
         table = "subscriptioncontact"
         app = PostgresConstant.NOTIFYR_APP
-        schema = CONTACTS_SCHEMA
+        schema = PostgresConstant.CONTACTS_SCHEMA
 
 class ReasonORM(Model):
     reason_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
@@ -145,7 +143,7 @@ class ReasonORM(Model):
     class Meta:
         table = "reason"
         app = PostgresConstant.NOTIFYR_APP
-        schema = CONTACTS_SCHEMA
+        schema = PostgresConstant.CONTACTS_SCHEMA
 
 class ContentSubscriptionORM(Model):
     content_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
@@ -160,7 +158,7 @@ class ContentSubscriptionORM(Model):
     class Meta:
         app = PostgresConstant.NOTIFYR_APP
         table = "subscontent"
-        schema = CONTACTS_SCHEMA
+        schema = PostgresConstant.CONTACTS_SCHEMA
 
 class SubscriptionORM(Model):
     subs_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
@@ -174,7 +172,7 @@ class SubscriptionORM(Model):
     class Meta:
         app = PostgresConstant.NOTIFYR_APP
         table = "subscription"
-        schema = CONTACTS_SCHEMA
+        schema = PostgresConstant.CONTACTS_SCHEMA
         unique_together = (("contact", "content"),)
 
 class ContentTypeSubscriptionORM(Model):
@@ -190,7 +188,7 @@ class ContentTypeSubscriptionORM(Model):
     class Meta:
         table = "contenttypesubscription"
         app = PostgresConstant.NOTIFYR_APP
-        schema = CONTACTS_SCHEMA
+        schema = PostgresConstant.CONTACTS_SCHEMA
 
 class ContactAnalyticsORM(Model):
     analytics_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
@@ -204,7 +202,7 @@ class ContactAnalyticsORM(Model):
 
     class Meta:
         app = PostgresConstant.NOTIFYR_APP
-        schema = CONTACTS_SCHEMA
+        schema = PostgresConstant.CONTACTS_SCHEMA
         table = "contactanalytics"
         unique_together = ("week_start_date", "country", "region", "city")
 
@@ -231,7 +229,7 @@ class ContactCreationAnalyticsORM(Model):
 
     class Meta:
         app = PostgresConstant.NOTIFYR_APP
-        schema = CONTACTS_SCHEMA
+        schema = PostgresConstant.CONTACTS_SCHEMA
         table = "contactcreationanalytics"
         unique_together = ("week_start_date", "country", "region", "city")
 

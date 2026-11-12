@@ -8,6 +8,7 @@ from typing_extensions import Literal
 from redis import Redis, ResponseError
 from app.classes.broker import MessageBroker, json_to_exception
 from app.classes.callbacks import CALLBACKS_CONFIG
+from app.classes.vault_engine import CredentialsMode
 from app.definition._service import DEFAULT_BUILD_STATE, Service
 from app.errors.async_error import ReactiveSubjectNotFoundError
 from app.errors.db_error import RedisDatabaseDoesNotExistsError, RedisStreamDoesNotExistsError, VaultCredentialNameDoesNotExistError
@@ -61,15 +62,18 @@ def _deserialize_redis_value(value:Any)->Any:
 
 RedisDB = Literal['celery','limiter','events','cache','config','agentic','cost','security',0,1,2,3,4,5,6,7]
 
-REDIS_PREFIX_BUILDER:dict[int|str,Callable[[str],str]] ={
+REDIS_PREFIX_BUILDER:dict[RedisDB,Callable[[str],str]] ={
     RedisConstant.COST_DB: lambda c:f'notifyr/credit:{c}',
     RedisConstant.SECURITY_DB: lambda s:f'notifyr/security/{s}',
     RedisConstant.AGENTIC_DB: lambda a:f'notifyr/agentic/{a}',
     RedisConstant.CONFIG_DB:lambda c:f'notifyr/config/{c}',
+    RedisConstant.EVENT_DB: lambda e:e,
     'agentic':lambda a:f'notifyr/agentic/{a}',
     'cost':lambda c:f'notifyr/credit:{c}',
     'security':lambda s: f'notifyr/security/{s}',
     'config':lambda c:f'notifyr/config/{c}',
+    'events': lambda e:e
+
 }
 
 REDIS_CRED_NAME_TO_ROLE_MAP:dict[CredentialName,tuple[str,str]] = {
@@ -276,24 +280,32 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         return decorator
 
     @contextmanager
-    def redis_dynamic_synccontext(self,db:RedisDB,name:CredentialName):
+    def redis_dynamic_synccontext(self,db:RedisDB,name:CredentialName,mode:CredentialsMode='dynamic'):
         config = self.configuration(name,db)
-        cred = self.vaultService.database_engine.generate_credentials(VaultConstant.REDIS_ROLE, config['prefix'], config['suffix'], mode='dynamic')
+        if mode == 'dynamic':
+            cred = self.vaultService.database_engine.generate_credentials(VaultConstant.REDIS_ROLE, config['prefix'], config['suffix'], mode='dynamic')
+        else:
+            cred = self.get_credentials(name)
         username = cred['data']['username']
         password = cred['data']['password']
         with SyncRedis(host=config['host'],db=db,username=username,password=password) as redis:
             yield redis
-        self.vaultService.revoke_lease(cred['lease_id'])
+        if mode == 'dynamic':
+            self.vaultService.revoke_lease(cred['lease_id'])
 
     @asynccontextmanager
-    async def redis_dynamic_asynccontext(self,db:RedisDB,name:CredentialName):
+    async def redis_dynamic_asynccontext(self,db:RedisDB,name:CredentialName,mode:CredentialsMode='dynamic'):
         config = self.configuration(name,db)
-        cred = self.vaultService.database_engine.generate_credentials(VaultConstant.REDIS_ROLE, config['prefix'], config['suffix'], mode='dynamic')
+        if mode == 'dynamic':
+            cred = self.vaultService.database_engine.generate_credentials(VaultConstant.REDIS_ROLE, config['prefix'], config['suffix'], mode='dynamic')
+        else:
+            cred = self.get_credentials(name)
         username = cred['data']['username']
         password = cred['data']['password']
         async with Redis(host=config['host'],db=db,username=username,password=password) as redis:
             yield redis
-        self.vaultService.revoke_lease(cred['lease_id'])
+        if mode == 'dynamic':
+            self.vaultService.revoke_lease(cred['lease_id'])
 
     def configuration(self,name:CredentialName,db:RedisDB)->CredentialConfig:
         if name not in REDIS_CRED_NAME_TO_ROLE_MAP:
@@ -312,13 +324,11 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         if build_state == DEFAULT_BUILD_STATE:
             super().build(build_state)
         try:
-            temp_redis = [SyncRedis(host=NOTIFYR_HOST,password=self.db_password(),username=self.db_user()),
-                          SyncRedis(host=self.configService.REDIS_HOST,db=RedisConstant.CELERY_DB,username=self.db_user(CELERY_BACKEND_CREDS),password=self.db_password(CELERY_BACKEND_CREDS))]
-            for tr in temp_redis:
-                pong = tr.ping()
-                if not pong:
-                    raise ConnectionError(f"Redis at {tr.get_connection_kwargs().get('host',None)} ping failed")
-                tr.close()
+            for name,d in zip({'default',CELERY_BACKEND_CREDS},{RedisConstant.EVENT_DB,RedisConstant.CELERY_DB}):
+                with self.redis_dynamic_synccontext(d,name,'static') as tr:
+                    pong = tr.ping()
+                    if not pong:
+                        raise ConnectionError(f"Redis at {tr.get_connection_kwargs().get('host',None)} ping failed")
         except Exception as e:
             raise BuildFailureError(e.args)
     
@@ -343,7 +353,6 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
 
         self.redis_cost = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.COST_DB,decode_responses=True,username=self.db_user(CREDIT_CREDS),password=self.db_password(CREDIT_CREDS))
         
-        self.redis_limiter = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.LIMITER_DB,username=self.db_user(),password=self.db_password())
         self.redis_cache = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.CACHE_DB,decode_responses=True,username=self.db_user(),password=self.db_password())
         self.redis_config = Redis(host=HostConstant.REDIS_HOST,db=RedisConstant.CONFIG_DB,decode_responses=True,username=self.db_user(CONFIG_CREDS),password=self.db_password(CONFIG_CREDS))
 
@@ -354,15 +363,11 @@ class RedisService(TempCredentialsDatabaseService,ResultBackendService,BrokerSer
         
         self.db.clear()
         self.db.update({
-            RedisConstant.LIMITER_DB:self.redis_limiter,
             RedisConstant.EVENT_DB:self.redis_events,
             RedisConstant.CACHE_DB:self.redis_cache,
-            RedisConstant.CONFIG_DB:self.redis_config,
             RedisConstant.COST_DB:self.redis_cost,
-            'limiter':self.redis_limiter,
             'events': self.redis_events,
             'cache':self.redis_cache,
-            'config':self.redis_config,
             'cost':self.redis_cost
         })
 

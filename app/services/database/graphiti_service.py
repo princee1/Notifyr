@@ -10,7 +10,7 @@ from app.services.config_service import ConfigService, WorkerService
 from app.services.custom_service import CustomService
 from app.services.database.base_db_service import TempCredentialsDatabaseService
 from app.services.database.mongoose_service import MongooseService
-from app.services.database.redis_service import RedisService
+from app.services.database.redis_service import CONFIG_CREDS, RedisService
 from app.services.file.file_service import FileService
 from app.services.timer_service import TimerService
 from app.services.vault_service import VaultService
@@ -162,10 +162,11 @@ class GraphitiService(TempCredentialsDatabaseService):
         await self.graphiti.build_communities()
     
     async def init_database(self,):
-        built = self.redisService.retrieve(RedisConstant.CONFIG_DB,GRAPHITI_INIT_KEY)
-        if not bool(built):
-            await self.graphiti.build_indices_and_constraints()
-            await self.redisService.store(RedisConstant.CONFIG_DB,GRAPHITI_INIT_KEY,True)
+        async with self.redisService.redis_dynamic_asynccontext(RedisConstant.CONFIG_DB,CONFIG_CREDS) as redis:
+            built = self.redisService.retrieve(RedisConstant.CONFIG_DB,GRAPHITI_INIT_KEY,redis=redis)
+            if not bool(built):
+                await self.graphiti.build_indices_and_constraints()
+                await self.redisService.store(RedisConstant.CONFIG_DB,GRAPHITI_INIT_KEY,True,redis=redis)
       
     ##########################################################################
     #######################                             ######################

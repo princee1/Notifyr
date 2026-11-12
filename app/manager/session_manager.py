@@ -18,6 +18,8 @@ class AuthSessionManager:
 
         self.refresh_token = refresh_token or None
 
+        self.session_id=None
+
         self.settingService = Get(SettingService)
         self.configService = Get(ConfigService)
         self.jwtService = Get(JWTAuthService)
@@ -46,6 +48,9 @@ class AuthSessionManager:
                 raise ClientAuthenticationConfusionError(client_id,refresh['session_id'],'refresh')
 
         return None
+    
+    def set_session_id(self,session_id:str):
+        self.session_id = session_id
 
     def verify_refresh_token(self,raise_on_expired:bool=True):
         if self.refresh_token == None:

@@ -85,7 +85,7 @@ class CostRessource(BaseHTTPRessource):
         """Placeholder for billing/history endpoint. Implement retrieval from DB/audit store when available."""
         
         bill_key = self.costService.bill_key(credit)
-        return await self.redisService.range(RedisConstant.LIMITER_DB,bill_key,start,stop) or []
+        return await self.redisService.range(RedisConstant.COST_DB,bill_key,start,stop) or []
 
     
     @Throttle(normal=(80,30))
@@ -101,5 +101,5 @@ class CostRessource(BaseHTTPRessource):
     async def get_receipts(self,credit:CostConstant.Credit, request: Request,start:int = Query(0),stop:int=Query(-1),authPermission:AuthPermission=Depends(get_auth_permission), clientInfo:ClientAccessInfo = Depends(get_client_info), accessInfo:AccessAPIInfo = Depends(get_access_info) ):
         
         receipt_key =  self.costService.receipts_key(credit)
-        return await self.redisService.range(RedisConstant.LIMITER_DB,receipt_key,start,stop) or []
+        return await self.redisService.range(RedisConstant.COST_DB,receipt_key,start,stop) or []
         
