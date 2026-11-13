@@ -27,6 +27,7 @@ class CredentialConfig(TypedDict):
     suffix:str
     host:str
     database:str
+    authSource:str
 
 def ExportRoleFunc(map:str):
     def export(name:str):

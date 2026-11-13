@@ -33,8 +33,8 @@ adminDb.createUser({
         { "role": "readWrite", "db": "agentic", "collection": "chat_write" }]
 });
 
-// adminDb.createUser({
-//     user: credit_vault_user,
-//     pwd: vaultpass,
-//     roles: []
-// });
+adminDb.createUser({
+    user: credit_vault_user,
+    pwd: vaultpass,
+    roles: []
+});

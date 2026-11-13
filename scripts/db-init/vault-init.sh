@@ -448,6 +448,21 @@ setup_database_config(){
           { "role": "dbOwner", "db": "notifyr" },
       ]}'
 
+    
+    vault write notifyr-database/roles/admin-mongo-credit-ntfr-role-dynamic\
+      db_name="mongodb-notifyr" \
+      default_ttl="30m" \
+      max_ttl="1h" \
+      creation_statements='{ "db": "credit", "roles": [
+          { "role": "dbOwner", "db": "credit" },
+      ]}'
+    
+    vault write notifyr-database/roles/app-mongo-credit-ntfr-role-dynamic \
+      db_name="mongodb-notifyr" \
+      creation_statements='{ "db": "credit", "roles": []}' \
+      default_ttl="12h" \
+      max_ttl="16h"
+          
     setup_config_kv2 "mongo_roles_suffix" "set"
   fi
   #           { "role":"createIndexes","db":"notifyr","collection":"aps"}
@@ -634,7 +649,7 @@ database_connection_config(){
 
     vault write notifyr-database/config/mongodb-notifyr \
       plugin_name="mongodb-database-plugin" \
-      allowed_roles="admin-mongo-ntfr-role-dynamic, app-mongo-ntfr-role-dynamic, app-mongo-ntfr-role-static, agentic-mongo-ntfr-role-dynamic, agentic-mongo-ntfr-role-static, admin-mongo-agentic-ntfr-role-dynamic" \
+      allowed_roles="admin-mongo-ntfr-role-dynamic, app-mongo-ntfr-role-dynamic, app-mongo-ntfr-role-static, agentic-mongo-ntfr-role-dynamic, agentic-mongo-ntfr-role-static, admin-mongo-agentic-ntfr-role-dynamic, admin-mongo-credit-ntfr-role-dynamic, app-mongo-credit-ntfr-role-dynamic, app-mongo-credit-ntfr-role-static" \
       connection_url="mongodb://{{username}}:{{password}}@mongodb:27017/admin?replicaSet=$MONGO_REPLICA_NAME" \
       username="mongo-vaultadmin" \
       password="$VAULTPASS"
@@ -741,6 +756,12 @@ setup_database_static_roles(){
     rotation_period="7d" \
     username="vault_ntfr_agentic_static_user"
   vault write -f notifyr-database/rotate-role/agentic-mongo-ntfr-role-static
+
+  vault write notifyr-database/static-roles/app-mongo-credit-ntfr-role-static \
+    db_name="mongodb-notifyr" \
+    rotation_period="7d" \
+    username="vault_ntfr_credit_static_user"
+  vault write -f notifyr-database/rotate-role/app-mongo-credit-ntfr-role-static
 
   vault write notifyr-database/static-roles/app-mongo-ntfr-role-static \
     db_name="mongodb-notifyr" \

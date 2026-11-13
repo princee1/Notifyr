@@ -39,6 +39,10 @@ DB_MAP:dict[CredentialName,str]= {
     CREDIT_CREDS:MongooseDBConstant.CREDIT_DATABASE_NAME
 }
 
+AUTH_SOURCE:dict[CredentialName,str]= {
+    JOBS_CREDS:MongooseDBConstant.JOB_DATABASE_NAME
+}
+
 MONGO_CRED_NAME_TO_ROLE_MAP:dict[CredentialName,tuple[str,str]] = {
     'default': ('app', None),
     AGENTIC_CREDS: ('agentic', None),
@@ -375,12 +379,12 @@ class MongooseService(TempCredentialsDatabaseService):
 
     @contextmanager
     def mongo_dynamic_synccontext(self,name:CredentialName,transaction=False,mode:CredentialsMode='dynamic'):
-        config:CredentialConfig = self.configuration(name)
+        config:CredentialConfig = self.configuration(name,mode)
         if mode == 'dynamic':
             creds = self.vaultService.database_engine.generate_credentials(VaultConstant.MONGO_ROLE,config['prefix'],config['suffix'],mode='dynamic')
         else:
             creds = self.get_credentials(name)
-        uri = self.compute_url(config['host'],config['database'],username=creds['data']['username'],password=creds['data']['password'])
+        uri = self.compute_url(config['host'],config['database'],username=creds['data']['username'],password=creds['data']['password'],authSource=config['authSource'])
         client:MongoClient = self.client_store.factory(uri,mode='sync')
         yield client
         if mode == 'dynamic':
@@ -388,12 +392,12 @@ class MongooseService(TempCredentialsDatabaseService):
 
     @asynccontextmanager
     async def mongo_dynamic_asynccontext(self,name:CredentialName,mode:CredentialsMode='dynamic'):
-        config:CredentialConfig = self.configuration(name)
+        config:CredentialConfig = self.configuration(name,mode)
         if mode == 'dynamic':
             creds = self.vaultService.database_engine.generate_credentials(VaultConstant.MONGO_ROLE,config['prefix'],config['suffix'],mode='dynamic')
         else:
             creds = self.get_credentials(name)
-        uri = self.compute_url(config['host'],config['database'],username=creds['data']['username'],password=creds['data']['password'])
+        uri = self.compute_url(config['host'],config['database'],username=creds['data']['username'],password=creds['data']['password'],authSource=config['authSource'])
         client:AsyncIOMotorClient = self.client_store.factory(uri,mode='async')
         yield client
         await client.close()
@@ -447,17 +451,20 @@ class MongooseService(TempCredentialsDatabaseService):
 
         raise MongoCollectionDoesNotExists(model._collection)
 
-    def configuration(self,name:CredentialName)->CredentialConfig:
+    def configuration(self,name:CredentialName,mode:CredentialsMode)->CredentialConfig:
         if name not in CREDENTIALS_SET:
             raise VaultCredentialNameDoesNotExistError(name)
         host = self.MONGO_CRED_NAME_TO_HOST.get(name,HostConstant.MONGOOSE_HOST)
         database = DB_MAP.get(name,MongooseDBConstant.DEFAULT_DATABASE_NAME)
         prefix,suffix = MONGO_CRED_NAME_TO_ROLE_MAP.get(name,(None,None))
+        auth_source = AUTH_SOURCE.get(name,'admin') if mode == 'static' else database
+
         return {
             'host':host,
             'database':database,
             'prefix':prefix,
             'suffix':suffix,
+            'authSource':auth_source
         }
 
     ##################################################

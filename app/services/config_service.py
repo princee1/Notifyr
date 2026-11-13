@@ -229,7 +229,7 @@ class ConfigService(_service.BaseService):
         self.APS_ACTIVATED:bool = ConfigService.parseToBool(self.getenv('APS_ACTIVATED','true'),True)
 
         # JOBSTORE CONFIG #
-        self.JOBSTORE_DB:Literal['redis','mongodb'] = self.getenv('JOBSTORE','redis')
+        self.JOBSTORE_DB:Literal['redis','mongodb','none'] = self.getenv('JOBSTORE','redis')
 
         # LANGCHAIN CONFIG #
         self.ALLOWED_TWO_LEVEL_SUBAGENT:bool = ConfigService.parseToBool(self.getenv('ALLOWED_TWO_LEVEL_AGENT','false'),False)
