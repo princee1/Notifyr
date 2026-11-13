@@ -319,7 +319,7 @@ class MongooseService(TempCredentialsDatabaseService):
         self.client_store.add_client(CREDIT_CREDS,self.compute_url(self.MONGO_CRED_NAME_TO_HOST['default'],DB_MAP['default'],authSource='admin'),'async')
         
         if self.configService.JOBSTORE_DB == 'mongodb':
-            self.client_store.add_client(JOBS_CREDS,self.compute_url(self.MONGO_CRED_NAME_TO_HOST[JOBS_CREDS],DB_MAP[JOBS_CREDS],name=JOBS_CREDS,authSource='notifyr'))
+            self.client_store.add_client(JOBS_CREDS,self.compute_url(self.MONGO_CRED_NAME_TO_HOST[JOBS_CREDS],DB_MAP[JOBS_CREDS],name=JOBS_CREDS,authSource='notifyr'),'sync')
         
         if CAPABILITIES['agentic']:
             agentic_mode = None if APP_MODE == ApplicationMode.agentic else 'async'
