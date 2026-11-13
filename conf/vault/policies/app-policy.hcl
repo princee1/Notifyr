@@ -166,6 +166,14 @@ path "notifyr-rabbitmq/creds/celery-ntfr-role" {
 
 # ---- DATABASE ENGINE ----
 
+path "notifyr-database/static-creds/app*" {
+  capabilities = ["read"]
+}
+
+path "notifyr-database/static-creds/agentic*" {
+  capabilities = ["read"]
+}
+
 path "notifyr-database/creds/app*" {
   capabilities = ["read"]
 }
@@ -175,6 +183,10 @@ path "notifyr-database/creds/agentic*" {
 }
 
 path "notifyr-database/roles" {
+  capabilities = ["list"]
+}
+
+path "notifyr-database/static-roles" {
   capabilities = ["list"]
 }
 

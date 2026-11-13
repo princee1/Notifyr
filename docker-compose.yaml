@@ -484,6 +484,7 @@ services:
     volumes:
       - redis-data:/data
       - ./scripts/entrypoint/redis-entrypoint.sh:/entrypoint.sh
+      - ./database/redis/users.acl:/etc/redis/users.acl:ro
       - ./scripts/credit/ncs-lib.lua:/functions/ncs-lib.lua
     networks:
       - data_net
@@ -504,12 +505,15 @@ services:
       - ./scripts/entrypoint/mongo-entrypoint.sh:/usr/local/bin/mongo-entrypoint.sh
       - ./scripts/db-init/mongo-init.sh:/docker-entrypoint-initdb.d/mongo-init.sh
       - ./database/mongodb/notifyr/admin.js:/notifyr/admin.js
+      - ./database/mongodb/users/static_user.js:/notifyr/static_user.js
     environment:
       INIT_NOTIFYR_DB: on
       MONGO_INITDB_DATABASE: app
       MONGO_INITDB_ROOT_USERNAME: mongo-vaultadmin
       MONGO_INITDB_ROOT_PASSWORD: ${VAULTPASS:-vaultpass}
       MONGO_REPLICA_NAME: ${MONGO_REPLICA_NAME:-nrp}
+      VAULTPASS: ${VAULTPASS:-vaultpass}
+      MONGO_HOST: ${MONGO_HOST:-mongodb}
       NOTIFYR_MONGO_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:?Mongo root user must be set}
       NOTIFYR_MONGO_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?Mongo root password must be set}
     networks:
@@ -528,6 +532,7 @@ services:
       INIT_NOTIFYR_DB: on
       POSTGRES_DB: security
       POSTGRES_USER: pg-vaultadmin
+      VAULTPASS: ${VAULTPASS:-vaultpass}
       POSTGRES_PASSWORD: ${VAULTPASS:-vaultpass}
       NOTIFYR_POSTGRES_USER: ${POSTGRES_USER:?Postgres user must be set}
       NOTIFYR_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Postgres password must be set}

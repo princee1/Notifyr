@@ -933,6 +933,7 @@ async def refresh_logout_handler(func,*args,**kwargs):
 
 async def auth_state_pipe(result:Any,session:AuthSessionManager,response:Response):
     response.headers[HTTPHeaderConstant.X_AUTH_STATE] = session.authState.value
+    response.headers[HTTPHeaderConstant.X_SESSION_ID] = session.session_id
     return result
 
 class StateResponseInjectionPipe(Pipe):

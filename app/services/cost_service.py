@@ -9,7 +9,7 @@ from app.classes.cost_definition import CostCredits, CostDefinitionNotFoundError
 from app.definition._service import BaseService, BuildAbortError, BuildWarningError, Service, ServiceStatus
 from app.errors.service_error import BuildFailureError
 from app.services.config_service import MODE, ConfigService
-from app.services.database.redis_service import RedisService
+from app.services.database.redis_service import REDIS_PREFIX_BUILDER, RedisService
 from app.services.file.file_service import FileService
 from app.utils.constant import CostConstant, RedisConstant
 from app.utils.fileIO import JSONFile
@@ -54,28 +54,9 @@ class CostService(BaseService):
         self.redisService = redisService
         self.fileService = fileService
         self.costs_definition={}
-
-    @staticmethod
-    def RedisCreditKeyBuilder(func:Callable):
-
-        if asyncio.iscoroutinefunction(func):
-            @functools.wraps(func)
-            async def wrapper(self:Self,credit_key:CostConstant.Credit,*args,__builder__=True,**kwargs):
-                if __builder__:
-                    credit_key = REDIS_CREDIT_KEY_BUILDER(credit_key)
-                return await func(self,credit_key,*args,**kwargs)            
-        else:
-            @functools.wraps(func)
-            def wrapper(self:Self,credit_key:CostConstant.Credit,*args,__builder__=True,**kwargs):
-                if __builder__:
-                    credit_key = REDIS_CREDIT_KEY_BUILDER(credit_key)
-                return func(self,credit_key,*args,**kwargs)
-
-        return wrapper
     
     @staticmethod
     def CreditSilentFail(value:Any=None):
-
         def decorator(function:Callable):
 
             async def wrapper(self:Self,*args,**kwargs):
@@ -126,7 +107,6 @@ class CostService(BaseService):
 
     ###################################################                        #######################################
 
-    @RedisCreditKeyBuilder
     async def check_enough_credits(self,credit_key:str,purchase_cost:int):
         current_balance = await self.redisService.retrieve(RedisConstant.COST_DB,credit_key)
         if current_balance == None:
@@ -141,7 +121,6 @@ class CostService(BaseService):
             raise InsufficientCreditsError(current_balance,purchase_cost,credit_key)
 
     @CreditSilentFail()
-    @RedisCreditKeyBuilder
     async def refund_credits(self,credit_key:str,bill:Bill):
         balance = await self.get_credit_balance(credit_key,__builder__=False)
 
@@ -156,12 +135,12 @@ class CostService(BaseService):
             await pipe.execute()
 
     @CreditSilentFail(0)
-    @RedisCreditKeyBuilder
     async def deduct_credits(self,credit_key:CostConstant.Credit,bill:Bill,retry_limit=5):
         bill_total = bill["total"]
         overdraft_allowed = self.rules.get("credit_overdraft_allowed",False,)
         overdraft_allowed = "1" if overdraft_allowed else "0"
 
+        credit_key = REDIS_PREFIX_BUILDER[RedisConstant.COST_DB](credit_key)
         try:
             result = await self.redisService.redis_cost.fcall(DEDUCT_CREDITS_SCRIPT,1,credit_key,bill_total,overdraft_allowed)
         except Exception as e:
@@ -183,7 +162,6 @@ class CostService(BaseService):
 
         return
     
-    @RedisCreditKeyBuilder
     async def get_credit_balance(self,credit_key:str,redis=None):
         credit = await self.redisService.retrieve(RedisConstant.COST_DB,credit_key,redis=redis)
         if credit != None:

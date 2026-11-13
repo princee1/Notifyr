@@ -2,10 +2,10 @@
 import asyncio
 from random import randint, random
 import time
-from typing import Dict, Union
+from typing import Dict, TypedDict, Union
 import hvac
 from typing_extensions import Literal
-from app.classes.vault_engine import VaultDatabaseCredentials
+from app.classes.vault_engine import CredentialsMode, VaultDatabaseCredentials
 from app.definition._service import AbstractServiceClass, BaseService, ServiceStatus
 from app.errors.db_error import VaultCredentialAlreadyExistError, VaultCredentialNameDoesNotExistError
 from app.errors.service_error import BuildFailureError, ServiceTemporaryNotAvailableError
@@ -22,6 +22,22 @@ CREDS_NAME_KEY='__cred_name__'
 CredentialName = Union[Literal['default'],str]
 MultiCredentialsStore = Dict[Literal['default']|str,VaultDatabaseCredentials]
 
+class CredentialConfig(TypedDict):
+    prefix:str
+    suffix:str
+    host:str
+    database:str
+    authSource:str
+
+def ExportRoleFunc(map:str):
+    def export(name:str):
+        if name not in map:
+            raise VaultCredentialNameDoesNotExistError(name)
+        
+        prefix,suffix = map.get(name,(None,None))
+        return {'prefix':prefix,'suffix':suffix}
+    
+    return export
 
 
 @AbstractServiceClass()
@@ -34,11 +50,12 @@ class DatabaseService(BaseService):
 @AbstractServiceClass()
 class TempCredentialsDatabaseService(DatabaseService):
 
-    def __init__(self,configService:ConfigService,fileService:FileService,vaultService:VaultService,timerService:TimerService,ttl,max_retry=2,wait_time=2,t:Literal['constant','linear']='constant',b=0):
+    def __init__(self,configService:ConfigService,fileService:FileService,vaultService:VaultService,timerService:TimerService,creds_mode:CredentialsMode,ttl,max_retry=2,wait_time=2,t:Literal['constant','linear']='constant',b=0):
         DatabaseService.__init__(self,configService,fileService)
         self.vaultService = vaultService
         self.timerService = timerService
         self.creds:MultiCredentialsStore = {}
+        self.creds_mode = creds_mode
         self.max_retry = max_retry
         self.wait_time = wait_time
         self.t=t
@@ -60,8 +77,7 @@ class TempCredentialsDatabaseService(DatabaseService):
             if strict:
                 raise VaultCredentialAlreadyExistError(name)
 
-        cred = self.vaultService.database_engine.generate_credentials(role,prefix,suffix)
-        self.creds[name] = cred
+        self.fetch_credentials(name,role,prefix,suffix)
         
     def get_credentials(self,name:CredentialName):
         if name not in self.creds:
@@ -87,6 +103,9 @@ class TempCredentialsDatabaseService(DatabaseService):
         if not lease_id:
             return
         self.vaultService.renew_lease(lease_id,3600)
+
+    def fetch_credentials(self,name:CredentialName,role:str,prefix:str,suffix:str):
+        self.creds[name] = self.vaultService.database_engine.generate_credentials(role,prefix,suffix,self.creds_mode)
     
     def db_user(self,name:CredentialName='default'):
         creds = self.get_credentials(name)

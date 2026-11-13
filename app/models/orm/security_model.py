@@ -7,7 +7,7 @@ from app.utils.constant import PostgresConstant
 from app.utils.helper import subset_model, uuid_v1_mc
 from app.utils.validation import email_validator, ipv4_subnet_validator, ipv4_validator,PasswordValidator
 
-SCHEMA = 'clients'
+
 
 class GroupClientORM(models.Model):
     group_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
@@ -16,7 +16,7 @@ class GroupClientORM(models.Model):
     updated_at = fields.DatetimeField(auto_now=True)
 
     class Meta:
-        schema = SCHEMA
+        schema = PostgresConstant.SECURITY_SCHEMA
         table = "groupclient"
         app = PostgresConstant.SECURITY_APP
 
@@ -47,7 +47,7 @@ class ClientORM(models.Model):
     updated_at = fields.DatetimeField(auto_now=True)
 
     class Meta:
-        schema = SCHEMA
+        schema = PostgresConstant.SECURITY_SCHEMA
         table = "client"
         app = PostgresConstant.SECURITY_APP
 
@@ -83,7 +83,7 @@ class PolicyMappingORM(models.Model):
 
     class Meta:
         app = PostgresConstant.SECURITY_APP
-        schema = SCHEMA
+        schema = PostgresConstant.SECURITY_SCHEMA
         table = "policymapping"
         unique_together = [
             ("policy", "client"),

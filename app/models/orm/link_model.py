@@ -9,8 +9,6 @@ from tortoise.contrib.pydantic import pydantic_model_creator
 from pydantic import BaseModel, field_validator, model_validator
 from app.utils.validation import url_validator
 
-SCHEMA = 'links'
-
 class LinkORM(models.Model):
     link_id = fields.UUIDField(pk=True, default=uuid_v1_mc)
     link_name = fields.CharField(max_length=100, unique=True)
@@ -31,7 +29,7 @@ class LinkORM(models.Model):
 
     class Meta:
         app = PostgresConstant.NOTIFYR_APP
-        schema = SCHEMA
+        schema = PostgresConstant.LINK_SCHEMA
         table = "link"
 
     @property
@@ -69,7 +67,7 @@ class LinkEventORM(models.Model):
     expiring_date = fields.DatetimeField(null=True)
 
     class Meta:
-        schema = SCHEMA
+        schema = PostgresConstant.LINK_SCHEMA
         table = "linkevent"
 
     @property
@@ -99,7 +97,7 @@ class LinkSessionORM(models.Model):
     converted = fields.BooleanField(null=True)
 
     class Meta:
-        schema = SCHEMA
+        schema = PostgresConstant.LINK_SCHEMA
         table = "linksession"
 
     @property
@@ -122,7 +120,7 @@ class LinkAnalyticsORM(models.Model):
     device = fields.CharField(max_length=50, default="unknown")
 
     class Meta:
-        schema = SCHEMA
+        schema = PostgresConstant.LINK_SCHEMA
         table = "linkanalytics"
         unique_together = ("link", "date_start_date", "country", "region", "city", "device")
 

@@ -11,7 +11,7 @@ from app.services.config_service import MODE, ConfigService, WorkerService
 import hvac
 from app.services.file.file_service import FileService
 from app.services.timer_service import TimerService
-from app.utils.constant import VaultConstant, VaultTTLSyncConstant
+from app.utils.constant import SetupRootConstant, VaultConstant, VaultTTLSyncConstant
 from app.utils.fileIO import FDFlag
 from datetime import datetime
 
@@ -93,7 +93,7 @@ class VaultService(BaseService):
         })
         _raise = build_state==DEFAULT_BUILD_STATE or build_state == GUNICORN_BUILD_STATE
 
-        if build_state == DEFAULT_BUILD_STATE or build_state == GUNICORN_BUILD_STATE:
+        if build_state == DEFAULT_BUILD_STATE or build_state == GUNICORN_BUILD_STATE or build_state == SetupRootConstant.ROOT_BUILD_STATE:
             self.role_id = self._read_volume_file(VaultConstant.ROLE_ID_FILE,'secrets',_raise)
             self.secret_id = self._read_volume_file(VaultConstant.SECRET_ID_FILE,'shared',_raise)
 

@@ -7,11 +7,19 @@ INIT_NOTIFYR_DB=${INIT_NOTIFYR_DB:-off}
 
 if [ "$INIT_NOTIFYR_DB" = "on" ]; then
 
+    if [ "$MONGO_HOST" = "mongodb" ]; then
+        mongosh \
+            --username "$MONGO_INITDB_ROOT_USERNAME" \
+            --password "$MONGO_INITDB_ROOT_PASSWORD" \
+            --authenticationDatabase admin \
+            /notifyr/admin.js
+    fi
+    
     mongosh \
         --username "$MONGO_INITDB_ROOT_USERNAME" \
         --password "$MONGO_INITDB_ROOT_PASSWORD" \
         --authenticationDatabase admin \
-        /notifyr/admin.js
+        /notifyr/static_user.js
     
     mongosh \
         --username "$MONGO_INITDB_ROOT_USERNAME" \

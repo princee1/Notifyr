@@ -189,6 +189,7 @@ class MongooseDBConstant:
     JOB_DATABASE_NAME = 'notifyr'
     AGENTIC_DATABASE_NAME = 'agentic'
     DEFAULT_DATABASE_NAME = 'app'
+    CREDIT_DATABASE_NAME = 'credit'
 
     JOB_COLLECTIONS =  {APS_COLLECTION,CELERY_COLLECTION,TASKS_COLLECTION}
     AGENTIC_COLLECTIONS = {AGENT_COLLECTION,LLM_COLLECTION,TOOL_COLLECTION,STORE_COLLECTION,CHAT_COLLECTION,CHAT_WRITE_COLLECTION}
@@ -209,6 +210,14 @@ class PostgresConstant:
     SECURITY_DATABASE_NAME = 'security'
     SECURITY_APP = 'security'
     NOTIFYR_APP = 'notifyr'
+
+
+    EMAILS_SCHEMA = 'emails'
+    TWILIO_SCHEMA = 'twilio'
+    LINK_SCHEMA = 'links'
+    SECURITY_SCHEMA = 'clients'
+    CONTACTS_SCHEMA = 'contacts'
+    
             
 ########################                     ########################################
 
@@ -609,5 +618,7 @@ class SetupRootConstant:
     SYSTEM_LOGIN_KEY='system-login'
     ADMIN_ACCESS_KEY = 'admin-access'
     ADMIN_LOGIN_KEY = 'admin-login'
+
+    ROOT_BUILD_STATE= 12443
 
     KEYS  = [SYSTEM_ACCESS_KEY,SYSTEM_LOGIN_KEY,ADMIN_ACCESS_KEY,ADMIN_LOGIN_KEY]

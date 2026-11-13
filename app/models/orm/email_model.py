@@ -12,7 +12,7 @@ from app.utils.constant import PostgresConstant
 from app.utils.helper import uuid_v1_mc
 from app.utils.validation import email_validator
 
-SCHEMA = 'emails'
+
 
 
 class EmailMetaModel(SubContentBaseModel):
@@ -199,7 +199,7 @@ class EmailTrackingORM(models.Model):
     delivered = fields.BooleanField(default = False)
 
     class Meta:
-        schema = SCHEMA
+        schema = PostgresConstant.EMAILS_SCHEMA
         app = PostgresConstant.NOTIFYR_APP
         table = "emailtracking"
 
@@ -238,7 +238,7 @@ class TrackingEmailEventORM(models.Model):
         correction: bool = False
 
     class Meta:
-        schema = SCHEMA
+        schema = PostgresConstant.EMAILS_SCHEMA
         app = PostgresConstant.NOTIFYR_APP
         table = "trackingevent"
 
@@ -260,7 +260,7 @@ class TrackedLinksORM(models.Model):
     click_count = fields.IntField(default=0)
 
     class Meta:
-        schema = SCHEMA
+        schema = PostgresConstant.EMAILS_SCHEMA
         app = PostgresConstant.NOTIFYR_APP
         table = "trackedlinks"
 
@@ -289,7 +289,7 @@ class EmailAnalyticsORM(models.Model):
     emails_failed = fields.IntField(default=0)  # Added emails_failed field
 
     class Meta:
-        schema = SCHEMA
+        schema = PostgresConstant.EMAILS_SCHEMA
         app = PostgresConstant.NOTIFYR_APP
         table = "emailanalytics"
         unique_together = ("day_date", "esp_provider")

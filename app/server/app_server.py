@@ -20,7 +20,7 @@ from app.services.cost_service import CostService
 from app.services.database.memcached_service import MemCachedService
 from app.services.database.mongoose_service import MongooseService
 from app.services.database.rabbitmq_service import RabbitMQService
-from app.services.database.redis_service import RedisService
+from app.services.database.redis_service import CONFIG_CREDS, RedisService
 from app.services.database.tortoise_service import TortoiseConnectionService
 from app.services.timer_service import TimerService
 from app.services.vault_service import VaultService
@@ -222,11 +222,12 @@ class AppServer(EventInterface):
 
     @register_hook('startup')
     async def before_startup(self):
-        async with self.redisService.redis_config.pipeline(True) as pipe:
-            for key in SetupRootConstant.KEYS:
-                await self.redisService.retrieve(RedisConstant.CONFIG_DB,key,redis=pipe)
+        async with self.redisService.redis_dynamic_asynccontext(RedisConstant.CONFIG_DB,CONFIG_CREDS) as redis:
+            async with redis.pipeline(True) as pipe:
+                for key in SetupRootConstant.KEYS:
+                    await self.redisService.retrieve(RedisConstant.CONFIG_DB,key,redis=pipe)
 
-            setup = await pipe.execute()
+                setup = await pipe.execute()
         
         setup = [bool(s) for s in setup]
         if not all(setup):
@@ -343,16 +344,10 @@ class AppServer(EventInterface):
 
     @register_hook('shutdown')
     async def revoke_dynamic_lease(self):
-        mongooseService: MongooseService = Get(MongooseService)
-        tortoiseConnService = Get(TortoiseConnectionService)
-        redisService = Get(RedisService)
         vaultService = Get(VaultService)
         rabbitmqService = Get(RabbitMQService)
 
         await RunInThreadPool(rabbitmqService.revoke_lease)()
-        await RunInThreadPool(mongooseService.revoke_lease)()
-        await RunInThreadPool(tortoiseConnService.revoke_lease)()
-        await RunInThreadPool(redisService.revoke_lease)()
 
         if CAPABILITIES['object']:
             objectS3Service = Get(ObjectS3Service)
