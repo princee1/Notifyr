@@ -136,7 +136,7 @@ class ClientMiniService(BaseMiniService):
         tokens = recovery.get('tokens',[])
         
         if not tokens:
-            raise ProvidedHashNotEquivalentError('****************','Recovery Code Setup')
+            raise ProvidedHashNotEquivalentError('****************','Recovery Code Setup','recovery')
 
         for token in tokens:
             try:
@@ -148,7 +148,7 @@ class ClientMiniService(BaseMiniService):
             except:
                 continue
         
-        raise ProvidedHashNotEquivalentError('****************','Recovery Code')
+        raise ProvidedHashNotEquivalentError('****************','Recovery Code','recovery')
 
     #######################################################################################################################
     ########################################                                           ####################################

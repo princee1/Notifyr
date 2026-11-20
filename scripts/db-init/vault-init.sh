@@ -459,7 +459,19 @@ setup_database_config(){
     
     vault write notifyr-database/roles/app-mongo-credit-ntfr-role-dynamic \
       db_name="mongodb-notifyr" \
-      creation_statements='{ "db": "credit", "roles": []}' \
+      creation_statements='{ "db": "credit", "roles": [
+            {"role":"read","db":"credit","collection":"plan"},
+            {"role":"readWrite","db":"credit","collection":"bills"},
+            {"role":"read","db":"credit","collection":"history"}]}' \
+      default_ttl="12h" \
+      max_ttl="16h"
+
+    vault write notifyr-database/roles/ncs-mongo-ntfr-role-dynamic \
+      db_name="mongodb-notifyr" \
+      creation_statements='{ "db": "credit", "roles": [
+            {"role":"readWrite","db":"credit","collection":"plan"},
+            {"role":"readWrite","db":"credit","collection":"bills"},
+            {"role":"readWrite","db":"credit","collection":"history"}]}' \
       default_ttl="12h" \
       max_ttl="16h"
           

@@ -36,5 +36,8 @@ adminDb.createUser({
 adminDb.createUser({
     user: credit_vault_user,
     pwd: vaultpass,
-    roles: []
+    roles: [{"role":"read","db":"credit","collection":"plan"},
+            {"role":"readWrite","db":"credit","collection":"bills"},
+            {"role":"read","db":"credit","collection":"history"},
+    ]
 });

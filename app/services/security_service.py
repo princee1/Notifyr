@@ -299,9 +299,9 @@ class SecurityService(BaseService):
         return hmac_obj.hexdigest(),salt.decode()
 
     def compare_hash(self, stored_hash:str,provided:str,key:str,salt:bytes|str=None,algorithm=None):
-        provided_hash,_ = self.hash(provided,key,salt)
+        provided_hash,_ = self.hash(provided,key,salt,algorithm)
         if not hmac.compare_digest(stored_hash, provided_hash):
-            raise ProvidedHashNotEquivalentError(provided_hash,'hashed value')
+            raise ProvidedHashNotEquivalentError(provided_hash,'hashed value','password')
         return True
 
     def encrypt(self,value:str,mode:CipherMode):

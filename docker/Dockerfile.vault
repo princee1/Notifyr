@@ -90,7 +90,7 @@ RUN chmod 700 /vault/data
 COPY --chown=vaultuser:vaultuser ./scripts/vault-rotator/*.sh /usr/local/bin/
 RUN chmod 770 /usr/local/bin/*-rotator.sh 
 
-COPY --chown=vaultuser:vaultuser ./.notifyr/settings_db.json ./vault/config/settings_db.json
+COPY --chown=vaultuser:vaultuser ./conf/vault/settings.json ./vault/config/settings_db.json
 
 COPY --chown=vaultuser:vaultuser ./conf/vault/policies/ /vault/policies/
 COPY --chown=vaultuser:vaultuser ./conf/vault/vault-config.hcl  /vault/config/vault.hcl

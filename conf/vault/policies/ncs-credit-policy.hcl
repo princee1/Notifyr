@@ -14,3 +14,7 @@ path "auth/token/renew/notifyr-database/creds/ncs-redis-ntfr-role-dynamic/*" {
 path "notifyr-database/creds/ncs-redis-ntfr-role-dynamic" {
     capabilities = ["read"]
 }
+
+path "notifyr-database/creds/ncs-mongo-ntfr-role-dynamic" {
+    capabilities = ["read"]
+}

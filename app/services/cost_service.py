@@ -9,6 +9,7 @@ from app.classes.cost_definition import CostCredits, CostDefinitionNotFoundError
 from app.definition._service import BaseService, BuildAbortError, BuildWarningError, Service, ServiceStatus
 from app.errors.service_error import BuildFailureError
 from app.services.config_service import MODE, ConfigService
+from app.services.database.mongoose_service import MongooseService
 from app.services.database.redis_service import REDIS_PREFIX_BUILDER, RedisService
 from app.services.file.file_service import FileService
 from app.utils.constant import CostConstant, RedisConstant
@@ -48,11 +49,12 @@ class CostService(BaseService):
 
     OVERDRAFT_ALLOWED = 0.15
 
-    def __init__(self,configService:ConfigService,redisService:RedisService,fileService:FileService):
+    def __init__(self,configService:ConfigService,redisService:RedisService,fileService:FileService,mongooseService:MongooseService):
         super().__init__()
         self.configService = configService
         self.redisService = redisService
         self.fileService = fileService
+        self.mongooseService = mongooseService
         self.costs_definition={}
     
     @staticmethod

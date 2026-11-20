@@ -245,7 +245,13 @@ class ConfigService(_service.BaseService):
 
         self.SYSTEM_IP:str = self.getenv('SYSTEM_IP','172.25.0.1')
 
+        self.VAULT_AUTH_METHOD:Literal['approle','token'] = self.getenv('VAULT_AUTH_METHOD','approle')
+
     def verify(self):
+
+        if self.VAULT_AUTH_METHOD not in ['approle','token']:
+            raise BuildAbortError(F"Couldnt connect to vault because auth method is not in ['approle','token']. Specified: {self.VAULT_AUTH_METHOD}")
+
         if self.S3_CRED_TYPE not in ['MINIO','AWS']:
             raise BuildAbortError(f"S3_CRED_TYPE {self.S3_CRED_TYPE} is not valid please use MINIO or AWS")
         

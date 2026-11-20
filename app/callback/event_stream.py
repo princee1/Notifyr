@@ -4,7 +4,7 @@ import traceback
 from typing import Callable
 from app.container import Get
 from app.definition._service import ServiceStatus
-from app.depends.lock import LockLogicDecorator
+from app.depends.lock import LockLogicDecorator, retry_logic
 from app.models.orm.email_model import EmailStatus, EmailTrackingORM,TrackingEmailEventORM, bulk_upsert_email_analytics
 from app.models.orm.link_model import LinkEventORM,bulk_upsert_analytics, bulk_upsert_links_vc
 from app.models.orm.contacts_model import ContactORM, bulk_upsert_contact_analytics, bulk_upsert_contact_creation_analytics
@@ -18,40 +18,6 @@ from tortoise.exceptions import IntegrityError
 
 Call_Ids:dict[str|dict]={}
 N_A = 'N/A'
-
-
-def inject_set(func:Callable):
-    @functools.wraps(func)
-    async def wrapper(*args,**kwargs):
-        valid_entries = set()
-        invalid_entries = set()
-        kwargs['valid_entries'] = valid_entries
-        kwargs['invalid_entries'] = invalid_entries
-
-        return await wrapper(*args,**kwargs)
-
-    return wrapper
-
-
-def retry_logic(retry:int,sleep_time:int):
-    def wrapper(func:Callable):
-        async def callback(*args,**kwargs):
-            retry_count = 0
-            while retry_count < retry:
-                try:
-                    return await func(*args,**kwargs)
-                    break  # Exit the loop if successful
-                except IntegrityError as e:
-                    retry_count += 1
-                    if retry_count == retry:
-                        raise e
-                    else:
-                        await asyncio.sleep(sleep_time)
-                except Exception as e:
-                    raise e
-        return callback
-    
-    return wrapper
 
 
 #############################################        ############################################
@@ -246,7 +212,7 @@ async def Add_Email_Event(entries: list[tuple[str, dict]]):
                 objs[index_tracking] = None
             
 
-    @retry_logic(4,10)
+    @retry_logic(4,10,IntegrityError)
     async def callback():
         async with in_transaction():
             await bulk_upsert_email_analytics(analytics)
@@ -368,7 +334,7 @@ async def Add_Twilio_Sms_Event(entries: list[tuple[str, dict]]):
             if prices['price_unit'] !=None:
                 st.price_unit = prices['price_unit']
     
-    @retry_logic(4,2)
+    @retry_logic(4,2,IntegrityError)
     async def callback():
         async with in_transaction():
             if len(sms_tracking) >0:
@@ -547,7 +513,7 @@ async def Add_Twilio_Call_Event(entries: list[tuple[str, dict]]):
             ct.duration = duration[str(ct.call_id)]['duration']
             ct.total_duration = duration[str(ct.call_id)]['total_duration']
 
-    @retry_logic(3,3)
+    @retry_logic(3,3,IntegrityError)
     async def callback():
         async with in_transaction():
             # if len(call_tracking) >0:

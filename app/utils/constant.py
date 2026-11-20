@@ -186,6 +186,10 @@ class MongooseDBConstant:
     CELERY_COLLECTION = 'celery'
     TASKS_COLLECTION = 'tasks'
 
+    VERSION_COLLECTION = 'version'
+    
+    
+
     JOB_DATABASE_NAME = 'notifyr'
     AGENTIC_DATABASE_NAME = 'agentic'
     DEFAULT_DATABASE_NAME = 'app'

@@ -55,9 +55,7 @@ class VaultService(BaseService):
         self.workerService = workerService
         self.fileService = fileService
         self.timerService = timerService
-        self.delay = IntervalParams(
-            seconds=VaultTTLSyncConstant.SECRET_ID_ROTATION*.75
-        )
+        self.delay = IntervalParams(seconds=VaultTTLSyncConstant.SECRET_ID_ROTATION*.75)
         self.last_rotated = None
 
     @property
@@ -69,36 +67,16 @@ class VaultService(BaseService):
             raise ServiceTemporaryNotAvailableError(service=self.name)
 
     def build(self, build_state = DEFAULT_BUILD_STATE):
-        if self.configService.MODE == MODE.DEV_MODE:
-            self._dev_token_login()
-            self.read_tokens()
-        else:
-            seed_time = self._read_volume_file(VaultConstant.SUPERCRONIC_SEED_TIME_FILE,'shared')
-            if seed_time and isinstance(seed_time,str):
-                self.supercronic_start_time = float(seed_time.split('=')[1])
-                self.compute_next_tick_time()
-
-            self.vault_approle_login(build_state)
-            self.read_tokens()
+        self.connect(build_state)
+        self.read_tokens()
+        if self.configService.MODE  != MODE.DEV_MODE and self.configService.VAULT_AUTH_METHOD == 'approle':
             self.timerService.interval_schedule(self.delay,self.refresh_token,tuple(),{},f'{self.name}-refresh_token')
-
+        
     def compute_next_tick_time(self):
         tick_delay = time_until_next_tick(self._secret_id_crontab)
         self.next_tick = time.time() + tick_delay
             
-    def _create_client(self,build_state:int):
-        self.client = hvac.Client(self.configService.VAULT_ADDR)
-        self.client.session.headers.update({
-            "X-Vault-Node-Name": self.workerService.INSTANCE_ID,
-        })
-        _raise = build_state==DEFAULT_BUILD_STATE or build_state == GUNICORN_BUILD_STATE
-
-        if build_state == DEFAULT_BUILD_STATE or build_state == GUNICORN_BUILD_STATE or build_state == SetupRootConstant.ROOT_BUILD_STATE:
-            self.role_id = self._read_volume_file(VaultConstant.ROLE_ID_FILE,'secrets',_raise)
-            self.secret_id = self._read_volume_file(VaultConstant.SECRET_ID_FILE,'shared',_raise)
-
-        self.client.auth.approle.login(self.role_id,self.secret_id)
-
+    def create_engine(self):
         if not self.client.is_authenticated():
             return False
         
@@ -113,14 +91,14 @@ class VaultService(BaseService):
         self.security_engine = KV1VaultEngine(self.client,VaultConstant.NOTIFYR_SECURITY_MOUNT_POINT)
 
         return True
-
+        
     async def refresh_token(self):
 
         async with self.lock('writer'):            
             creation_state = DEFAULT_BUILD_STATE if  time.time() > self.next_tick else 0
             self.compute_next_tick_time()
             try:
-                if not self._create_client(creation_state):
+                if not self.connect(creation_state):
                     self.service_status = ServiceStatus.TEMPORARY_NOT_AVAILABLE
                 else:
                     self.service_status = ServiceStatus.AVAILABLE
@@ -163,11 +141,40 @@ class VaultService(BaseService):
 
 ##############################################                          ##################################333
 
-    def vault_approle_login(self,build_state):
-        try:
-            if not self._create_client(build_state):
-                raise BuildAbortError('Not authenticated')
+    def token_auth_login(self):
+        token = self._read_volume_file("credit_token.txt",'secrets')
+        self.client = hvac.Client(self.configService.VAULT_ADDR,token)
+        self.client.session.headers.update({"X-Vault-Node-Name": self.workerService.INSTANCE_ID,})
+        return self.create_engine()
+
+    def vault_approle_login(self,build_state:int):
+        _raise = build_state==DEFAULT_BUILD_STATE or build_state == GUNICORN_BUILD_STATE or build_state == SetupRootConstant.ROOT_BUILD_STATE
+                    
+        if build_state == DEFAULT_BUILD_STATE or build_state == GUNICORN_BUILD_STATE or build_state == SetupRootConstant.ROOT_BUILD_STATE:
+            seed_time = self._read_volume_file(VaultConstant.SUPERCRONIC_SEED_TIME_FILE,'shared')
             
+            if seed_time and isinstance(seed_time,str):
+                self.supercronic_start_time = float(seed_time.split('=')[1])
+                self.compute_next_tick_time()
+
+            self.role_id = self._read_volume_file(VaultConstant.ROLE_ID_FILE,'secrets',_raise)
+            self.secret_id = self._read_volume_file(VaultConstant.SECRET_ID_FILE,'shared',_raise)
+
+        self.client.auth.approle.login(self.role_id,self.secret_id)
+        
+        return self.create_engine()
+
+    def connect(self,build_state):
+        try:
+            if self.configService.MODE == MODE.DEV_MODE:
+                connected = self.dev_token_login()
+            else:
+                match self.configService.VAULT_AUTH_METHOD:
+                    case 'approle':
+                        connected = self.vault_approle_login(build_state)
+                    case 'token':
+                        connected = self.token_auth_login()
+                        
             if not self.client.ha_status['is_self']:
                 self.service_status = ServiceStatus.PARTIALLY_AVAILABLE
 
@@ -176,6 +183,8 @@ class VaultService(BaseService):
             
             if self.client.seal_status['sealed']:
                 raise BuildAbortError('Cant access vault since it sealed')
+
+            return connected
             
         except hvac.exceptions.InvalidRequest as e:
             raise BuildAbortError(f'"Invalid:", {e}')
@@ -192,7 +201,7 @@ class VaultService(BaseService):
         except requests.exceptions.Timeout as e:
             raise BuildAbortError("Vault request timed out: {e}")
   
-    def _dev_token_login(self):
+    def dev_token_login(self):
         dev_root_token = self.configService.getenv('VAULT_DEV_ROOT_TOKEN_ID',None)
         if not dev_root_token:
             raise BuildAbortError('No dev root token provided')
@@ -200,6 +209,7 @@ class VaultService(BaseService):
             self.client = hvac.Client(self.configService.VAULT_ADDR,token=dev_root_token)
         except Exception as e:
             raise BuildAbortError(f"Failed to create Vault client: {e}")
+        return self.create_engine()
         
 ##############################################                          ##################################333
 

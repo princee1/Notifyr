@@ -132,10 +132,10 @@ class APIKeyMismatchError(SecurityBaseError):
 
 
 class ProvidedHashNotEquivalentError(SecurityBaseError):
-    def __init__(self, source_id: str | None = None, source_mode: str | None = None):
+    def __init__(self, source_id: str | None = None, source_mode: str | None = None,action=None):
         self.source_id = source_id
         self.source_mode = source_mode
-        super().__init__("Provided hash does not match the stored value", source_id=source_id, source_mode=source_mode)
+        super().__init__("Provided hash does not match the stored value", source_id=source_id, source_mode=source_mode,action=action)
 
 
 class IdentityBlacklistedError(SecurityBaseError):
